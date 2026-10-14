@@ -1,16 +1,10 @@
 #  andOTP -  Android OTP Authenticator
 
-[![Current release](https://img.shields.io/github/release/andOTP/andOTP/all.svg)](https://github.com/andOTP/andOTP/releases/download/v0.9.0.1/andOTP_v0.9.0.1.apk)
-[![Crowdin](https://d322cqt584bo4o.cloudfront.net/andotp/localized.svg)](https://crowdin.com/project/andotp)
-[![Chat - Telegram](https://img.shields.io/badge/chat-Telegram-blue.svg)](https://t.me/andOTP)
-
 ![andOTP](./assets/logo.png)
 
 ## Unmaintained
 
 **This repository is currently unmaintained.**
-
-See [this XDA post](https://forum.xda-developers.com/t/app-4-4-open-source-andotp-open-source-two-factor-authentication-for-android.3636993/post-87021655) for more details.
 
 ## Intro
 
@@ -85,22 +79,14 @@ Check out [this](https://github.com/andOTP/andOTP/wiki/Migration) wiki page to l
 
 ## Downloads:
 
-[<img height=80 alt="Get it on Google Play" src="https://play.google.com/intl/en_us/badges/images/generic/en-play-badge.png" />](https://play.google.com/store/apps/details?id=org.shadowice.flocke.andotp)
-[<img height=80 alt="Get it on F-Droid" src="https://fdroid.gitlab.io/artwork/badge/get-it-on.png" />](https://f-droid.org/packages/org.shadowice.flocke.andotp/)
-[<img height=80 alt="Get it on GitHub" src="https://raw.githubusercontent.com/flocke/andOTP/master/assets/badges/get-it-on-github.png" />](https://github.com/andOTP/andOTP/releases)
-
-**Warning**: All three versions (Google Play, F-Droid and the APKs) are not compatible (not signed by the same key)!
+**Warning**: Builds signed with different keys are not compatible!
 You will have to uninstall one to install the other, which will delete all your data.
 So make sure you have a **current backup** before switching!
 
 ## Contribute:
 
- * **Translation**: If you want to help translate andOTP into your language, visit the [Crowdin project](https://crowdin.com/project/andotp).
  * **Bug reports and feature requests**: You can report bugs and request features in the [Issue tracker](https://github.com/andOTP/andOTP/issues) on GitHub.
  * **Requesting thumbnails**: If you are missing a thumbnail you can request it by [opening a thumbnail request](https://github.com/andOTP/andOTP/issues/new/choose).
- * **Discussion and support**:
-   - [XDA thread](https://forum.xda-developers.com/android/apps-games/app-andotp-android-otp-authenticator-t3636993) (please keep off-topic to a minimum)
-   - Telegram group [@andOTP](https://t.me/andOTP) (if you just want important updates you can mute the group so you only get notified about pinned messages)
 
 #### Donations:
 
@@ -108,25 +94,6 @@ If you want to show your appreciation for our work with a small donation you can
 
  * [Donate to Jakob Nixdorf](https://flocke.shadowice.org/donate.html) (Main developer, maintainer)
  * [Donate to Richy HBM](https://richyhbm.co.uk/donate) (Developer)
-
-## Screenshots:
-#### Light theme:
-
-[<img width=200 alt="Main Activity" src="https://raw.githubusercontent.com/flocke/andOTP/master/assets/screenshots/main_activity.png">](https://raw.githubusercontent.com/flocke/andOTP/master/assets/screenshots/main_activity.png)
-[<img width=200 alt="Settings Activity" src="https://raw.githubusercontent.com/flocke/andOTP/master/assets/screenshots/settings_activity.png">](https://raw.githubusercontent.com/flocke/andOTP/master/assets/screenshots/settings_activity.png)
-[<img width=200 alt="Backup Activity" src="https://raw.githubusercontent.com/flocke/andOTP/master/assets/screenshots/backup_activity.png">](https://raw.githubusercontent.com/flocke/andOTP/master/assets/screenshots/backup_activity.png)
-
-#### Dark theme:
-
-[<img width=200 alt="Main Activity" src="https://raw.githubusercontent.com/flocke/andOTP/master/assets/screenshots/main_activity_dark.png">](https://raw.githubusercontent.com/flocke/andOTP/master/assets/screenshots/main_activity_dark.png)
-[<img width=200 alt="Settings Activity" src="https://raw.githubusercontent.com/flocke/andOTP/master/assets/screenshots/settings_activity_dark.png">](https://raw.githubusercontent.com/flocke/andOTP/master/assets/screenshots/settings_activity_dark.png)
-[<img width=200 alt="Backup Activity" src="https://raw.githubusercontent.com/flocke/andOTP/master/assets/screenshots/backup_activity_dark.png">](https://raw.githubusercontent.com/flocke/andOTP/master/assets/screenshots/backup_activity_dark.png)
-
-#### Black theme:
-
-[<img width=200 alt="Main Activity" src="https://raw.githubusercontent.com/flocke/andOTP/master/assets/screenshots/main_activity_black.png">](https://raw.githubusercontent.com/flocke/andOTP/master/assets/screenshots/main_activity_black.png)
-[<img width=200 alt="Settings Activity" src="https://raw.githubusercontent.com/flocke/andOTP/master/assets/screenshots/settings_activity_black.png">](https://raw.githubusercontent.com/flocke/andOTP/master/assets/screenshots/settings_activity_black.png)
-[<img width=200 alt="Backup Activity" src="https://raw.githubusercontent.com/flocke/andOTP/master/assets/screenshots/backup_activity_black.png">](https://raw.githubusercontent.com/flocke/andOTP/master/assets/screenshots/backup_activity_black.png)
 
 ## Acknowledgments:
 #### Open-source components used:
