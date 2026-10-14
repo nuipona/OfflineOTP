@@ -65,6 +65,7 @@ import org.shadowice.flocke.andotp.Utilities.Constants;
 import org.shadowice.flocke.andotp.Utilities.EditorActionHelper;
 import org.shadowice.flocke.andotp.Utilities.UIHelper;
 
+/** First-run wizard: chooses the encryption, authentication and Android backup settings. */
 public class IntroScreenActivity extends IntroActivity {
     private EncryptionFragment encryptionFragment;
     private AuthenticationFragment authenticationFragment;
@@ -155,6 +156,7 @@ public class IntroScreenActivity extends IntroActivity {
         });
     }
 
+    /** Returns the setup result to MainActivity. */
     @Override
     public Intent onSendActivityResult(int result) {
         Intent data = new Intent();
@@ -169,6 +171,7 @@ public class IntroScreenActivity extends IntroActivity {
         // We don't want users to quit the intro screen and end up in an uninitialized state
     }
 
+    /** Slide to choose between KeyStore and password encryption. */
     public static class EncryptionFragment extends SlideFragment {
         private EncryptionChangedCallback encryptionChangedCallback = null;
 
@@ -230,11 +233,13 @@ public class IntroScreenActivity extends IntroActivity {
             return root;
         }
 
+        /** Notifies the other slides when the encryption choice changes. */
         public interface EncryptionChangedCallback {
             void onEncryptionChanged(Constants.EncryptionType newEncryptionType);
         }
     }
 
+    /** Last slide: saves the collected settings and shows whether the setup succeeded. */
     public static class IntroFinishedFragment extends SlideFragment {
         private TextView title;
         private TextView message;
@@ -304,11 +309,13 @@ public class IntroScreenActivity extends IntroActivity {
             return canGoForward;
         }
 
+        /** Reports the outcome of the initial setup (and the new encryption key). */
         public interface SaveSettingsCallback {
             void onAfterSaveSettings(boolean success, byte[] encryptionKey);
         }
     }
 
+    /** Slide to enable the Android backup service (only useful for password encryption). */
     public static class AndroidSyncFragment extends SlideFragment {
         private SwitchCompat introAndroidSync;
         private final EncryptionFragment encryptionFragment;
@@ -340,6 +347,7 @@ public class IntroScreenActivity extends IntroActivity {
         }
     }
 
+    /** Slide to choose the auth method and enter the password/PIN. */
     public static class AuthenticationFragment extends SlideFragment implements TextView.OnEditorActionListener {
         private Constants.EncryptionType encryptionType = Constants.EncryptionType.KEYSTORE;
 
@@ -368,6 +376,7 @@ public class IntroScreenActivity extends IntroActivity {
             slidePos = pos;
         }
 
+        /** Adapts the slide to the encryption choice (password encryption requires password/PIN). */
         public void updateEncryptionType(Constants.EncryptionType encryptionType) {
             this.encryptionType = encryptionType;
 
@@ -408,6 +417,7 @@ public class IntroScreenActivity extends IntroActivity {
             authWarnings.setText(null);
         }
 
+        /** Briefly highlights the warning text when the user tries to leave the slide. */
         public void flashWarning() {
             if (authWarnings.getText().toString().isEmpty()) {
                 authWarnings.setVisibility(View.GONE);

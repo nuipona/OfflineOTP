@@ -6,6 +6,7 @@ import android.widget.EditText;
 import com.google.android.material.textfield.TextInputEditText;
 import com.google.android.material.textfield.TextInputLayout;
 
+/** Keeps the password and confirmation fields' masking in sync with the show-password toggle. */
 public final class ConfirmedPasswordTransformationHelper {
 
     /** Sets up the specified password views for a toggleable obscure/view password text transformation. */
@@ -21,6 +22,7 @@ public final class ConfirmedPasswordTransformationHelper {
         passwordConfirmInput.setTransformationMethod(PasswordTransformationMethod.getInstance());
     }
 
+    /** Shows or hides the text while keeping the cursor position. */
     private static void dispatchPasswordVisibilityChange(EditText editText, boolean wasShowingPassword) {
         final int selection = editText.getSelectionEnd();
         PasswordTransformationMethod newMethod = wasShowingPassword ? null : PasswordTransformationMethod.getInstance();

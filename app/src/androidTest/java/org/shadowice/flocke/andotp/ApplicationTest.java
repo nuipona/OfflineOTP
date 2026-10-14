@@ -61,11 +61,12 @@ import javax.crypto.spec.SecretKeySpec;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 
+/** OTP calculation, entry parsing and database/crypto tests against published test vectors. */
 public class ApplicationTest {
 
     @Test
     public void testTOTPCalculation(){
-        // Test Vectors from https://tools.ietf.org/html/rfc6238
+        // Test vectors from RFC 6238, appendix B
         byte[] keySHA1 =  "12345678901234567890".getBytes(StandardCharsets.US_ASCII);
         byte[] keySHA256 =  "12345678901234567890123456789012".getBytes(StandardCharsets.US_ASCII);
         byte[] keySHA512 =  "1234567890123456789012345678901234567890123456789012345678901234".getBytes(StandardCharsets.US_ASCII);
@@ -97,7 +98,7 @@ public class ApplicationTest {
 
     @Test
     public void testHOTPCalculation() {
-        // Test cases from https://tools.ietf.org/html/rfc4226
+        // Test cases from RFC 4226, appendix D
         byte[] keySHA1 = "12345678901234567890".getBytes(StandardCharsets.US_ASCII);
 
         assertEquals("755224", TokenCalculator.HOTP(keySHA1, 0, 6, TokenCalculator.HashAlgorithm.SHA1));
@@ -230,7 +231,7 @@ public class ApplicationTest {
     public void testEncryptionHelper() throws NoSuchPaddingException, BadPaddingException, InvalidKeyException, NoSuchAlgorithmException, IllegalBlockSizeException, UnsupportedEncodingException, InvalidAlgorithmParameterException, DecoderException {
 
 
-        // https://golang.org/src/crypto/cipher/gcm_test.go
+        // AES-GCM test vectors from https://golang.org/src/crypto/cipher/gcm_test.go
         String[][] testCases =  new String[][]{
                 new String []{"11754cd72aec309bf52f7687212e8957","3c819d9a9bed087615030b65","", "250327c674aaf477aef2675748cf6971" },
                 new String []{"ca47248ac0b6f8372a97ac43508308ed","ffd2b598feabc9019262d2be","", "60d20404af527d248d893ae495707d1a" },

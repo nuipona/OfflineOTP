@@ -22,9 +22,10 @@ import androidx.recyclerview.widget.RecyclerView;
 import androidx.recyclerview.widget.ItemTouchHelper;
 
 /**
- * An implementation of {@link ItemTouchHelper.Callback} that enables basic drag & drop and
- * swipe-to-dismiss. Drag events are automatically started by an item long-press.<br/>
- * </br/>
+ * An implementation of {@link ItemTouchHelper.Callback} that enables basic drag & drop.
+ * Drag events are automatically started by an item long-press; swiping is disabled here,
+ * so {@link #onSwiped} is only kept because the super class requires it.
+ * <p>
  * Expects the <code>RecyclerView.Adapter</code> to listen for {@link
  * ItemTouchHelperAdapter} callbacks and the <code>RecyclerView.ViewHolder</code> to implement
  * {@link ItemTouchHelperViewHolder}.
@@ -33,6 +34,7 @@ import androidx.recyclerview.widget.ItemTouchHelper;
  */
 public class SimpleItemTouchHelperCallback extends ItemTouchHelper.Callback {
 
+    /** Alpha of an idle item view; the swipe animation fades it out. */
     public static final float ALPHA_FULL = 1.0f;
 
     private boolean dragEnabled = true;
@@ -42,6 +44,7 @@ public class SimpleItemTouchHelperCallback extends ItemTouchHelper.Callback {
         mAdapter = adapter;
     }
 
+    /** Enables or disables drag & drop (disabled for sorted lists and while searching). */
     public void setDragEnabled(boolean newDragState) {
         this.dragEnabled = newDragState;
     }
@@ -56,6 +59,7 @@ public class SimpleItemTouchHelperCallback extends ItemTouchHelper.Callback {
         return false;
     }
 
+    /** Allows dragging (both axes in a grid, vertically in a list); swiping is never allowed. */
     @Override
     public int getMovementFlags(RecyclerView recyclerView, RecyclerView.ViewHolder viewHolder) {
         // Set movement flags based on the layout manager
@@ -70,6 +74,7 @@ public class SimpleItemTouchHelperCallback extends ItemTouchHelper.Callback {
         }
     }
 
+    /** Forwards the move to the adapter (only between items of the same type). */
     @Override
     public boolean onMove(RecyclerView recyclerView, RecyclerView.ViewHolder source, RecyclerView.ViewHolder target) {
         if (source.getItemViewType() != target.getItemViewType()) {
@@ -81,11 +86,13 @@ public class SimpleItemTouchHelperCallback extends ItemTouchHelper.Callback {
         return true;
     }
 
+    /** Never called: swiping is disabled. */
     @Override
     public void onSwiped(RecyclerView.ViewHolder viewHolder, int i) {
         // We don't do anything here as we don't support swipe-to-dismiss
     }
 
+    /** Fades and slides the view while it is being swiped. */
     @Override
     public void onChildDraw(Canvas c, RecyclerView recyclerView, RecyclerView.ViewHolder viewHolder, float dX, float dY, int actionState, boolean isCurrentlyActive) {
         if (actionState == ItemTouchHelper.ACTION_STATE_SWIPE) {

@@ -12,7 +12,9 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 
+/** Reads and writes documents through the Storage Access Framework (content URIs). */
 public class StorageAccessHelper {
+    /** Writes the data to the given document URI. */
     public static boolean saveFile(Context context, Uri file, byte[] data) {
         boolean success = true;
 
@@ -32,6 +34,7 @@ public class StorageAccessHelper {
         return success;
     }
 
+    /** The display name of the document, falling back to the last path segment. */
     public static String getContentFileName(Context context, Uri uri) {
         String result = null;
         if (uri.getScheme().equals("content")) {
@@ -55,6 +58,7 @@ public class StorageAccessHelper {
         return saveFile(context, file, data.getBytes(StandardCharsets.UTF_8));
     }
 
+    /** Reads the whole document into memory. */
     public static byte[] loadFile(Context context, Uri file) throws IOException {
         try (InputStream inputStream = context.getContentResolver().openInputStream(file)) {
             ByteArrayOutputStream bytes = new ByteArrayOutputStream();
@@ -70,6 +74,7 @@ public class StorageAccessHelper {
         }
     }
 
+    /** Reads the document as UTF-8 text, or "" if it cannot be read. */
     public static String loadFileString(Context context, Uri file) {
         String result = "";
 

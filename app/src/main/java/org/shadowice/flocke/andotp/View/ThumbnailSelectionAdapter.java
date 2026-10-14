@@ -38,6 +38,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 
+/** Adapter for the thumbnail picker grid; supports filtering by name. */
 public class ThumbnailSelectionAdapter extends BaseAdapter {
     private Context context;
     private List items;
@@ -54,6 +55,7 @@ public class ThumbnailSelectionAdapter extends BaseAdapter {
         settings = new Settings(context);
     }
 
+    /** Shows only the thumbnails whose name contains the filter text. */
     void filter(String filter) {
         items.clear();
         for (EntryThumbnail.EntryThumbnails thumb : EntryThumbnail.EntryThumbnails.values()) {
@@ -77,6 +79,7 @@ public class ThumbnailSelectionAdapter extends BaseAdapter {
             return EntryThumbnail.EntryThumbnails.Default;
     }
 
+    /** Maps a position in the (filtered) grid back to the thumbnail's enum ordinal. */
     public int getRealIndex(int displayPosition) {
         return ((EntryThumbnail.EntryThumbnails)getItem(displayPosition)).ordinal();
     }

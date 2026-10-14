@@ -75,6 +75,7 @@ import java.util.ArrayList;
 
 import javax.crypto.SecretKey;
 
+/** Backup/restore screen for plain-text, password-encrypted and OpenPGP backups. */
 public class BackupActivity extends BackgroundTaskActivity<BackupTaskResult> {
     private final static String TAG = BackupActivity.class.getSimpleName();
 
@@ -175,6 +176,7 @@ public class BackupActivity extends BackgroundTaskActivity<BackupTaskResult> {
         });
     }
 
+    /** Shows the controls and warnings for the selected backup type and remembers the choice. */
     private void setupBackupType(Constants.BackupType type) {
         switch (type) {
             case PLAIN_TEXT:
@@ -234,7 +236,7 @@ public class BackupActivity extends BackgroundTaskActivity<BackupTaskResult> {
         settings.setDefaultBackupType(type);
     }
 
-    // End with a result
+    /** Finishes the activity, reporting to MainActivity whether entries had to be reloaded. */
     public void finishWithResult() {
         Intent data = new Intent();
         data.putExtra("reload", reload);
@@ -325,6 +327,7 @@ public class BackupActivity extends BackgroundTaskActivity<BackupTaskResult> {
             showRestoreProgress(running);
     }
 
+    /** Starts a task and remembers which progress indicator belongs to it. */
     protected void startBackgroundTask(UiBasedBackgroundTask<BackupTaskResult> task, BackupTaskResult.ResultType type) {
         currentTask = type;
         startBackgroundTask(task);
@@ -349,7 +352,7 @@ public class BackupActivity extends BackgroundTaskActivity<BackupTaskResult> {
         progressRestore.setVisibility(running ? View.VISIBLE : View.GONE);
     }
 
-    // Get the result from external activities
+    // Results from external activities
     @Override
     protected void onActivityResult(int requestCode, int resultCode, Intent intent) {
         super.onActivityResult(requestCode, resultCode, intent);
@@ -411,6 +414,7 @@ public class BackupActivity extends BackgroundTaskActivity<BackupTaskResult> {
         }
     }
 
+    /** Uses the system file picker, or backs up straight to the configured location when "ask" is off. */
     private void showSaveFileSelector(String mimeType, Constants.BackupType backupType, int intentId) {
         if (settings.getBackupAsk()) {
             Intent intent = new Intent(Intent.ACTION_CREATE_DOCUMENT);
@@ -433,6 +437,7 @@ public class BackupActivity extends BackgroundTaskActivity<BackupTaskResult> {
         }
     }
 
+    /** Adds the restored entries (replacing the current ones if selected) and saves the database. */
     private void restoreEntries(String text, boolean finish) {
         ArrayList<Entry> entries = DatabaseHelper.stringToEntries(text);
 
@@ -580,10 +585,12 @@ public class BackupActivity extends BackgroundTaskActivity<BackupTaskResult> {
         handleOpenPGPResult(result, os, uri, Constants.INTENT_BACKUP_ENCRYPT_PGP);
     }
 
+    /** Reads the OpenPGP API's output stream as UTF-8 text. */
     public String outputStreamToString(ByteArrayOutputStream os) {
         return new String(os.toByteArray(), StandardCharsets.UTF_8);
     }
 
+    /** Handles the OpenPGP API result; a pending user interaction is passed to the OpenPGP app. */
     public void handleOpenPGPResult(Intent result, ByteArrayOutputStream os, Uri file, int requestCode) {
         if (result.getIntExtra(OpenPgpApi.RESULT_CODE, OpenPgpApi.RESULT_CODE_ERROR) == OpenPgpApi.RESULT_CODE_SUCCESS) {
             if (requestCode == Constants.INTENT_BACKUP_ENCRYPT_PGP) {

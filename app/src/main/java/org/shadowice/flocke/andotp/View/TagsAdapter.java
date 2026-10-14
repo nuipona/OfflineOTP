@@ -39,6 +39,7 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 
+/** Adapter for the tag lists (drawer and entry dialog); keeps the tags sorted by name. */
 public class TagsAdapter extends ArrayAdapter<String> {
     private Context context;
     private List<String> tagsOrder;
@@ -79,12 +80,14 @@ public class TagsAdapter extends ArrayAdapter<String> {
         return false;
     }
 
+    /** Checks or unchecks one tag (unknown tags are ignored). */
     public void setTagState(String tag, Boolean state) {
         if(tagsState.containsKey(tag))
             tagsState.put(tag, state);
         notifyDataSetChanged();
     }
 
+    /** The currently checked tags. */
     public List<String> getActiveTags() {
         List<String> tagsList = new ArrayList<>();
         for(String tag : tagsOrder)
@@ -96,6 +99,7 @@ public class TagsAdapter extends ArrayAdapter<String> {
         return tagsList;
     }
 
+    /** True if every tag is checked (matches the "all tags" toggle in the drawer). */
     public boolean allTagsActive() {
         for (String key : tagsState.keySet())
             if (! tagsState.get(key))
@@ -108,6 +112,7 @@ public class TagsAdapter extends ArrayAdapter<String> {
         return new HashMap<String, Boolean>(tagsState);
     }
 
+    /** Replaces the displayed tags (and re-sorts them by name). */
     public void setTags(HashMap<String, Boolean> tags) {
         this.tagsState = tags;
         this.tagsOrder = new ArrayList<>(tagsState.keySet());
@@ -118,6 +123,7 @@ public class TagsAdapter extends ArrayAdapter<String> {
         notifyDataSetChanged();
     }
 
+    /** Builds the tag map for the given entries, restoring the remembered check states. */
     public static HashMap<String, Boolean> createTagsMap(ArrayList<Entry> entries, Settings settings) {
         HashMap<String, Boolean> tagsHashMap = new HashMap<>();
 

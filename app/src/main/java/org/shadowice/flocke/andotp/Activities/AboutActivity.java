@@ -39,6 +39,7 @@ import com.mikepenz.aboutlibraries.LibsBuilder;
 import org.shadowice.flocke.andotp.Fragments.AboutFragment;
 import org.shadowice.flocke.andotp.R;
 
+/** About screen: the "About" tab plus the licenses of the used libraries. */
 public class AboutActivity extends BaseActivity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -76,6 +77,7 @@ public class AboutActivity extends BaseActivity {
         super.onBackPressed();
     }
 
+    /** Two tabs: the app's about page and the generated library list. */
     private class AboutPageAdapter extends FragmentPagerAdapter {
         AboutPageAdapter(FragmentManager fm) {
             super(fm, BEHAVIOR_RESUME_ONLY_CURRENT_FRAGMENT);

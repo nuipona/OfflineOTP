@@ -49,6 +49,7 @@ import static org.shadowice.flocke.andotp.Utilities.Constants.AuthMethod;
 import static org.shadowice.flocke.andotp.Utilities.Constants.EncryptionType;
 import static org.shadowice.flocke.andotp.Utilities.Constants.SortMode;
 
+/** Typed accessors for the app's SharedPreferences, addressed by string resource ID. */
 public class Settings {
     private static final List<String> newLangs = Arrays.asList("ar",    "bg",    "ca",    "cs",    "de",    "el",    "en",    "es",    "fa",    "fr",    "gl",    "hi",    "hu",    "it",    "ja",    "nl",    "pl",    "pt_BR", "ru",    "sl",    "sv",    "tr",    "uk",    "zh_CN", "zh_TW");
     private static final List<String> oldLangs = Arrays.asList("ar_SA", "bg_BG", "ca_ES", "cs_CZ", "de_DE", "el_GR", "en_US", "es_ES", "fa_IR", "fr_FR", "gl_ES", "hi_IN", "hu_HU", "it_IT", "ja_JP", "nl_NL", "pl_PL", "pt_BR", "ru_RU", "sl_SI", "sv_SE", "tr_TR", "uk_UA", "zh_CN", "zh_TW");
@@ -63,6 +64,7 @@ public class Settings {
         migrateDeprecatedSettings();
     }
 
+    /** Migrates values that are stored under deprecated preference keys. */
     private void migrateDeprecatedSettings() {
         if (settings.contains(getResString(R.string.settings_key_auth_password))) {
             setAuthCredentials(getString(R.string.settings_key_auth_password, ""));
@@ -175,12 +177,14 @@ public class Settings {
                 .apply();
     }
 
+    /** Removes the entry with the given key. */
     private void remove(int keyId) {
         settings.edit()
                 .remove(getResString(keyId))
                 .apply();
     }
 
+    /** Resets all settings; with {@code keep_auth} the credentials and salt survive. */
     @SuppressWarnings("ApplySharedPref")
     public void clear(boolean keep_auth) {
         AuthMethod authMethod = getAuthMethod();
@@ -212,14 +216,17 @@ public class Settings {
         PreferenceManager.setDefaultValues(context, R.xml.preferences, true);
     }
 
+    /** Lets a listener react to changed preference values. */
     public void registerPreferenceChangeListener(SharedPreferences.OnSharedPreferenceChangeListener listener) {
         settings.registerOnSharedPreferenceChangeListener(listener);
     }
 
+    /** Stops delivering preference changes to the listener. */
     public void unregisterPreferenceChangeListener(SharedPreferences.OnSharedPreferenceChangeListener listener) {
         settings.unregisterOnSharedPreferenceChangeListener(listener);
     }
 
+    /** True if either single or double tap is set to reveal. */
     public boolean getTapToReveal() {
         return getTapSingle() == Constants.TapMode.REVEAL || getTapDouble() == Constants.TapMode.REVEAL;
     }
@@ -257,6 +264,7 @@ public class Settings {
         return getString(R.string.settings_key_auth_credentials, "");
     }
 
+    /** Derives and stores the credentials; returns the new database key. */
     public byte[] setAuthCredentials(String plainPassword) {
         byte[] key = null;
 
@@ -450,6 +458,7 @@ public class Settings {
         return getString(R.string.settings_key_backup_password, "");
     }
 
+    /** Decrypts the stored backup password with the KeyStore key. */
     public String getBackupPasswordEnc() {
         String base64Password = getString(R.string.settings_key_backup_password_enc, "");
         byte[] encPassword = Base64.decode(base64Password, Base64.URL_SAFE);
@@ -513,7 +522,7 @@ public class Settings {
     }
 
     public boolean getTagToggle(String tag) {
-        // The tag toggle holds tags that are unchecked in order to default to checked.
+        // Only unchecked tags are stored, so unknown tags default to checked.
         Set<String> toggledTags = settings.getStringSet(getResString(R.string.settings_key_tags_toggles), Collections.emptySet());
 
         assert toggledTags != null;     // At least an empty set should always be present
@@ -537,6 +546,7 @@ public class Settings {
         setStringSet(R.string.settings_key_tags_toggles, toggledTags);
     }
 
+    /** Thumbnails are hidden by setting their size to 0. */
     public boolean getThumbnailVisible() {
         return getThumbnailSize() > 0;
     }
@@ -552,7 +562,7 @@ public class Settings {
     }
 
     public int getTokenSplitGroupSize() {
-        // the setting is of type "String", because ListPreference does not support integer arrays for its entryValues
+        // Stored as a String because ListPreference entryValues cannot be an integer array
         return  Integer.parseInt(
                 getString(R.string.settings_key_split_group_size, R.string.settings_default_split_group_size)
         );
@@ -600,6 +610,7 @@ public class Settings {
         return  getBoolean(R.string.settings_key_minimize_on_copy, false);
     }
   
+    /** The auto-backup mode for the encrypted backups. */
     private Constants.AutoBackup getAutoBackupEncryptedSetting() {
         String stringValue = getString(R.string.settings_key_auto_backup_password_enc, R.string.settings_default_auto_backup_password_enc);
         return Constants.AutoBackup.valueOf(stringValue.toUpperCase(Locale.ENGLISH));

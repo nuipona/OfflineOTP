@@ -49,6 +49,7 @@ import java.util.EnumMap;
 import java.util.Map;
 import java.util.Vector;
 
+/** Decodes a QR code from an image file chosen by the user. */
 public class ScanQRCodeFromFile {
 
     private static final Map<DecodeHintType, Object> HINTS;
@@ -67,13 +68,14 @@ public class ScanQRCodeFromFile {
     }
 
 
+    /** Decodes the first QR code found in the given image file. */
     public static String scanQRImage(Context context, Uri uri) {
-        //Check if external storage is accessible
+        // Check if external storage is accessible
         if (!Tools.isExternalStorageReadable()) {
             Toast.makeText(context, R.string.backup_toast_storage_not_accessible, Toast.LENGTH_LONG).show();
             return null;
         }
-        //Get image in bytes
+        // Read the image file
         byte[] imageInBytes;
         try {
             imageInBytes = StorageAccessHelper.loadFile(context, uri);
@@ -98,7 +100,7 @@ public class ScanQRCodeFromFile {
         ReaderException savedException = null;
 
         try {
-            //Try finding QR code
+            // Try a normal decode first
             result = reader.decode(bitmap, HINTS);
             contents = result.getText();
         } catch (ReaderException re) {
@@ -107,7 +109,7 @@ public class ScanQRCodeFromFile {
 
         if (contents == null) {
             try {
-                //Try finding QR code really hard
+                // Retry with the TRY_HARDER hint
                 result = reader.decode(bitmap, HINTS_HARDER);
                 contents = result.getText();
             } catch (ReaderException re) {
@@ -124,13 +126,13 @@ public class ScanQRCodeFromFile {
             } catch (FormatException e) {
                 e.printStackTrace();
                 Toast.makeText(context, R.string.toast_qr_format_error, Toast.LENGTH_LONG).show();
-            } catch (ReaderException e) {  // Including NotFoundException
+            } catch (ReaderException e) {  // also covers NotFoundException
                 e.printStackTrace();
                 Toast.makeText(context, R.string.toast_qr_error, Toast.LENGTH_LONG).show();
             }
         }
 
-        //Return QR code (if found)
+        // Return the QR content (null if none was found)
         return contents;
     }
 }

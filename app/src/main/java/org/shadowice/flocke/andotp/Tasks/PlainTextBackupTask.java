@@ -13,6 +13,7 @@ import org.shadowice.flocke.andotp.Utilities.StorageAccessHelper;
 
 import java.util.ArrayList;
 
+/** Writes an unencrypted JSON backup. */
 public class PlainTextBackupTask extends GenericBackupTask {
     private final ArrayList<Entry> entries;
 

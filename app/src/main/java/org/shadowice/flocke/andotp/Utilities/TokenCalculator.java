@@ -33,24 +33,29 @@ import java.security.NoSuchAlgorithmException;
 import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;
 
+/** Generates one-time passwords: TOTP/HOTP (RFC 6238/4226), Steam Guard and mOTP. */
 public class TokenCalculator {
+    // Defaults used when an entry or otpauth URI does not specify them
     public static final int TOTP_DEFAULT_PERIOD = 30;
     public static final int TOTP_DEFAULT_DIGITS = 6;
     public static final int HOTP_INITIAL_COUNTER = 1;
     public static final int STEAM_DEFAULT_DIGITS = 5;
 
+    // Steam's token alphabet (excludes easily confused characters)
     private static final char[] STEAMCHARS = new char[] {
             '2', '3', '4', '5', '6', '7', '8', '9', 'B', 'C',
             'D', 'F', 'G', 'H', 'J', 'K', 'M', 'N', 'P', 'Q',
             'R', 'T', 'V', 'W', 'X', 'Y'
     };
 
+    /** Hash algorithms usable for the HMAC part of TOTP/HOTP. */
     public enum HashAlgorithm {
         SHA1, SHA256, SHA512
     }
 
     public static final HashAlgorithm DEFAULT_ALGORITHM = HashAlgorithm.SHA1;
 
+    /** HMAC of {@code data} with the given algorithm and key. */
     private static byte[] generateHash(HashAlgorithm algorithm, byte[] key, byte[] data)
             throws NoSuchAlgorithmException, InvalidKeyException {
         String algo = "Hmac" + algorithm.toString();
@@ -62,10 +67,12 @@ public class TokenCalculator {
     }
 
     // TODO: Rewrite tests so this compatibility wrapper can be removed
+    /** Convenience overload without a time step offset. */
     public static int TOTP_RFC6238(byte[] secret, int period, long time, int digits, HashAlgorithm algorithm) {
         return TOTP_RFC6238(secret, period, time, digits, algorithm, 0);
     }
 
+    /** Computes the TOTP for the given unix time; {@code offset} shifts the time step. */
     public static int TOTP_RFC6238(byte[] secret, int period, long time, int digits, HashAlgorithm algorithm, int offset) {
         int fullToken = TOTP(secret, period, time, algorithm, offset);
         int div = (int) Math.pow(10, digits);
@@ -73,10 +80,12 @@ public class TokenCalculator {
         return fullToken % div;
     }
 
+    /** Returns the current TOTP as a zero-padded string. */
     public static String TOTP_RFC6238(byte[] secret, int period, int digits, HashAlgorithm algorithm, int offset) {
         return Tools.formatTokenString(TOTP_RFC6238(secret, period, System.currentTimeMillis() / 1000, digits, algorithm, offset), digits);
     }
 
+    /** Steam Guard variant of TOTP, mapped onto Steam's custom alphabet. */
     public static String TOTP_Steam(byte[] secret, int period, int digits, HashAlgorithm algorithm, int offset) {
         int fullToken = TOTP(secret, period, System.currentTimeMillis() / 1000, algorithm, offset);
 
@@ -90,6 +99,7 @@ public class TokenCalculator {
         return tokenBuilder.toString();
     }
 
+    /** Returns the HOTP for the given counter as a zero-padded string. */
     public static String HOTP(byte[] secret, long counter, int digits, HashAlgorithm algorithm) {
         int fullToken = HOTP(secret, counter, algorithm);
         int div = (int) Math.pow(10, digits);
@@ -97,10 +107,12 @@ public class TokenCalculator {
         return Tools.formatTokenString(fullToken % div, digits);
     }
 
+    /** The raw (untruncated) TOTP for the given time step. */
     private static int TOTP(byte[] key, int period, long time, HashAlgorithm algorithm, int offset) {
         return HOTP(key, (time / period) + offset, algorithm);
     }
 
+    /** The raw (untruncated) HOTP for the given counter. */
     private static int HOTP(byte[] key, long counter, HashAlgorithm algorithm)
     {
         int r = 0;
@@ -124,6 +136,7 @@ public class TokenCalculator {
         return r;
     }
 
+    /** Legacy mOTP: first 6 hex digits of MD5(epoch/10 + offset + secret + PIN). */
     public static String MOTP(String PIN, String secret, long epoch, int offset)
     {
         String epochText = String.valueOf((epoch / 10) + offset);

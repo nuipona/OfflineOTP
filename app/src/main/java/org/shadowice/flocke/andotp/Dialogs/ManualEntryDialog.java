@@ -55,11 +55,14 @@ import java.util.List;
 import java.util.Locale;
 import java.util.concurrent.Callable;
 
+/** Dialog to add a new entry or edit an existing one. */
 public class ManualEntryDialog {
+    /** Opens the dialog to add a new entry. */
     public static void show(final MainActivity callingActivity, Settings settings, final EntriesCardAdapter adapter) {
         show(callingActivity, settings, adapter, null, null);
     }
 
+    /** Opens the dialog for a new entry, or to edit {@code oldEntry} if it is not null. */
     public static void show(final MainActivity callingActivity, Settings settings, final EntriesCardAdapter adapter, Entry oldEntry, UpdateCallback updateCallback) {
         AppCompatDelegate.setCompatVectorFromResourcesEnabled(true);
         boolean isNewEntry = oldEntry == null;
@@ -167,7 +170,7 @@ public class ManualEntryDialog {
 
         tagsInput.setOnClickListener(view -> TagsDialog.show(callingActivity, tagsAdapter, tagsCallable, tagsCallable));
 
-        // Dirty fix for the compound drawable to avoid crashes on KitKat
+        // Dirty fix for the compound drawable to avoid crashes on older Android versions
         expandButton.setCompoundDrawablesWithIntrinsicBounds(null, null, ResourcesCompat.getDrawable(callingActivity.getResources(), R.drawable.ic_arrow_down_accent, null), null);
 
         final ExpandableLinearLayout expandLayout = inputView.findViewById(R.id.dialog_expand_layout);
@@ -200,7 +203,7 @@ public class ManualEntryDialog {
         final Button positiveButton = dialog.getButton(AlertDialog.BUTTON_POSITIVE);
 
         positiveButton.setOnClickListener(view -> {
-            //Replace spaces with empty characters
+            // Strip whitespace from the secret
             String secret = secretInput.getText().toString().replaceAll("\\s+","");
             Entry.OTPType type = (Entry.OTPType) typeInput.getSelectedItem();
 
@@ -314,6 +317,7 @@ public class ManualEntryDialog {
                 }
             }
 
+            /** True for a non-empty, non-zero integer input. */
             private boolean isNonZeroIntegerInput(EditText editText) {
                 try {
                     Editable text = editText.getText();
@@ -323,6 +327,7 @@ public class ManualEntryDialog {
                 }
             }
 
+            /** True for a non-empty, non-negative long input. */
             private boolean isZeroOrPositiveLongInput(EditText editText) {
                 try {
                     Editable text = editText.getText();
@@ -380,6 +385,7 @@ public class ManualEntryDialog {
         }
     }
 
+    /** Notifies the caller that an edited entry was saved. */
     public interface UpdateCallback {
         void onUpdate();
     }

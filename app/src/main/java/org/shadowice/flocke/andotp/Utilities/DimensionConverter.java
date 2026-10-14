@@ -32,9 +32,11 @@ import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
+/** Converts dimension strings such as "12dp" from the preferences to pixels. */
 public class DimensionConverter {
 
-    // -- Initialize dimension string to constant lookup.
+    // Maps dimension unit suffixes ("dp", "sp", ...) to TypedValue constants
+    /** Lookup table for the supported unit suffixes. */
     public static final Map<String, Integer> dimensionConstantLookup = initDimensionConstantLookup();
     private static Map<String, Integer> initDimensionConstantLookup() {
         Map<String, Integer> m = new HashMap<String, Integer>();
@@ -47,11 +49,12 @@ public class DimensionConverter {
         m.put("mm", TypedValue.COMPLEX_UNIT_MM);
         return Collections.unmodifiableMap(m);
     }
-    // -- Initialize pattern for dimension string.
+    // Pattern for values like "12dp" or "1.5sp"
     private static final Pattern DIMENSION_PATTERN = Pattern.compile("^\\s*(\\d+(\\.\\d+)*)\\s*([a-zA-Z]+)\\s*$");
 
+    /** Like {@link TypedValue#complexToDimensionPixelSize}, but parses a string such as "12dp". */
     public static int stringToDimensionPixelSize(String dimension, DisplayMetrics metrics) {
-        // -- Mimics TypedValue.complexToDimensionPixelSize(int data, DisplayMetrics metrics).
+        // Mimics TypedValue.complexToDimensionPixelSize(int, DisplayMetrics)
         InternalDimension internalDimension = stringToInternalDimension(dimension);
         final float value = internalDimension.value;
         final float f = TypedValue.applyDimension(internalDimension.unit, value, metrics);
@@ -62,36 +65,31 @@ public class DimensionConverter {
         return -1;
     }
 
+    /** Like {@link TypedValue#complexToDimension}, but parses a string such as "12dp". */
     public static float stringToDimension(String dimension, DisplayMetrics metrics) {
-        // -- Mimics TypedValue.complexToDimension(int data, DisplayMetrics metrics).
+        // Mimics TypedValue.complexToDimension(int, DisplayMetrics)
         InternalDimension internalDimension = stringToInternalDimension(dimension);
         return TypedValue.applyDimension(internalDimension.unit, internalDimension.value, metrics);
     }
 
+    /** Parses a dimension string; throws {@link NumberFormatException} if it is invalid. */
     private static InternalDimension stringToInternalDimension(String dimension) {
-        // -- Match target against pattern.
         Matcher matcher = DIMENSION_PATTERN.matcher(dimension);
         if (matcher.matches()) {
-            // -- Match found.
-            // -- Extract value.
             float value = Float.valueOf(matcher.group(1)).floatValue();
-            // -- Extract dimension units.
             String unit = matcher.group(3).toLowerCase();
-            // -- Get Android dimension constant.
             Integer dimensionUnit = dimensionConstantLookup.get(unit);
             if (dimensionUnit == null) {
-                // -- Invalid format.
                 throw new NumberFormatException();
             } else {
-                // -- Return valid dimension.
                 return new InternalDimension(value, dimensionUnit);
             }
         } else {
-            // -- Invalid format.
             throw new NumberFormatException();
         }        
     }
 
+    /** A parsed dimension: its value and the matching TypedValue unit. */
     private static class InternalDimension {
         float value;
         int unit;

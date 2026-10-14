@@ -22,11 +22,14 @@ import org.shadowice.flocke.andotp.Utilities.Constants;
 import org.shadowice.flocke.andotp.Utilities.EditorActionHelper;
 import org.shadowice.flocke.andotp.Utilities.Tools;
 
+/** Dialog that asks for a backup password (once, or twice with confirmation). */
 public class PasswordEntryDialog extends AppCompatDialog
     implements View.OnClickListener, TextWatcher, TextView.OnEditorActionListener {
 
+    /** ENTER for a single input (restore), UPDATE for input plus confirmation (new password). */
     public enum Mode { ENTER, UPDATE }
 
+    /** Receives the password entered by the user. */
     public interface PasswordEnteredCallback {
         void onPasswordEntered(String newPassword);
     }
@@ -89,7 +92,7 @@ public class PasswordEntryDialog extends AppCompatDialog
         }
     }
 
-    // TextWatcher
+    // TextWatcher callbacks
     public void onTextChanged(CharSequence s, int start, int before, int count) {
         if (passwordInput.getEditableText().length() >= Constants.AUTH_MIN_PASSWORD_LENGTH) {
             tooShortWarning.setVisibility(View.GONE);
@@ -119,7 +122,7 @@ public class PasswordEntryDialog extends AppCompatDialog
         return false;
     }
 
-    // View.OnClickListener
+    // View.OnClickListener callback
     public void onClick(View view)  {
         if (view.getId() == R.id.buttonOk) {
             if (callback != null)

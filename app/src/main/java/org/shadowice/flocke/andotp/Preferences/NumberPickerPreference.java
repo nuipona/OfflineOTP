@@ -90,6 +90,7 @@ public class NumberPickerPreference extends DialogPreference {
         setSummary(String.valueOf(initialValue));
     }
 
+    /** Stores and displays the current value. */
     public void setValue(int value) {
         this.value = value;
         persistInt(this.value);

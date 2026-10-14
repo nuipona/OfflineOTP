@@ -12,8 +12,10 @@ import androidx.annotation.Nullable;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
-/** Encapsulates a background task that needs to communicate back to the UI (on the main thread) to
- * provide a result. */
+/**
+ * Encapsulates a background task that communicates its result back to the UI on the main thread.
+ * Results that arrive while no callback is set are stored until one is attached.
+ */
 public abstract class UiBasedBackgroundTask<Result> {
 
     private final Result failedResult;
@@ -51,6 +53,7 @@ public abstract class UiBasedBackgroundTask<Result> {
         }
     }
 
+    /** Posts the result to the main thread and clears the pending callback/result. */
     private void emitResultOnMainThread(@NonNull UiCallback<Result> callback, @NonNull Result result) {
         mainThreadHandler.post(() -> callback.onResult(result));
         this.callback = null;
@@ -63,6 +66,7 @@ public abstract class UiBasedBackgroundTask<Result> {
         executor.execute(this::runTask);
     }
 
+    /** Runs {@link #doInBackground()} and delivers or stores its result. */
     private void runTask() {
         Result result = failedResult;
         try {
@@ -101,6 +105,7 @@ public abstract class UiBasedBackgroundTask<Result> {
         isCanceled = true;
     }
 
+    /** Receives the task's result on the main thread. */
     @FunctionalInterface
     public interface UiCallback<Result> {
         @MainThread

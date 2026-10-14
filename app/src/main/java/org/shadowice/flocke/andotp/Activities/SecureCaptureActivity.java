@@ -37,22 +37,21 @@ import org.shadowice.flocke.andotp.Utilities.Settings;
 
 import java.util.Locale;
 
+/** QR scanner activity that honours the theme, language and screenshot settings. */
 public class SecureCaptureActivity extends CaptureActivity {
 
     /**
-     * Overwrites {@link CaptureActivity#initializeContent()} to:
+     * Overrides {@link CaptureActivity#initializeContent()} to:
      * <ul>
-     *     <li>preventing the window from appearing in screenshots or from being viewed on
-     *     non-secure displays, if this was enabled in the app settings.</li>
-     *     <li>request hardware acceleration to be turned on.</li>
-     *     <li>hide all screen decorations like navigation and status bars.</li>
+     *     <li>block screenshots and non-secure displays (unless enabled in the app settings),</li>
+     *     <li>request hardware acceleration,</li>
+     *     <li>hide the system bars.</li>
      * </ul>
      *
      * <em>
-     *     Note:
-     *     {@link android.app.Activity#setContentView(int)} in {@link CaptureActivity#initializeContent()}
-     *     of super class needs to be called before {@link Window#getInsetsController()}, otherwise NPE will be thrown
-     *     because the top-level view of the current {@link Window}, containing the window decor, is not yet initialized.
+     *     Note: the super class calls {@link android.app.Activity#setContentView(int)} before this method,
+     *     so the window decor exists by the time {@link Window#getInsetsController()} is used; calling it
+     *     earlier would throw an NPE.
      * </em>
      *
      * @return the DecoratedBarcodeView
@@ -65,7 +64,7 @@ public class SecureCaptureActivity extends CaptureActivity {
         setTheme(settings.getTheme());
         setLocale(settings);
 
-        //  This flag must be set before setting the content view of the activity or dialog.
+        // This flag must be set before setting the content view of the activity or dialog.
         getWindow().setFlags(
                 WindowManager.LayoutParams.FLAG_HARDWARE_ACCELERATED,
                 WindowManager.LayoutParams.FLAG_HARDWARE_ACCELERATED
@@ -95,6 +94,7 @@ public class SecureCaptureActivity extends CaptureActivity {
         return barcodeScannerView;
     }
 
+    /** Applies the selected language (this activity does not extend ThemedActivity). */
     private void setLocale(Settings settings) {
         Locale locale = settings.getLocale();
         Locale.setDefault(locale);

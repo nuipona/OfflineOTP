@@ -34,11 +34,12 @@ import android.util.Log;
 
 import java.io.IOException;
 
+/** Backs up the preferences and the (already encrypted) database files via the Android backup service. */
 public class BackupAgent extends BackupAgentHelper {
     static final String PREFS_BACKUP_KEY = "prefs";
     static final String FILES_BACKUP_KEY = "files";
 
-    // PreferenceManager.getDefaultSharedPreferencesName is only available in API > 24, this is its implementation
+    // PreferenceManager.getDefaultSharedPreferencesName() is only public since API 24, so mirror its implementation
     String getDefaultSharedPreferencesName() {
         return getPackageName() + "_preferences";
     }

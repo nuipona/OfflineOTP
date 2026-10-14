@@ -8,6 +8,7 @@ import androidx.annotation.NonNull;
 
 import org.shadowice.flocke.andotp.Utilities.StorageAccessHelper;
 
+/** Reads an OpenPGP-encrypted backup and hands it to the OpenPGP app for decryption. */
 public class PGPRestoreTask extends GenericRestoreTask {
     private final Intent decryptIntent;
 

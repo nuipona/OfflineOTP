@@ -84,6 +84,10 @@ import javax.crypto.SecretKey;
 
 import static org.shadowice.flocke.andotp.Utilities.Constants.SortMode;
 
+/**
+ * Adapter for the entry cards; keeps the persisted {@link EntryList} and the (sorted and
+ * filtered) list that is actually displayed.
+ */
 public class EntriesCardAdapter extends RecyclerView.Adapter<EntryViewHolder>
     implements ItemTouchHelperAdapter, Filterable {
     private final Context context;
@@ -144,6 +148,7 @@ public class EntriesCardAdapter extends RecyclerView.Adapter<EntryViewHolder>
         saveEntries(auto_backup);
     }
 
+    /** Adds the entry (with a toast if it is already present) and saves the database. */
     public void addEntry(Entry e) {
         if (entries.addEntry(e)) {
             saveAndRefresh(settings.getAutoBackupEncryptedPasswordsEnabled());
@@ -152,10 +157,12 @@ public class EntriesCardAdapter extends RecyclerView.Adapter<EntryViewHolder>
         }
     }
 
+    /** Maps a position in the displayed list to the position in the persisted list. */
     private int getRealIndex(int displayPosition) {
         return entries.indexOf(displayedEntries.get(displayPosition));
     }
 
+    /** Re-sorts and re-filters the displayed list and notifies the view. */
     private void entriesChanged(int itemPos) {
         displayedEntries = entries.getEntriesSorted(sortMode);
         filterByTags(tagsFilter);
@@ -166,6 +173,7 @@ public class EntriesCardAdapter extends RecyclerView.Adapter<EntryViewHolder>
             notifyItemChanged(itemPos);
     }
 
+    /** Rebuilds the tag drawer from the tags that are actually in use. */
     public void updateTagsFilter() {
         List<String> inUseTags = getTags();
 
@@ -188,6 +196,7 @@ public class EntriesCardAdapter extends RecyclerView.Adapter<EntryViewHolder>
         tagsFilter = tagsFilterAdapter.getActiveTags();
     }
 
+    /** Saves the database and, if enabled, writes an encrypted automatic backup. */
     public void saveEntries(boolean auto_backup) {
         DatabaseHelper.saveDatabase(context, entries.getEntries(), encryptionKey);
 
@@ -207,6 +216,7 @@ public class EntriesCardAdapter extends RecyclerView.Adapter<EntryViewHolder>
         }
     }
 
+    /** Loads the database into the entry list (merging it into the existing entries). */
     public void loadEntries() {
         if (encryptionKey != null) {
             ArrayList<Entry> newEntries = DatabaseHelper.loadDatabase(context, encryptionKey);
@@ -216,6 +226,7 @@ public class EntriesCardAdapter extends RecyclerView.Adapter<EntryViewHolder>
         }
     }
 
+    /** Shows only the entries matching the given tags. */
     public void filterByTags(List<String> tags) {
         displayedEntries = entries.getEntriesFilteredByTags(tags, settings.getNoTagsToggle(), settings.getTagFunctionality(), sortMode);
         tagsFilter = tags;
@@ -223,6 +234,7 @@ public class EntriesCardAdapter extends RecyclerView.Adapter<EntryViewHolder>
         notifyDataSetChanged();
     }
 
+    /** Refreshes all time-based tokens; the view is only notified when something changed. */
     public void updateTimeBasedTokens() {
         boolean change = false;
 
@@ -323,7 +335,7 @@ public class EntriesCardAdapter extends RecyclerView.Adapter<EntryViewHolder>
                         sendKeystrokes(position);
                         break;
                     default:
-                        // If tap-to-reveal is disabled a single tab still needs to establish the PIN
+                        // If tap-to-reveal is disabled a single tap still needs to establish the PIN
                         if (!settings.getTapToReveal())
                             establishPinIfNeeded(position);
                         break;
@@ -470,6 +482,7 @@ public class EntriesCardAdapter extends RecyclerView.Adapter<EntryViewHolder>
         dialog.show();
     }
 
+    /** Enables the OK button only while the input is a non-negative number. */
     private void addCounterValidationWatcher(EditText input, AlertDialog dialog) {
         TextWatcher counterWatcher = new TextWatcher() {
             @Override
@@ -499,6 +512,7 @@ public class EntriesCardAdapter extends RecyclerView.Adapter<EntryViewHolder>
         input.addTextChangedListener(counterWatcher);
     }
 
+    /** Records the usage; returns false when the resorting also updated the view. */
     private boolean updateLastUsedAndFrequency(int position, int realIndex) {
         long timeStamp = System.currentTimeMillis();
         long entryUsedFrequency = entries.getEntry(realIndex).getUsedFrequency();
@@ -526,6 +540,7 @@ public class EntriesCardAdapter extends RecyclerView.Adapter<EntryViewHolder>
         return true;
     }
 
+    /** Swaps two entries after a drag (only in the unsorted, unfiltered view). */
     @Override
     public boolean onItemMove(int fromPosition, int toPosition) {
         if (sortMode == SortMode.UNSORTED && entries.isEqual(displayedEntries)) {
@@ -540,6 +555,7 @@ public class EntriesCardAdapter extends RecyclerView.Adapter<EntryViewHolder>
         return true;
     }
 
+    /** Shows the thumbnail picker with a filter field. */
     public void changeThumbnail(final int pos) {
         AlertDialog.Builder builder = new AlertDialog.Builder(context);
 
@@ -618,6 +634,7 @@ public class EntriesCardAdapter extends RecyclerView.Adapter<EntryViewHolder>
         alert.show();
     }
 
+    /** Asks for the mOTP PIN, which is required to calculate the token. */
     public void establishPIN(final int pos) {
         AlertDialog.Builder builder = new AlertDialog.Builder(context);
 
@@ -656,6 +673,7 @@ public class EntriesCardAdapter extends RecyclerView.Adapter<EntryViewHolder>
                 .show();
     }
 
+    /** Deletes the entry after a confirmation dialog. */
     @SuppressLint("StringFormatInvalid")
     public void removeItem(final int pos) {
         AlertDialog.Builder builder = new AlertDialog.Builder(context);
@@ -678,9 +696,8 @@ public class EntriesCardAdapter extends RecyclerView.Adapter<EntryViewHolder>
                 .show();
     }
 
-    // sends the current OTP code via a "Send Action" with the MIME type "text/x-keystrokes"
-    // other apps (eg. https://github.com/KDE/kdeconnect-android ) can listen for this and handle
-    // the current code on their own (eg. sending it to a connected device/browser/...)
+    /** Sends the current token as an ACTION_SEND intent of type "text/x-keystrokes", which apps
+     * such as KDE Connect can pick up (e.g. to type it on a connected device). */
     private void sendKeystrokes(final int pos) {
         String otp = displayedEntries.get(pos).getCurrentOTP();
         Intent sendIntent = new Intent(Intent.ACTION_SEND);
@@ -691,6 +708,7 @@ public class EntriesCardAdapter extends RecyclerView.Adapter<EntryViewHolder>
         }
     }
 
+    /** Shows the entry as a QR code (if the type can be encoded). */
     private void showQRCode(final int pos) {
         Uri uri = displayedEntries.get(pos).toUri();
         if (uri != null) {
@@ -720,6 +738,7 @@ public class EntriesCardAdapter extends RecyclerView.Adapter<EntryViewHolder>
         }
     }
 
+    /** Shows the per-entry context menu. */
     private void showPopupMenu(View view, final int pos) {
         View menuItemView = view.findViewById(R.id.menuButton);
         PopupMenu popup = new PopupMenu(view.getContext(), menuItemView);
@@ -759,6 +778,7 @@ public class EntriesCardAdapter extends RecyclerView.Adapter<EntryViewHolder>
         popup.show();
     }
 
+    /** Changes the sort order of the displayed entries. */
     public void setSortMode(SortMode mode) {
         this.sortMode = mode;
         entriesChanged(RecyclerView.NO_POSITION);
@@ -779,6 +799,7 @@ public class EntriesCardAdapter extends RecyclerView.Adapter<EntryViewHolder>
         return filter;
     }
 
+    /** Drops the current search filter. */
     public void clearFilter() {
         if (filter != null)
             filter = null;
@@ -788,6 +809,7 @@ public class EntriesCardAdapter extends RecyclerView.Adapter<EntryViewHolder>
         return entries.getAllTags();
     }
 
+    /** Search filter that applies the configured search fields. */
     public class EntryFilter extends Filter {
         private final List<Constants.SearchIncludes> filterValues = settings.getSearchValues();
 
@@ -810,6 +832,7 @@ public class EntriesCardAdapter extends RecyclerView.Adapter<EntryViewHolder>
         }
     }
 
+    /** Lets the activity react to drag/drop events (pausing the token updater). */
     public interface Callback {
         void onMoveEventStart();
         void onMoveEventStop();

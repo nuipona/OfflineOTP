@@ -28,6 +28,7 @@ import android.content.Intent;
 import android.content.IntentFilter;
 import android.os.Bundle;
 
+/** Base activity that reacts to screen-off events to lock or close the screen. */
 public abstract class BaseActivity extends ThemedActivity {
     private ScreenOffReceiver screenOffReceiver;
     private BroadcastReceivedCallback broadcastReceivedCallback;
@@ -46,10 +47,12 @@ public abstract class BaseActivity extends ThemedActivity {
         super.onDestroy();
     }
 
+    /** Lets the activity react when the screen is turned off. */
     public void setBroadcastCallback(BroadcastReceivedCallback cb) {
         this.broadcastReceivedCallback = cb;
     }
 
+    /** Finishes the activity (and notifies the callback) when the screen turns off. */
     public class ScreenOffReceiver extends BroadcastReceiver {
         public IntentFilter filter = new IntentFilter(Intent.ACTION_SCREEN_OFF);
 
@@ -66,10 +69,12 @@ public abstract class BaseActivity extends ThemedActivity {
         }
     }
 
+    /** True if this activity should be closed when the screen turns off. */
     protected boolean shouldDestroyOnScreenOff() {
         return true;
     }
 
+    /** Callback for the screen-off event. */
     interface BroadcastReceivedCallback {
         void onReceivedScreenOff();
     }

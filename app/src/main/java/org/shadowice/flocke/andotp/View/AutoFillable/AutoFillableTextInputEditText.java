@@ -45,10 +45,12 @@ public class AutoFillableTextInputEditText extends TextInputEditText {
         }
     }
 
+    /** Sets the listener that is notified about autofilled text. */
     public void setAutoFillTextListener(@Nullable AutoFillTextListener listener) {
         this.listener = listener;
     }
 
+    /** Receives the text inserted by the autofill service. */
     public interface AutoFillTextListener {
 
         void onTextAutoFilled(@NonNull CharSequence text);

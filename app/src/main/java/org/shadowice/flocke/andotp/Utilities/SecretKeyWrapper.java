@@ -42,8 +42,7 @@ public class SecretKeyWrapper {
     private final KeyPair mPair;
 
     /**
-     * Create a wrapper using the public/private key pair with the given alias.
-     * If no pair with that alias exists, it will be generated.
+     * Create a wrapper using the public/private key pair from the Android KeyStore.
      */
     @SuppressLint("GetInstance")
     public SecretKeyWrapper(KeyPair keyPair)

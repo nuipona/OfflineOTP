@@ -39,13 +39,16 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.Objects;
 
+/** One OTP entry: its secret, type and display/sort metadata, serialized to JSON and otpauth:// URIs. */
 public class Entry {
+    /** The OTP algorithms supported by andOTP. */
     public enum OTPType {
         TOTP, HOTP, MOTP, STEAM
     }
 
     private static final OTPType DEFAULT_TYPE = OTPType.TOTP;
     private static final int DEFAULT_PERIOD = 30;
+    // Token placeholder shown while an mOTP entry has no PIN
     private static final String MOTP_NO_PIN_CODE = "PINREQ";
 
     private static final String JSON_SECRET = "secret";
@@ -80,7 +83,7 @@ public class Entry {
     private EntryThumbnail.EntryThumbnails thumbnail = EntryThumbnail.EntryThumbnails.Default;
     private static final int COLOR_DEFAULT = 0;
     public static final int COLOR_RED = 1;
-    private static final int EXPIRY_TIME = 8;
+    private static final int EXPIRY_TIME = 8;               // Seconds before the period ends to highlight the token
     private int color = COLOR_DEFAULT;
     private String pin = "";
     private long listId = 0;
@@ -219,7 +222,7 @@ public class Entry {
         try {
             this.issuer = jsonObj.getString(JSON_ISSUER);
         } catch (JSONException e) {
-            // Older backup version did not save issuer and label separately
+            // Older backups did not store the issuer separately
             this.issuer = "";
         }
 
@@ -262,7 +265,7 @@ public class Entry {
                 this.tags.add(tagsArray.getString(i));
             }
         } catch (Exception e) {
-            // Nothing wrong here
+            // No tags stored (e.g. an older backup)
         }
 
         try {
@@ -284,6 +287,7 @@ public class Entry {
         }
     }
 
+    /** Serializes this entry to the JSON object used in the database and in backups. */
     public JSONObject toJSON() throws JSONException {
         JSONObject jsonObj = new JSONObject();
         jsonObj.put(JSON_SECRET, new String(new Base32().encode(getSecret())));
@@ -310,6 +314,7 @@ public class Entry {
         return jsonObj;
     }
 
+    /** Serializes this entry to an otpauth:// URI (null if the type is unsupported). */
     public Uri toUri() {
         String type;
         switch (this.type) {
@@ -379,6 +384,7 @@ public class Entry {
         return secret;
     }
 
+    /** The secret as stored/displayed: Base32, or the raw secret for mOTP. */
     public String getSecretEncoded() {
         if (type == OTPType.MOTP)
             return new String(secret);
@@ -505,13 +511,14 @@ public class Entry {
         listId = newId;
     }
 
+    /** Recalculates the token ({@code updateNow} forces a time-based refresh); returns whether one was produced. */
     public boolean updateOTP(boolean updateNow) {
         if (type == OTPType.TOTP || type == OTPType.STEAM || type == OTPType.MOTP) {
             long time = System.currentTimeMillis() / 1000;
             long counter = time / this.getPeriod();
 
             if (updateNow || counter > last_update) {
-                // Store the previous token so we don't have to recalculate it every time
+                // Keep the previous token so it does not have to be recalculated
                 if (currentOTP != null && !currentOTP.isEmpty())
                     prevOTP = currentOTP;
                 else
@@ -562,13 +569,9 @@ public class Entry {
     }
 
     /**
-     * Checks if the OTP is expiring. The color for the entry will be changed to red if the expiry time is less than or equal to 8 seconds
-     * COLOR_DEFAULT indicates that the OTP has not expired. In this case check if the OTP is about to expire. Update color to COLOR_RED if it's about to expire
-     * COLOR_RED indicates that the OTP is already about to expire. Don't check again.
-     * The color will be reset to COLOR_DEFAULT in {@link #updateOTP(boolean updateNow)} method
-     *
-     * @return Return true only if the color has changed to red to save from unnecessary notifying dataset
-     * */
+     * Returns true the first time the token is within {@link #EXPIRY_TIME} seconds of expiring,
+     * switching the entry to the expiring color. {@link #updateOTP(boolean)} resets that color.
+     */
     public boolean hasColorChanged() {
         if(color == COLOR_DEFAULT){
             long time = System.currentTimeMillis() / 1000;
@@ -580,6 +583,7 @@ public class Entry {
         return false;
     }
 
+    /** Sets the thumbnail by exact, then by fuzzy issuer match. */
     private void setThumbnailFromIssuer(String issuer) {
         try {
             this.thumbnail = EntryThumbnail.EntryThumbnails.valueOfIgnoreCase(issuer);
@@ -625,6 +629,7 @@ public class Entry {
         return color;
     }
 
+    /** True if the secret is valid Base32 (or hex for mOTP). */
     public static boolean validateSecret(String secret, OTPType type) {
         try {
             if (type == OTPType.MOTP)
@@ -639,10 +644,9 @@ public class Entry {
     }
 
     /**
-     * Returns the label with issuer prefix removed (if present)
-     * @param issuer - Name of the issuer to remove from the label
-     * @param label - Full label from which the issuer should be removed
-     * @return - label with the issuer removed
+     * @param issuer Issuer to strip from the front of the label
+     * @param label  Full label (e.g. "ACME:john.doe@email.com")
+     * @return The label without the "issuer:" prefix
      */
     private String getStrippedLabel(String issuer, String label) {
         if (issuer == null || issuer.isEmpty() || !label.startsWith(issuer + ":")) {

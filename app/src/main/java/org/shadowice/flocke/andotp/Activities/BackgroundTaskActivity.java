@@ -11,21 +11,27 @@ import androidx.lifecycle.ProcessLifecycleOwner;
 
 import org.shadowice.flocke.andotp.Tasks.UiBasedBackgroundTask;
 
+/**
+ * Base activity for screens that run one {@link UiBasedBackgroundTask} through a retained task
+ * fragment, so a running task survives configuration changes.
+ */
 public abstract class BackgroundTaskActivity<Result> extends BaseActivity {
     final protected String TAG_TASK_FRAGMENT = this.getClass().getSimpleName() + ".TaskFragment";
 
     private ProcessLifecycleObserver observer = null;
 
+    /** Called with the result of a finished task; the UI is already back to its idle state. */
     abstract void onTaskResult(Result result);
 
     protected void onReturnToCanceledTask() {
-        // This can be overwritten if we need to do something here
+        // Override to react when the user comes back to a canceled task
     }
 
     protected void setupUiForTaskState(boolean running) {
-        // This can be overwritten when we need to give some UI feedback
+        // Override to reflect the running state in the UI
     }
 
+    /** True to cancel the running task when the app goes to the background. */
     protected boolean cancelTaskOnScreenOff() {
         return false;
     }
@@ -71,6 +77,7 @@ public abstract class BackgroundTaskActivity<Result> extends BaseActivity {
             taskFragment.setCallback(null);
     }
 
+    /** Cancels the running task (if any) and restores the idle UI. */
     protected void cancelBackgroundTask() {
         TaskFragment<Result> taskFragment = findTaskFragment();
 
@@ -80,6 +87,7 @@ public abstract class BackgroundTaskActivity<Result> extends BaseActivity {
         setupUiForTaskState(false);
     }
 
+    /** Hands the task to the retained fragment and switches to the running UI. */
     protected void startBackgroundTask(UiBasedBackgroundTask<Result> task) {
         TaskFragment<Result> taskFragment = findTaskFragment();
 
@@ -116,6 +124,7 @@ public abstract class BackgroundTaskActivity<Result> extends BaseActivity {
         }
     }
 
+    /** Re-attaches the result callback after returning to the activity. */
     private void checkBackgroundTask() {
         TaskFragment<Result> taskFragment = findTaskFragment();
 
@@ -139,6 +148,7 @@ public abstract class BackgroundTaskActivity<Result> extends BaseActivity {
         }
     }
 
+    /** The retained task fragment, or null if none is attached. */
     @Nullable
     @SuppressWarnings("unchecked")
     private TaskFragment<Result> findTaskFragment() {
@@ -150,6 +160,7 @@ public abstract class BackgroundTaskActivity<Result> extends BaseActivity {
             return null;
     }
 
+    /** Cancels the running task when the app goes to the background (if the activity asks for it). */
     private class ProcessLifecycleObserver implements DefaultLifecycleObserver {
         @Override
         public void onStop(@NonNull LifecycleOwner owner) {
@@ -158,6 +169,7 @@ public abstract class BackgroundTaskActivity<Result> extends BaseActivity {
         }
     }
 
+    /** Retained fragment that keeps the running task alive across configuration changes. */
     public static class TaskFragment<Result> extends Fragment {
         private UiBasedBackgroundTask<Result> task;
 

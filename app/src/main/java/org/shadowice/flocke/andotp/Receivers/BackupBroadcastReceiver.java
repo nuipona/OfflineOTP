@@ -28,8 +28,10 @@ import android.content.Context;
 
 import org.shadowice.flocke.andotp.Utilities.Settings;
 
+/** Base class for the receivers that trigger a backup from an external broadcast. */
 public abstract class BackupBroadcastReceiver extends BroadcastReceiver {
 
+    /** True if a backup location is configured. */
     @SuppressWarnings("BooleanMethodIsAlwaysInverted")
     protected boolean canSaveBackup(Context context) {
         Settings settings = new Settings(context);

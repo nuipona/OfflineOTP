@@ -33,6 +33,7 @@ import org.shadowice.flocke.andotp.Utilities.Settings;
 
 import java.util.Set;
 
+/** Handles the PanicKit TRIGGER action: wipes the database/keys and/or the settings as configured. */
 public class PanicResponderActivity extends Activity {
     public static final String PANIC_TRIGGER_ACTION = "info.guardianproject.panic.action.TRIGGER";
 

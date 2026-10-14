@@ -9,6 +9,7 @@ import android.widget.LinearLayout;
 
 import org.shadowice.flocke.andotp.R;
 
+/** fdroid flavor: adds the donation links for both authors to the About tab. */
 public class AboutFragment extends BaseAboutFragment {
     private static final String ABOUT_AUTHOR1_EXTRA_LINK = "https://flocke.shadowice.org/donate.html";
     private static final String ABOUT_AUTHOR2_EXTRA_LINK = "https://richyhbm.co.uk/donate";

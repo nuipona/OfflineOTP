@@ -12,10 +12,12 @@ import org.shadowice.flocke.andotp.Utilities.Constants;
 import org.shadowice.flocke.andotp.Utilities.Settings;
 import org.shadowice.flocke.andotp.Utilities.StorageAccessHelper;
 
+/** Base for backup tasks: resolves the target file, then delegates to {@link #doBackup()}. */
 public abstract class GenericBackupTask extends UiBasedBackgroundTask<BackupTaskResult> {
     protected final Context applicationContext;
     protected final Settings settings;
     protected final Constants.BackupType type;
+    // Target file; resolved in doInBackground() when null
     protected Uri uri;
 
     public GenericBackupTask(Context context, @Nullable Uri uri) {
@@ -28,6 +30,7 @@ public abstract class GenericBackupTask extends UiBasedBackgroundTask<BackupTask
         this.uri = uri;
     }
 
+    /** Picks or creates the target file and then runs {@link #doBackup()}. */
     @Override
     @NonNull
     protected BackupTaskResult doInBackground() {
@@ -53,7 +56,9 @@ public abstract class GenericBackupTask extends UiBasedBackgroundTask<BackupTask
             return BackupTaskResult.failure(BackupTaskResult.ResultType.BACKUP, R.string.backup_toast_export_failed);
     }
 
+    /** The backup type this task writes (used for the file name and MIME type). */
     @NonNull
     protected abstract Constants.BackupType getBackupType();
+    /** Writes the backup to {@link #uri} and reports whether it succeeded. */
     protected abstract boolean doBackup();
 }

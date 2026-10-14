@@ -9,6 +9,7 @@ import org.shadowice.flocke.andotp.Utilities.EncryptionHelper;
 
 import javax.crypto.SecretKey;
 
+/** Re-encrypts the database after the encryption type was changed in the settings. */
 public class ChangeEncryptionTask extends UiBasedBackgroundTask<ChangeEncryptionTask.Result>
     implements EncryptionHelper.EncryptionChangeCallback {
 
@@ -33,6 +34,7 @@ public class ChangeEncryptionTask extends UiBasedBackgroundTask<ChangeEncryption
         this.newEncryptionKey = newEncryptionKey;
     }
 
+    /** Runs the re-encryption with the given key material. */
     @NonNull
     @Override
     protected Result doInBackground() {
@@ -41,6 +43,7 @@ public class ChangeEncryptionTask extends UiBasedBackgroundTask<ChangeEncryption
         return new Result(result, this.newEncryptionKey, this.newEncryptionType);
     }
 
+    /** Detailed outcome of the change (see EncryptionChangeResult) plus the new key and type. */
     public static class Result {
         public final EncryptionHelper.EncryptionChangeResult result;
         public final SecretKey newEncryptionKey;

@@ -41,10 +41,13 @@ import java.util.ArrayList;
 
 import javax.crypto.SecretKey;
 
+/** Reads and writes the encrypted JSON database (and its backup copy). */
 public class DatabaseHelper {
 
+    // Serializes database file access; BackupAgent synchronizes on this lock as well
     static final Object DatabaseFileLock = new Object();
 
+    /** Deletes the database and its backup copy. */
     public static void wipeDatabase(Context context) {
         File db = new File(context.getFilesDir() + "/" + Constants.FILENAME_DATABASE);
         File dbBackup = new File(context.getFilesDir() + "/" + Constants.FILENAME_DATABASE_BACKUP);
@@ -65,6 +68,7 @@ public class DatabaseHelper {
         }
     }
 
+    /** Copies the database file aside before a risky operation. */
     public static boolean backupDatabase(Context context) {
         File original = new File(context.getFilesDir() + "/" + Constants.FILENAME_DATABASE);
         File backup = new File(context.getFilesDir() + "/" + Constants.FILENAME_DATABASE_BACKUP);
@@ -80,6 +84,7 @@ public class DatabaseHelper {
         return true;
     }
 
+    /** Restores the database from the copy made by {@link #backupDatabase(Context)}. */
     public static boolean restoreDatabaseBackup(Context context) {
         File original = new File(context.getFilesDir() + "/" + Constants.FILENAME_DATABASE);
         File backup = new File(context.getFilesDir() + "/" + Constants.FILENAME_DATABASE_BACKUP);
@@ -95,7 +100,7 @@ public class DatabaseHelper {
         return true;
     }
 
-    /* Database functions */
+    /** Encrypts and writes the entry list, then asks the Android backup manager to sync it. */
     public static boolean saveDatabase(Context context, ArrayList<Entry> entries, SecretKey encryptionKey) {
         if (encryptionKey == null) {
             Toast.makeText(context, R.string.toast_encryption_key_empty, Toast.LENGTH_LONG).show();
@@ -121,6 +126,7 @@ public class DatabaseHelper {
         return true;
     }
 
+    /** Reads and decrypts the entry list; returns an empty list if the data cannot be read. */
     public static ArrayList<Entry> loadDatabase(Context context, SecretKey encryptionKey) {
         ArrayList<Entry> entries = new ArrayList<>();
 
@@ -142,8 +148,7 @@ public class DatabaseHelper {
         return entries;
     }
 
-    /* Conversion functions */
-
+    /** Serializes all entries to the JSON array used in the database and in backups. */
     public static String entriesToString(ArrayList<Entry> entries) {
         JSONArray json = new JSONArray();
 
@@ -158,6 +163,7 @@ public class DatabaseHelper {
         return json.toString();
     }
 
+    /** Parses the JSON array used in the database and in backups; returns an empty list if it is invalid. */
     public static ArrayList<Entry> stringToEntries(String data) {
         ArrayList<Entry> entries = new ArrayList<>();
 

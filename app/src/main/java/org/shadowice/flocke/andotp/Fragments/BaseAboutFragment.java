@@ -25,6 +25,7 @@ import org.shadowice.flocke.andotp.R;
 import org.shadowice.flocke.andotp.Utilities.Settings;
 import org.shadowice.flocke.andotp.Utilities.Tools;
 
+/** Shared logic of the About tab, which the fdroid/play flavors extend with their own extras. */
 public class BaseAboutFragment extends Fragment {
     private static final String GITHUB_URI = "https://github.com/andOTP/andOTP";
     private static final String CHANGELOG_URI = GITHUB_URI + "/blob/master/CHANGELOG.md";
@@ -189,6 +190,7 @@ public class BaseAboutFragment extends Fragment {
         return v;
     }
 
+    /** Enables the hidden special-features screen (offered after seven quick taps on the version). */
     private void enableSpecialFeatures() {
         AlertDialog.Builder builder = new AlertDialog.Builder(getActivity());
         builder.setTitle(R.string.about_title_special_features)
@@ -208,12 +210,14 @@ public class BaseAboutFragment extends Fragment {
                 .show();
     }
 
+    /** Opens the URI in a suitable app. */
     public void openURI(String uri) {
         Intent openURI = new Intent(Intent.ACTION_VIEW);
         openURI.setData(Uri.parse(uri));
         startActivity(openURI);
     }
 
+    /** Copies the URI to the clipboard (fallback when no app can open it). */
     public void copyToClipboard(String uri) {
         ClipboardManager clipboard = (ClipboardManager) getActivity().getSystemService(Context.CLIPBOARD_SERVICE);
         ClipData clip = ClipData.newPlainText("andOTP", uri);

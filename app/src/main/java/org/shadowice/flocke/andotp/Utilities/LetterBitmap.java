@@ -38,10 +38,9 @@ import android.util.TypedValue;
 import org.shadowice.flocke.andotp.R;
 
 /**
- * Orginal http://stackoverflow.com/questions/23122088/colored-boxed-with-letters-a-la-gmail
+ * Original: http://stackoverflow.com/questions/23122088/colored-boxed-with-letters-a-la-gmail
  * Used to create a {@link Bitmap} that contains a letter used in the English
- * alphabet or digit, if there is no letter or digit available, a default image
- * is shown instead.
+ * alphabet or digit; otherwise a "?" placeholder is used.
  *
  * Only English language supported.
  */
@@ -79,7 +78,7 @@ class LetterBitmap {
     private final float mTileLetterFontSizeScale;
 
     /**
-     * Constructor for <code>LetterTileProvider</code>
+     * Constructor for <code>LetterBitmap</code>
      *
      * @param context The {@link Context} to use
      */
@@ -103,9 +102,8 @@ class LetterBitmap {
      * @param key         The key used to generate the background color for the tile
      * @param width       The desired width of the tile
      * @param height      The desired height of the tile
-     * @return A {@link Bitmap} that contains a letter used in the English
-     * alphabet or digit, if there is no letter or digit available, a
-     * default image is shown instead
+     * @return A {@link Bitmap} with the first letter/digit of the name, or a
+     * "?" placeholder if there is none
      */
     public Bitmap getLetterTile(String displayName, String key, int width, int height) {
         final Bitmap bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888);

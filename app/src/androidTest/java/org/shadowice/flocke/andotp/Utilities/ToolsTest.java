@@ -25,6 +25,7 @@ package org.shadowice.flocke.andotp.Utilities;
 
 import junit.framework.TestCase;
 
+/** Tests for the token grouping helper. */
 public class ToolsTest extends TestCase {
    public void testFormatToken() throws Exception {
       assertEquals("123 456", Tools.formatToken("123456", 3));
