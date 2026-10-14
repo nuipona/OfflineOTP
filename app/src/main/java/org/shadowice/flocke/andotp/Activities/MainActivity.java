@@ -91,6 +91,7 @@ import static org.shadowice.flocke.andotp.Utilities.Constants.AuthMethod;
 import static org.shadowice.flocke.andotp.Utilities.Constants.EncryptionType;
 import static org.shadowice.flocke.andotp.Utilities.Constants.SortMode;
 
+/** Main screen: the entry list with search, tag drawer and authentication handling. */
 public class MainActivity extends BaseActivity
         implements SharedPreferences.OnSharedPreferenceChangeListener {
     public static long animatorDuration = 1000;
@@ -125,7 +126,6 @@ public class MainActivity extends BaseActivity
     private ProgressBar progressBar;
     private TextView emptyListView;
 
-    // QR code scanning
     private void scanQRCode(){
         new IntentIntegrator(MainActivity.this)
                 .setOrientationLocked(false)
@@ -139,6 +139,7 @@ public class MainActivity extends BaseActivity
         startActivityForResult(introIntent, Constants.INTENT_MAIN_INTRO);
     }
 
+    /** Starts the configured authentication flow, showing {@code messageId} as prompt. */
     public void authenticate(int messageId) {
         AuthMethod authMethod = settings.getAuthMethod();
 
@@ -157,7 +158,7 @@ public class MainActivity extends BaseActivity
         }
     }
 
-    // Everything that should happen after the app is unlocked can go here
+    // Everything that should happen after the app is unlocked goes here
     private void afterAuthentication() {
         checkAutomaticTime();
     }
@@ -176,6 +177,7 @@ public class MainActivity extends BaseActivity
             settings.setSortMode(mode);
     }
 
+    /** Loads the entries into the adapter and refreshes the tag drawer. */
     private void populateAdapter() {
         adapter.loadEntries();
         tagsDrawerAdapter.setTags(TagsAdapter.createTagsMap(adapter.getEntries(), settings));
@@ -444,7 +446,7 @@ public class MainActivity extends BaseActivity
         }
 
         if (filterString != null) {
-            // ensure the current filter string is applied after a resume
+            // Keep the search filter applied after a resume
             setFilterString(this.filterString);
         }
 
@@ -573,6 +575,7 @@ public class MainActivity extends BaseActivity
         }
     }
 
+    /** (Re)creates the adapter's encryption key and reloads the entries. */
     private void updateEncryption(byte[] newKey) {
         SecretKey encryptionKey = null;
 
@@ -669,6 +672,7 @@ public class MainActivity extends BaseActivity
         return true;
     }
 
+    /** Expands the search view (deferred to the next menu creation if needed). */
     private void focusSearchMenu() {
         if (searchMenu != null)
             searchMenu.expandActionView();
@@ -676,6 +680,7 @@ public class MainActivity extends BaseActivity
             focusSearchOnCreate = true;
     }
 
+    /** Applies the search text, or the tag filter when the search is empty. */
     private void setFilterString(String newText) {
         if (newText.isEmpty())
             adapter.filterByTags(tagsDrawerAdapter.getActiveTags());
@@ -876,6 +881,7 @@ public class MainActivity extends BaseActivity
         adapter.filterByTags(tagsDrawerAdapter.getActiveTags());
     }
 
+    /** Rebuilds the tag drawer after entries were added or removed. */
     public void refreshTags() {
         HashMap<String, Boolean> tagsHashMap = new HashMap<>();
         for(String tag: tagsDrawerAdapter.getTags()) {
@@ -896,7 +902,7 @@ public class MainActivity extends BaseActivity
     public void onUserInteraction(){
         super.onUserInteraction();
 
-        // Refresh Blackout Timer
+        // Restart the blackout timer
         if (countDownTimer != null)
             countDownTimer.cancel();
 
@@ -904,6 +910,7 @@ public class MainActivity extends BaseActivity
             countDownTimer.start();
     }
 
+    /** (Re)creates the inactivity timer; returns false when no timer is needed. */
     private boolean setCountDownTimerNow() {
         int secondsToBlackout = 1000 * settings.getAuthInactivityDelay();
 
@@ -933,6 +940,7 @@ public class MainActivity extends BaseActivity
         startActivityForResult(intent, intentId);
     }
     
+    /** Adds the entry encoded in the given otpauth URI. */
     private void addQRCode(String result){
         if(!TextUtils.isEmpty(result)) {
             try {
@@ -947,6 +955,7 @@ public class MainActivity extends BaseActivity
         }
     }
 
+    /** Locks the app when it is sent to the background (if enabled). */
     private class ProcessLifecycleObserver implements DefaultLifecycleObserver {
         @Override
         public void onStop(@NonNull LifecycleOwner owner) {
@@ -981,9 +990,9 @@ public class MainActivity extends BaseActivity
     }
 
     /**
-     * This function will hide the progress bar if the token list is empty along with
-     * showing a view which has instruction on how to add the tokens
-     * */
+     * Hides the progress bar (also when the global timeout is turned off) and shows the
+     * "how to add tokens" hint while the list is empty.
+     */
     private void hideProgressBar(){
         int itemCount = adapter.getItemCount();
         progressBar.setVisibility((settings.isHideGlobalTimeoutEnabled() || itemCount <= 0) ? View.GONE : View.VISIBLE);

@@ -33,11 +33,13 @@ import org.shadowice.flocke.andotp.R;
 
 import static android.content.Context.NOTIFICATION_SERVICE;
 
+/** Creates the backup notification channels and posts the backup notifications. */
 public class NotificationHelper {
     private static String channelId(Constants.NotificationChannel channel) {
         return "andOTP_" + channel.name().toLowerCase();
     }
 
+    /** Creates the channel for the given type (no-op before Android 8). */
     private static void createNotificationChannel(Context context, Constants.NotificationChannel channel) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             NotificationChannel notificationChannel = new NotificationChannel(channelId(channel), context.getString(R.string.app_name), NotificationManager.IMPORTANCE_DEFAULT);
@@ -62,6 +64,7 @@ public class NotificationHelper {
         }
     }
 
+    /** Creates all notification channels the app can use. */
     public static void initializeNotificationChannels(Context context) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             for (Constants.NotificationChannel channel : Constants.NotificationChannel.values()) {
@@ -70,10 +73,12 @@ public class NotificationHelper {
         }
     }
 
+    /** Posts a notification with a string resource as its body. */
     public static void notify(Context context, Constants.NotificationChannel channel, int resIdTitle, int resIdBody) {
         notify(context, channel, resIdTitle, context.getText(resIdBody).toString());
     }
 
+    /** Posts a notification with an already resolved body text. */
     public static void notify(Context context, Constants.NotificationChannel channel , int resIdTitle, String resBody) {
         NotificationCompat.Builder builder = new NotificationCompat.Builder(context, null)
                 .setSmallIcon(R.mipmap.ic_launcher)

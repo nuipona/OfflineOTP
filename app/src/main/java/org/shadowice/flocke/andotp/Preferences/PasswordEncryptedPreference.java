@@ -49,9 +49,11 @@ import org.shadowice.flocke.andotp.Utilities.Settings;
 import java.nio.charset.StandardCharsets;
 import java.security.KeyPair;
 
+/** Preference that stores a password/PIN encrypted with the KeyStore-backed key pair. */
 public class PasswordEncryptedPreference extends DialogPreference
     implements View.OnClickListener, TextWatcher {
 
+    /** Which kind of credential the dialog asks for. */
     public enum Mode {
         PASSWORD, PIN
     }
@@ -81,6 +83,7 @@ public class PasswordEncryptedPreference extends DialogPreference
         setDialogLayoutResource(R.layout.component_password);
     }
 
+    /** Sets whether a password or a PIN is entered. */
     public void setMode(Mode mode) {
         this.mode = mode;
     }
@@ -149,6 +152,7 @@ public class PasswordEncryptedPreference extends DialogPreference
         return a.getString(index);
     }
 
+    /** Encrypts the value with the KeyStore key and stores it Base64 encoded. */
     private void encryptAndPersist(String value) {
         try {
             byte[] encBytes = EncryptionHelper.encrypt(key.getPublic(), value.getBytes(StandardCharsets.UTF_8));
@@ -158,6 +162,7 @@ public class PasswordEncryptedPreference extends DialogPreference
         }
     }
 
+    /** Loads and decrypts the stored Base64 value. */
     private void restoreAndDecrypt(String encValue) {
         try {
             byte[] encBytes = Base64.decode(encValue, Base64.URL_SAFE);
@@ -203,6 +208,7 @@ public class PasswordEncryptedPreference extends DialogPreference
         }
     }
 
+    // Unused TextWatcher callbacks (required by the interface)
     @Override
     public void afterTextChanged(Editable s) {}
 

@@ -45,8 +45,10 @@ import java.util.GregorianCalendar;
 import javax.crypto.SecretKey;
 import javax.security.auth.x500.X500Principal;
 
+/** Manages the app's Android KeyStore entries: the RSA pair that wraps the AES key in KeyStore mode. */
 public class KeyStoreHelper {
 
+    /** Deletes the wrapped key file and the KeyStore entry (PANIC response and "clear keystore"). */
     public static void wipeKeys(Context context) {
         File keyFile = new File(context.getFilesDir() + "/" + Constants.FILENAME_ENCRYPTED_KEY);
         keyFile.delete();
@@ -61,6 +63,7 @@ public class KeyStoreHelper {
         }
     }
 
+    /** Returns the RSA key pair stored under the alias, generating it first if needed. */
     public static KeyPair loadOrGenerateAsymmetricKeyPair(Context context, String alias)
             throws GeneralSecurityException, IOException {
         final KeyStore keyStore = KeyStore.getInstance("AndroidKeyStore");
@@ -72,6 +75,7 @@ public class KeyStoreHelper {
             end.add(Calendar.YEAR, 100);
 
             AlgorithmParameterSpec spec;
+            // KeyGenParameterSpec needs Android 6+, otherwise fall back to the deprecated KeyPairGeneratorSpec
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
                 spec = new KeyGenParameterSpec.Builder(alias, KeyProperties.PURPOSE_ENCRYPT | KeyProperties.PURPOSE_DECRYPT)
                         .setCertificateSubject(new X500Principal("CN=" + alias))
@@ -104,6 +108,8 @@ public class KeyStoreHelper {
             return null;
     }
 
+    /** Loads the AES key wrapped with the KeyStore key pair (the database key in KeyStore mode);
+     * errors are only shown to the user if {@code failSilent} is false. */
     public static SecretKey loadEncryptionKeyFromKeyStore(Context context, boolean failSilent) {
         SecretKey encKey = null;
 

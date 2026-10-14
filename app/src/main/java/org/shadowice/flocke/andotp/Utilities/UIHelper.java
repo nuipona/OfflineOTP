@@ -28,11 +28,13 @@ import android.content.DialogInterface;
 import android.view.View;
 import android.view.inputmethod.InputMethodManager;
 
+/** Small helpers for generic dialogs and the soft keyboard. */
 public class UIHelper {
     public static void showGenericDialog(Context context, int titleId, int messageId) {
         showGenericDialog(context, titleId, messageId, null);
     }
 
+    /** Shows a message dialog, running {@code onOk} when it is confirmed. */
     public static void showGenericDialog(Context context, int titleId, int messageId, final Runnable onOk) {
         AlertDialog.Builder builder = new AlertDialog.Builder(context);
         builder.setTitle(titleId)
@@ -52,6 +54,7 @@ public class UIHelper {
         showKeyboard(context,view,false);
     }
 
+    /** Shows the soft keyboard for the given view (forced, or requested normally). */
     public static void showKeyboard(Context context, View view, Boolean showForced) {
         if (view != null) {
             InputMethodManager imm = (InputMethodManager) context.getSystemService(Context.INPUT_METHOD_SERVICE);
@@ -62,6 +65,7 @@ public class UIHelper {
         }
     }
 
+    /** Hides the soft keyboard of the given view. */
     public static void hideKeyboard(Context context, View view) {
         if (view != null) {
             InputMethodManager imm = (InputMethodManager) context.getSystemService(Context.INPUT_METHOD_SERVICE);

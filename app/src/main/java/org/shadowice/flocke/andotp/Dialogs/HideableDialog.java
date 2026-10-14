@@ -14,6 +14,7 @@ import org.shadowice.flocke.andotp.R;
 import org.shadowice.flocke.andotp.Utilities.Settings;
 import org.shadowice.flocke.andotp.Utilities.Tools;
 
+/** Dialog with a "don't show again" checkbox that remembers the choice in the settings. */
 public class HideableDialog extends AppCompatDialog
     implements View.OnClickListener, CompoundButton.OnCheckedChangeListener {
 
@@ -54,6 +55,7 @@ public class HideableDialog extends AppCompatDialog
         dismiss();
     }
 
+    /** Shows the dialog unless the user asked not to see it again. */
     public static void ShowHidableDialog(Context context, int titleId, int msgId, int hideSettingId) {
         Settings settings = new Settings(context);
 

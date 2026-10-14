@@ -10,6 +10,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicLong;
 
+/** The complete entry list; the adapter keeps a sorted/filtered copy of it. */
 public class EntryList {
     private final ArrayList<Entry> entries;
     private final AtomicLong currentId = new AtomicLong();
@@ -18,10 +19,12 @@ public class EntryList {
         entries = new ArrayList<>();
     }
 
+    /** Adds the entry unless it is already in the list; returns whether it was added. */
     public boolean addEntry(Entry newEntry) {
         return addEntry(newEntry, false);
     }
 
+    /** Like {@link #addEntry(Entry)}, but replaces an existing entry when {@code update} is true. */
     public boolean addEntry(Entry newEntry, boolean update) {
         if (! entries.contains(newEntry)) {
             long newId = currentId.incrementAndGet();
@@ -43,6 +46,7 @@ public class EntryList {
         return false;
     }
 
+    /** Keeps the entries that are still present and adds or updates the given ones. */
     public void updateEntries(ArrayList<Entry> newEntries, boolean update) {
         // Remove all items not in the new list
         entries.retainAll(newEntries);
@@ -57,6 +61,7 @@ public class EntryList {
         return entries.get(pos);
     }
 
+    /** Swaps two entries (used by drag & drop in the unsorted view). */
     public void swapEntries(int fromPosition, int toPosition) {
         Collections.swap(entries, fromPosition, toPosition);
     }
@@ -65,10 +70,12 @@ public class EntryList {
         entries.remove(pos);
     }
 
+    /** Position of the entry, or -1 if it is not in the list. */
     public int indexOf(Entry e) {
         return entries.indexOf(e);
     }
 
+    /** True if the list holds the same entries in the same order. */
     public boolean isEqual(ArrayList<Entry> otherEntries) {
         return entries.equals(otherEntries);
     }
@@ -81,6 +88,7 @@ public class EntryList {
         return sortEntries(entries, sortMode);
     }
 
+    /** Returns a copy of the list, sorted according to {@code sortMode}. */
     public static ArrayList<Entry> sortEntries(ArrayList<Entry> unsortedEntries, Constants.SortMode sortMode) {
         ArrayList<Entry> sorted = new ArrayList<>(unsortedEntries);
 
@@ -133,11 +141,12 @@ public class EntryList {
         return sortEntries(filtered, sortMode);
     }
 
+    /** Returns the entries matching the tag filter (AND/OR, plus tagless entries if enabled). */
     public ArrayList<Entry> getEntriesFilteredByTags(List<String> tags, boolean noTags, Constants.TagFunctionality tagFunctionality, Constants.SortMode sortMode) {
         ArrayList<Entry> matchingEntries = new ArrayList<>();
 
         for(Entry e : entries) {
-            // Entries with no tags will always be shown
+            // Entries with no tags only match when the "no tags" filter is active
             boolean foundMatchingTag = e.getTags().isEmpty() && noTags;
 
             if(tagFunctionality == Constants.TagFunctionality.AND) {
@@ -161,6 +170,8 @@ public class EntryList {
         return sortEntries(matchingEntries, sortMode);
     }
 
+    // Comparators for the different sort modes; the name comparisons use collation (ignore case and accents)
+    /** Sorts by issuer using the locale collation (ignores case and accents). */
     public static class IssuerComparator implements Comparator<Entry> {
         Collator collator;
 
@@ -175,6 +186,7 @@ public class EntryList {
         }
     }
 
+    /** Sorts by label using the locale collation (ignores case and accents). */
     public static class LabelComparator implements Comparator<Entry> {
         Collator collator;
 
@@ -189,6 +201,7 @@ public class EntryList {
         }
     }
 
+    /** Sorts by the time of the last use (most recent first). */
     public static class LastUsedComparator implements Comparator<Entry> {
         @Override
         public int compare(Entry o1, Entry o2) {
@@ -196,6 +209,7 @@ public class EntryList {
         }
     }
 
+    /** Sorts by the number of uses (most frequently used first). */
     public static class MostUsedComparator implements Comparator<Entry> {
         @Override
         public int compare(Entry o1, Entry o2) {

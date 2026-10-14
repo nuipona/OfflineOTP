@@ -58,6 +58,7 @@ import me.zhanghai.android.materialprogressbar.MaterialProgressBar;
 
 import static org.shadowice.flocke.andotp.Activities.MainActivity.animatorDuration;
 
+/** A single entry card and its (single/double) click handling. */
 public class EntryViewHolder extends RecyclerView.ViewHolder
         implements ItemTouchHelperViewHolder {
     private final Context context;
@@ -152,6 +153,7 @@ public class EntryViewHolder extends RecyclerView.ViewHolder
         });
     }
 
+    /** Consumer for a click event, called only with a bound view holder. */
     @FunctionalInterface
     private interface AdapterPositionSafeCallbackConsumer {
         /** The specified {@link Callback} is guaranteed to be non-null, and adapterPosition is
@@ -159,6 +161,7 @@ public class EntryViewHolder extends RecyclerView.ViewHolder
         void accept(@NonNull Callback callback, int adapterPosition);
     }
 
+    /** Runs the callback with the clicked position, if the view holder is still bound. */
     private void adapterPositionSafeCallback(AdapterPositionSafeCallbackConsumer safeCallback) {
         int clickedPosition = getAdapterPosition();
         if (callback != null && clickedPosition != RecyclerView.NO_POSITION) {
@@ -166,6 +169,7 @@ public class EntryViewHolder extends RecyclerView.ViewHolder
         }
     }
 
+    /** Fills the card with the entry's token, labels, tags and counter. */
     public void updateValues(Entry entry) {
         Settings settings = new Settings(context);
 
@@ -276,6 +280,7 @@ public class EntryViewHolder extends RecyclerView.ViewHolder
         }
     }
 
+    /** Animates the progress bar to the remaining time of the current period. */
     private void updateProgress(Entry entry) {
         int progress =  (int) (entry.getPeriod() - (System.currentTimeMillis() / 1000) % entry.getPeriod()) ;
 
@@ -288,17 +293,20 @@ public class EntryViewHolder extends RecyclerView.ViewHolder
         animation.start();
     }
 
+    /** Applies the label size (the tag line is scaled along with it). */
     public void setLabelSize(int size) {
         label.setTextSize(size);
         tags.setTextSize(0.75f * size);
     }
 
+    /** Resizes the thumbnail image. */
     public void setThumbnailSize(int size) {
         thumbnailImg.getLayoutParams().height = size;
         thumbnailImg.getLayoutParams().width = size;
         thumbnailImg.requestLayout();
     }
 
+    /** Configures how an overlong label is displayed (truncated, scrolling or multiline). */
     public void setLabelScroll(Constants.LabelDisplay labelDisplay, Constants.CardLayouts cardLayout) {
         switch (labelDisplay) {
             case TRUNCATE:
@@ -322,6 +330,7 @@ public class EntryViewHolder extends RecyclerView.ViewHolder
         }
     }
 
+    /** Shows the cover instead of the token while tap-to-reveal is active. */
     private void setTapToReveal(boolean enabled) {
         tapToReveal = enabled;
 
@@ -352,6 +361,7 @@ public class EntryViewHolder extends RecyclerView.ViewHolder
         this.callback = cb;
     }
 
+    /** Events of one card that the adapter reacts to. */
     public interface Callback {
         void onMoveEventStart();
         void onMoveEventStop();
@@ -366,10 +376,9 @@ public class EntryViewHolder extends RecyclerView.ViewHolder
         void onCounterLongPressed(int position);
     }
     /**
-     * Updates the color of OTP to red (if expiring) or default color (if new OTP)
-     *
-     * @param color will define if the color needs to be changed to red or default
-     * */
+     * Colors the token text with the theme's "expiring" color when {@code color} is
+     * {@link Entry#COLOR_RED}, and with the secondary text color otherwise.
+     */
     public void updateColor(int color) {
         int textColor;
         if(color == Entry.COLOR_RED) {

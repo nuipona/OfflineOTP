@@ -22,53 +22,65 @@
 
 package org.shadowice.flocke.andotp.Utilities;
 
+/** Shared constants: the enum values used across the app, the intent IDs/extras and the crypto parameters. */
 public class Constants {
     // Enums
+    /** How the user authenticates: not at all, password, PIN or device credentials. */
     public enum AuthMethod {
         NONE, PASSWORD, PIN, DEVICE
     }
 
+    /** How the database key is protected: wrapped by the KeyStore, or derived from the credentials. */
     public enum EncryptionType {
         KEYSTORE, PASSWORD
     }
 
+    /** Order of the entry list; UNSORTED keeps the manual drag & drop order. */
     public enum SortMode {
         UNSORTED, ISSUER, LABEL, LAST_USED, MOST_USED
     }
 
+    /** The kind of backup file; UNAVAILABLE disables the backup/restore controls. */
     public enum BackupType {
         PLAIN_TEXT, ENCRYPTED, OPEN_PGP, UNAVAILABLE
     }
 
+    /** How selected tags are combined: any tag (OR), all tags (AND), or only one tag at a time. */
     public enum TagFunctionality {
         OR, AND, SINGLE
     }
 
+    /** The notification channels used by the backup broadcasts. */
     public enum NotificationChannel {
         BACKUP_FAILED, BACKUP_SUCCESS
     }
 
+    /** The entry fields the search looks at (any combination of them). */
     public enum SearchIncludes {
         LABEL, ISSUER, TAGS
     }
 
+    /** The selectable entry card layouts. */
     public enum CardLayouts {
         COMPACT, DEFAULT, FULL
     }
 
+    /** When an automatic encrypted backup is written. */
     public enum AutoBackup {
         OFF, NEW_ENTRIES, ALL_EDITS
     }
 
+    /** The action of a single/double tap on a card. */
     public enum TapMode {
         NOTHING, REVEAL, COPY, COPY_BACKGROUND, SEND_KEYSTROKES
     }
 
+    /** How an overlong label is displayed on the card. */
     public enum LabelDisplay {
         TRUNCATE, SCROLL, MULTILINE
     }
 
-    // Intents (Format: A0x with A = parent Activity, x = number of the intent)
+    // Intents (1xx = MainActivity, 2xx = BackupActivity, 3xx = SettingsActivity)
     public final static int INTENT_MAIN_AUTHENTICATE            = 100;
     public final static int INTENT_MAIN_SETTINGS                = 101;
     public final static int INTENT_MAIN_BACKUP                  = 102;
@@ -105,14 +117,14 @@ public class Constants {
     final static String ALGORITHM_SYMMETRIC     = "AES/GCM/NoPadding";
     final static String ALGORITHM_ASYMMETRIC    = "RSA/ECB/PKCS1Padding";
 
-    final static int ENCRYPTION_KEY_LENGTH  = 16;           // 128-bit encryption key (KeyStore-mode)
-    public final static int ENCRYPTION_IV_LENGTH   = 12;
+    final static int ENCRYPTION_KEY_LENGTH  = 16;           // 128-bit AES key, wrapped by the KeyStore key pair
+    public final static int ENCRYPTION_IV_LENGTH   = 12;    // 96-bit GCM nonce, also the salt length of encrypted backups
 
-    public final static int INT_LENGTH = 4;
+    public final static int INT_LENGTH = 4;                 // Byte length of the PBKDF2 iteration count in encrypted backups
 
     // Global PBKDF2 settings
     final static String PBKDF2_ALGORITHM            = "PBKDF2WithHmacSHA1";
-    final static int PBKDF2_LENGTH                  = 256;      // 128-bit encryption key (Password-mode)
+    final static int PBKDF2_LENGTH                  = 256;      // PBKDF2 output in bits: auth splits it into two 128-bit halves, backup keys use all 32 bytes
     final static int PBKDF2_SALT_LENGTH             = 16;
 
     // PBKDF2 settings for authentication

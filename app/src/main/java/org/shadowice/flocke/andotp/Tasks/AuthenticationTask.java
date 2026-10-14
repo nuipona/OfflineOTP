@@ -19,6 +19,7 @@ import java.security.NoSuchAlgorithmException;
 import java.security.spec.InvalidKeySpecException;
 import java.util.Arrays;
 
+/** Verifies a password/PIN and returns the database key, upgrading legacy hashes when needed. */
 public class AuthenticationTask extends UiBasedBackgroundTask<Result> {
 
     private final Settings settings;
@@ -28,10 +29,11 @@ public class AuthenticationTask extends UiBasedBackgroundTask<Result> {
     private final String plainPassword;
 
     /**
-     * @param context Context to be used to query settings (the application Context will be used to avoid memory leaks).
-     * @param isAuthUpgrade true if this is an authentication upgrade and new credentials should be saved, false if this is just confirmation.
-     * @param existingAuthCredentials The existing hashed authentication credentials that we have stored.
-     * @param plainPassword The plaintext user-entered password to check authentication with. */
+     * @param context Context used to query settings (only its application context is kept).
+     * @param isAuthUpgrade true to upgrade the stored credentials instead of only confirming them.
+     * @param existingAuthCredentials The currently stored hashed authentication credentials.
+     * @param plainPassword The plaintext password or PIN entered by the user.
+     */
     public AuthenticationTask(Context context, boolean isAuthUpgrade, String existingAuthCredentials, String plainPassword) {
         super(Result.failure());
         Context applicationContext = context.getApplicationContext();
@@ -52,6 +54,7 @@ public class AuthenticationTask extends UiBasedBackgroundTask<Result> {
         }
     }
 
+    /** Upgrades a legacy SHA-256 hash to PBKDF2 credentials and returns the new key. */
     @NonNull
     private Result upgradeAuthentication() {
         String hashedPassword = new String(Hex.encodeHex(DigestUtils.sha256(plainPassword)));
@@ -72,6 +75,7 @@ public class AuthenticationTask extends UiBasedBackgroundTask<Result> {
             return Result.success(key);
     }
 
+    /** Checks the entered password/PIN against the stored PBKDF2 credentials. */
     @NonNull
     private Result confirmAuthentication() {
         try {
@@ -88,6 +92,7 @@ public class AuthenticationTask extends UiBasedBackgroundTask<Result> {
         }
     }
 
+    /** The derived encryption key (null on failure) plus the auth-upgrade failure flag. */
     public static class Result {
         @Nullable
         public final byte[] encryptionKey;
@@ -98,14 +103,17 @@ public class AuthenticationTask extends UiBasedBackgroundTask<Result> {
             this.authUpgradeFailed = authUpgradeFailed;
         }
 
+        /** The password/PIN was verified; carries the derived key. */
         public static Result success(byte[] encryptionKey) {
             return new Result(encryptionKey, false);
         }
 
+        /** The legacy hash matched but re-hashing it failed. */
         public static Result upgradeFailure() {
             return new Result(null, true);
         }
 
+        /** The password/PIN was wrong (or the algorithm is unsupported). */
         public static Result failure() {
             return new Result(null, false);
         }

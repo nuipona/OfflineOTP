@@ -37,7 +37,10 @@ import androidx.appcompat.content.res.AppCompatResources;
 
 import org.shadowice.flocke.andotp.R;
 
+/** Provides the thumbnails: the bundled brand icons and the generated letter tiles. */
 public class EntryThumbnail {
+    /** Returns the entry thumbnail: a generated letter tile for the default icon, else the brand icon
+     * (with the app icon as fallback when the drawable cannot be loaded). */
     public static Bitmap getThumbnailGraphic(Context context, String issuer, String label, int size, EntryThumbnails thumbnail) {
         AppCompatDelegate.setCompatVectorFromResourcesEnabled(true);
 
@@ -67,11 +70,13 @@ public class EntryThumbnail {
         return BitmapFactory.decodeResource(context.getResources(), R.mipmap.ic_launcher_round);
     }
 
+    /** Whether an icon is a vector drawable or a bitmap. */
     private enum AssetType {
         Bitmap,
         Vector
     }
 
+    /** The available thumbnails, with the resource of each icon. */
     public enum EntryThumbnails {
         Default(R.mipmap.ic_launcher_round),
         OneAndOne(R.drawable.thumb_1and1),
@@ -433,12 +438,14 @@ public class EntryThumbnail {
             this.assetType = assetType;
         }
 
+        /** Looks up a thumbnail by its exact name, ignoring case. */
         public static EntryThumbnails valueOfIgnoreCase(String thumbnail) {
             for (EntryThumbnails entryThumbnails : values())
                 if (entryThumbnails.name().equalsIgnoreCase(thumbnail)) return entryThumbnails;
             throw new IllegalArgumentException();
         }
 
+        /** Looks up a thumbnail by a whole-word match, ignoring case (e.g. "GitHub Inc."). */
         public static EntryThumbnails valueOfFuzzy(String thumbnail) {
             for (EntryThumbnails entryThumbnails : values()) {
                 Pattern re = Pattern.compile("\\b" + Pattern.quote(entryThumbnails.name()) + "\\b", Pattern.CASE_INSENSITIVE);
@@ -448,10 +455,12 @@ public class EntryThumbnail {
             throw new IllegalArgumentException();
         }
 
+        /** The drawable resource of this thumbnail. */
         public int getResource() {
             return resource;
         }
 
+        /** Whether the resource is a vector or a bitmap. */
         public AssetType getAssetType() {
             return assetType;
         }

@@ -53,6 +53,7 @@ import org.shadowice.flocke.andotp.View.AutoFillable.AutoFillableTextInputEditTe
 
 import static org.shadowice.flocke.andotp.Utilities.Constants.AuthMethod;
 
+/** Asks for the password/PIN (or the device lock) and returns the derived database key. */
 public class AuthenticateActivity extends BackgroundTaskActivity<AuthenticationTask.Result>
         implements EditText.OnEditorActionListener, View.OnClickListener {
     private final AutoFillableTextInputEditText.AutoFillTextListener autoFillTextListener = text -> startAuthTask(text.toString());
@@ -88,7 +89,7 @@ public class AuthenticateActivity extends BackgroundTaskActivity<AuthenticationT
             Toast.makeText(this, missingPwResId, Toast.LENGTH_LONG).show();
             finishWithResult(true, null);
         }
-        // If we're not using password or pin for auth method, we have nothing to authenticate here.
+        // If we're not using password or PIN as the auth method, we have nothing to authenticate here.
         if (authMethod != AuthMethod.PASSWORD && authMethod != AuthMethod.PIN) {
             finishWithResult(true, null);
         }

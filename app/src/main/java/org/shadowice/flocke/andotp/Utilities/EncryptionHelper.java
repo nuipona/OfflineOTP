@@ -55,20 +55,28 @@ import javax.crypto.spec.IvParameterSpec;
 import javax.crypto.spec.PBEKeySpec;
 import javax.crypto.spec.SecretKeySpec;
 
+/**
+ * Crypto helpers: AES/GCM encryption, PBKDF2 password derivation and the wrapped-key storage
+ * used in KeyStore mode.
+ */
 public class EncryptionHelper {
+    /** The two halves of a derived credential: the authentication password and the encryption key. */
     public static class PBKDF2Credentials {
         public byte[] password;
         public byte[] key;
     }
 
+    /** Error codes of {@link #tryEncryptionChange}. */
     public enum EncryptionChangeResult {
         SUCCESS, CHANGE_FAILURE, BACKUP_FAILURE, MISSING_NEW_KEY, DECRYPTION_FAILED, TASK_CREATION_FAILED
     }
 
+    /** Called once the database has been re-encrypted with the new key. */
     public interface EncryptionChangeCallback {
         void onSuccessfulEncryptionChange(Constants.EncryptionType newEncryptionType, SecretKey newEncryptionKey);
     }
 
+    /** Re-encrypts the database with the new key/type, restoring the database backup on failure. */
     public static EncryptionChangeResult tryEncryptionChange(Context context, SecretKey oldKey, Constants.EncryptionType newType, byte[] newKey, EncryptionChangeCallback changeCallback) {
         if (DatabaseHelper.backupDatabase(context)) {
             ArrayList<Entry> entries;
@@ -108,6 +116,7 @@ public class EncryptionHelper {
         }
     }
 
+    /** Measures PBKDF2 speed and scales the iteration count to the target auth time (never below the minimum). */
     public static int benchmarkIterations(String password, byte[] salt) {
         try {
             SecretKeyFactory secretKeyFactory = SecretKeyFactory.getInstance(Constants.PBKDF2_ALGORITHM);
@@ -127,11 +136,13 @@ public class EncryptionHelper {
         }
     }
 
+    /** Random iteration count for new encrypted backups, so not all backups share one value. */
     public static int generateRandomIterations() {
         Random rand = new Random();
         return rand.nextInt((Constants.PBKDF2_MAX_BACKUP_ITERATIONS - Constants.PBKDF2_MIN_BACKUP_ITERATIONS) + 1) + Constants.PBKDF2_MIN_BACKUP_ITERATIONS;
     }
 
+    /** Returns {@code length} random bytes from {@link SecureRandom}. */
     public static byte[] generateRandom(int length) {
         final byte[] raw = new byte[length];
         new SecureRandom().nextBytes(raw);
@@ -139,6 +150,7 @@ public class EncryptionHelper {
         return raw;
     }
 
+    /** Derives the PBKDF2 output and splits it into the auth password and the encryption key. */
     public static PBKDF2Credentials generatePBKDF2Credentials(String password, byte[] salt, int iter)
         throws NoSuchAlgorithmException, InvalidKeySpecException {
         SecretKeyFactory secretKeyFactory = SecretKeyFactory.getInstance(Constants.PBKDF2_ALGORITHM);
@@ -155,10 +167,12 @@ public class EncryptionHelper {
         return credentials;
     }
 
+    /** Wraps raw bytes in an AES {@link SecretKey}. */
     public static SecretKey generateSymmetricKey(byte[] data) {
         return new SecretKeySpec(data, 0, data.length, "AES");
     }
 
+    /** Derives the AES key used for password-encrypted backups. */
     public static SecretKey generateSymmetricKeyPBKDF2(String password, int iter, byte[] salt)
         throws NoSuchAlgorithmException, InvalidKeySpecException {
         SecretKeyFactory secretKeyFactory = SecretKeyFactory.getInstance(Constants.PBKDF2_ALGORITHM);
@@ -167,6 +181,7 @@ public class EncryptionHelper {
         return secretKeyFactory.generateSecret(keySpec);
     }
 
+    /** Legacy key derivation (plain SHA-256 of the password) for old-format encrypted backups. */
     public static SecretKey generateSymmetricKeyFromPassword(String password)
             throws NoSuchAlgorithmException {
         MessageDigest sha = MessageDigest.getInstance("SHA-256");
@@ -174,6 +189,7 @@ public class EncryptionHelper {
         return new SecretKeySpec(sha.digest(password.getBytes(StandardCharsets.UTF_8)), "AES");
     }
 
+    /** Encrypts with an explicit nonce. */
     public static byte[] encrypt(SecretKey secretKey, IvParameterSpec iv, byte[] plainText)
             throws NoSuchPaddingException, NoSuchAlgorithmException, InvalidAlgorithmParameterException, InvalidKeyException, BadPaddingException, IllegalBlockSizeException {
         Cipher cipher = Cipher.getInstance(Constants.ALGORITHM_SYMMETRIC);
@@ -182,6 +198,7 @@ public class EncryptionHelper {
         return cipher.doFinal(plainText);
     }
 
+    /** Encrypts and prefixes the random GCM nonce, as used in the database and backup formats. */
     public static byte[] encrypt(SecretKey secretKey, byte[] plaintext)
             throws NoSuchPaddingException, BadPaddingException, InvalidKeyException, NoSuchAlgorithmException, IllegalBlockSizeException, InvalidAlgorithmParameterException {
         final byte[] iv = new byte[Constants.ENCRYPTION_IV_LENGTH];
@@ -196,6 +213,7 @@ public class EncryptionHelper {
         return combined;
     }
 
+    /** RSA encryption, used to wrap the backup password. */
     public static byte[] encrypt(PublicKey publicKey, byte[] plaintext)
             throws NoSuchPaddingException, BadPaddingException, InvalidKeyException, NoSuchAlgorithmException, IllegalBlockSizeException {
         Cipher cipher = Cipher.getInstance(Constants.ALGORITHM_ASYMMETRIC);
@@ -204,6 +222,7 @@ public class EncryptionHelper {
         return cipher.doFinal(plaintext);
     }
 
+    /** Decrypts with an explicit nonce. */
     public static byte[] decrypt(SecretKey secretKey, IvParameterSpec iv, byte[] cipherText)
             throws NoSuchPaddingException, InvalidKeyException, NoSuchAlgorithmException, IllegalBlockSizeException, BadPaddingException, InvalidAlgorithmParameterException {
         Cipher cipher = Cipher.getInstance(Constants.ALGORITHM_SYMMETRIC);
@@ -212,6 +231,7 @@ public class EncryptionHelper {
         return cipher.doFinal(cipherText);
     }
 
+    /** Splits the nonce off the front of the blob and decrypts the remaining ciphertext. */
     public static byte[] decrypt(SecretKey secretKey, byte[] cipherText)
             throws NoSuchPaddingException, InvalidKeyException, NoSuchAlgorithmException, IllegalBlockSizeException, BadPaddingException, InvalidAlgorithmParameterException {
         byte[] iv = Arrays.copyOfRange(cipherText, 0, Constants.ENCRYPTION_IV_LENGTH);
@@ -220,6 +240,7 @@ public class EncryptionHelper {
         return decrypt(secretKey, new IvParameterSpec(iv), encrypted);
     }
 
+    /** RSA decryption, the counterpart of {@link #encrypt(PublicKey, byte[])}. */
     public static byte[] decrypt(PrivateKey privateKey, byte[] cipherText)
             throws NoSuchPaddingException, InvalidKeyException, NoSuchAlgorithmException, IllegalBlockSizeException, BadPaddingException {
         Cipher cipher = Cipher.getInstance(Constants.ALGORITHM_ASYMMETRIC);

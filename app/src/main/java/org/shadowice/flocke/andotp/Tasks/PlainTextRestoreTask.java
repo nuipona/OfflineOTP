@@ -7,6 +7,7 @@ import androidx.annotation.NonNull;
 
 import org.shadowice.flocke.andotp.Utilities.StorageAccessHelper;
 
+/** Reads an unencrypted JSON backup. */
 public class PlainTextRestoreTask extends GenericRestoreTask {
     public PlainTextRestoreTask(Context context, Uri uri) {
         super(context, uri);

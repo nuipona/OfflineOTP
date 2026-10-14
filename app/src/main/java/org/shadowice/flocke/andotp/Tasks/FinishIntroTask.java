@@ -7,6 +7,7 @@ import androidx.annotation.NonNull;
 import org.shadowice.flocke.andotp.Utilities.Constants;
 import org.shadowice.flocke.andotp.Utilities.Settings;
 
+/** Persists the choices made in the intro screen and derives the initial encryption key. */
 public class FinishIntroTask extends UiBasedBackgroundTask<FinishIntroTask.Result> {
     private final Settings settings;
 
@@ -44,6 +45,7 @@ public class FinishIntroTask extends UiBasedBackgroundTask<FinishIntroTask.Resul
         return new Result(true, encryptionKey);
     }
 
+    /** Whether the initial setup was saved, plus the new encryption key. */
     public static class Result {
         public final boolean saveSuccessful;
         public final byte[] encryptionKey;

@@ -65,6 +65,7 @@ import static android.content.Context.KEYGUARD_SERVICE;
 import static org.shadowice.flocke.andotp.Utilities.Constants.AuthMethod;
 import static org.shadowice.flocke.andotp.Utilities.Constants.EncryptionType;
 
+/** Preference that switches the auth method and stores new password/PIN credentials. */
 public class CredentialsPreference extends DialogPreference
     implements AdapterView.OnItemClickListener, View.OnClickListener, TextWatcher, TextView.OnEditorActionListener {
     public static final AuthMethod DEFAULT_VALUE = AuthMethod.NONE;
@@ -107,10 +108,12 @@ public class CredentialsPreference extends DialogPreference
         setDialogLayoutResource(R.layout.component_authentication);
     }
 
+    /** The key the database is currently encrypted with (needed when changing the encryption). */
     public void setOldEncryptionKey(SecretKey oldKey) {
         this.oldEncryptionKey = oldKey;
     }
 
+    /** Called after the credentials (and possibly the encryption) were changed. */
     public void setEncryptionChangeCallback(EncryptionHelper.EncryptionChangeCallback changeCallback) {
         this.encryptionChangeCallback = changeCallback;
     }
@@ -185,6 +188,7 @@ public class CredentialsPreference extends DialogPreference
         setSummary(entries.get(entryValues.indexOf(value)));
     }
 
+    /** Validates the selection and starts the credential change. */
     private void saveValues() {
         Constants.EncryptionType encryptionType = settings.getEncryption();
 
@@ -212,6 +216,7 @@ public class CredentialsPreference extends DialogPreference
         task.execute();
     }
 
+    /** Disables the dialog while the change is running. */
     private void setInProgress(boolean inProgress) {
         credentialsSelection.setEnabled(!inProgress);
         passwordInput.setEnabled(!inProgress);
@@ -224,6 +229,7 @@ public class CredentialsPreference extends DialogPreference
         getDialog().setCancelable(!inProgress);
     }
 
+    /** Persists the new value on success and closes the dialog. */
     private void handleTaskResult(ChangeCredentialsTask.Result result) {
         if (result.success) {
             persistString(value.toString().toLowerCase());
@@ -266,6 +272,7 @@ public class CredentialsPreference extends DialogPreference
         }
     }
 
+    /** Shows or hides the password fields for the selected auth method. */
     private void updateLayout() {
         if (value == AuthMethod.NONE || value == AuthMethod.DEVICE) {
             credentialsLayout.setVisibility(View.GONE);
@@ -278,6 +285,7 @@ public class CredentialsPreference extends DialogPreference
         }
     }
 
+    /** Configures the input fields for password or PIN entry. */
     private void prepareAuthMethodInputFields() {
         if (value != AuthMethod.PIN && value != AuthMethod.PASSWORD) {
             return;
@@ -306,6 +314,7 @@ public class CredentialsPreference extends DialogPreference
         btnSave.setEnabled(false);
     }
 
+    /** Applies the selected auth method and clears the password fields. */
     @Override
     public void onItemClick(AdapterView<?> parent, View view, int position, long id) {
         value = entryValues.get(position);
@@ -313,6 +322,7 @@ public class CredentialsPreference extends DialogPreference
         clearInputFields();
     }
 
+    /** Clears both password fields. */
     private void clearInputFields() {
         passwordInput.setText(null);
         passwordConfirm.setText(null);
@@ -330,7 +340,7 @@ public class CredentialsPreference extends DialogPreference
         }
     }
 
-    // Needed stub functions
+    // Unused TextWatcher callbacks (required by the interface)
     @Override
     public void afterTextChanged(Editable s) {}
 

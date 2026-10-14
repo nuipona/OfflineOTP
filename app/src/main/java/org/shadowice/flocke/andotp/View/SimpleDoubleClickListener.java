@@ -24,6 +24,10 @@ package org.shadowice.flocke.andotp.View;
 
 import android.view.View;
 
+/**
+ * Distinguishes single and double taps; the single click is delayed by
+ * {@code DOUBLE_CLICK_TIME_DELTA} ms to wait for a possible second tap.
+ */
 public abstract class SimpleDoubleClickListener implements View.OnClickListener {
 
     private static final long DOUBLE_CLICK_TIME_DELTA = 300; // Milliseconds

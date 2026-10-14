@@ -13,6 +13,7 @@ import org.shadowice.flocke.andotp.Utilities.DatabaseHelper;
 
 import java.util.ArrayList;
 
+/** Writes a password-encrypted backup file. */
 public class EncryptedBackupTask extends GenericBackupTask {
     private final String password;
     private final ArrayList<Entry> entries;

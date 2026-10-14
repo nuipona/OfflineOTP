@@ -43,20 +43,21 @@ import java.util.Calendar;
 import java.util.Date;
 import java.util.Locale;
 
+/** Small helpers for storage checks, theming, token formatting and the clipboard. */
 public class Tools {
-    /* Checks if external storage is available for read and write */
+    /** True if external storage is mounted and writable. */
     public static boolean isExternalStorageWritable() {
         String state = Environment.getExternalStorageState();
         return Environment.MEDIA_MOUNTED.equals(state);
     }
 
-    /* Checks if external storage is available to at least read */
+    /** True if external storage is mounted (read-only is enough). */
     public static boolean isExternalStorageReadable() {
         String state = Environment.getExternalStorageState();
         return Environment.MEDIA_MOUNTED.equals(state) || Environment.MEDIA_MOUNTED_READ_ONLY.equals(state);
     }
 
-    /* Get a color based on the current theme */
+    /** Resolves a theme color attribute to its color value. */
     public static int getThemeColor(Context context, int colorAttr) {
         Resources.Theme theme = context.getTheme();
         TypedArray arr = theme.obtainStyledAttributes(new int[]{colorAttr});
@@ -67,6 +68,7 @@ public class Tools {
         return colorValue;
     }
 
+    /** Resolves a theme attribute to a resource ID. */
     public static int getThemeResource(Context context, int styleAttr) {
         Resources.Theme theme = context.getTheme();
         TypedArray arr = theme.obtainStyledAttributes(new int[]{styleAttr});
@@ -77,7 +79,7 @@ public class Tools {
         return styleValue;
     }
 
-    /* Create a ColorFilter based on the current theme */
+    /** A color filter for tinting icons with the current theme color. */
     public static ColorFilter getThemeColorFilter(Context context, int colorAttr) {
         return new PorterDuffColorFilter(getThemeColor(context, colorAttr), PorterDuff.Mode.SRC_IN);
     }
@@ -91,6 +93,7 @@ public class Tools {
         }
     }
 
+    /** Formats the token with leading zeros (without grouping separators). */
     public static String formatTokenString(int token, int digits) {
         NumberFormat numberFormat = NumberFormat.getInstance(Locale.ENGLISH);
         numberFormat.setMinimumIntegerDigits(digits);
@@ -99,6 +102,7 @@ public class Tools {
         return numberFormat.format(token);
     }
 
+    /** Splits the token into groups of {@code chunkSize} characters. */
     public static String formatToken(String s, int chunkSize) {
         if (chunkSize ==0 || s == null)
             return s;
@@ -113,12 +117,14 @@ public class Tools {
         return ret.toString().trim();
     }
 
+    /** The current date/time in the format used for backup file names. */
     public static String getDateTimeString() {
         DateFormat df = new SimpleDateFormat("yyyy-MM-dd_HH-mm-ss", Locale.ENGLISH);
         Date now = Calendar.getInstance().getTime();
         return df.format(now);
     }
 
+    /** Copies the text to the clipboard and shows a confirmation toast. */
     public static void copyToClipboard(Context context, String text) {
         ClipboardManager clipboard = (ClipboardManager) context.getSystemService(Context.CLIPBOARD_SERVICE);
         ClipData clip = ClipData.newPlainText(context.getString(R.string.label_clipboard_content), text);

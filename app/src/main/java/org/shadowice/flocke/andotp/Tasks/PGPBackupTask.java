@@ -9,6 +9,7 @@ import androidx.annotation.Nullable;
 import org.shadowice.flocke.andotp.Utilities.Constants;
 import org.shadowice.flocke.andotp.Utilities.StorageAccessHelper;
 
+/** Writes a backup whose contents were already encrypted by the OpenPGP app. */
 public class PGPBackupTask extends GenericBackupTask {
     private final String payload;
 

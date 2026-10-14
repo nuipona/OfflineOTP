@@ -10,6 +10,7 @@ import org.shadowice.flocke.andotp.Utilities.Settings;
 
 import javax.crypto.SecretKey;
 
+/** Changes the authentication credentials and re-encrypts the database if required. */
 public class ChangeCredentialsTask extends UiBasedBackgroundTask<ChangeCredentialsTask.Result>
     implements EncryptionHelper.EncryptionChangeCallback {
 
@@ -38,6 +39,7 @@ public class ChangeCredentialsTask extends UiBasedBackgroundTask<ChangeCredentia
         this.newEncryptionKey = newEncryptionKey;
     }
 
+    /** Stores the new credentials and re-encrypts the database when password encryption is used. */
     @NonNull
     @Override
     protected Result doInBackground() {
@@ -66,6 +68,7 @@ public class ChangeCredentialsTask extends UiBasedBackgroundTask<ChangeCredentia
         return new Result(true, newEncryptionKey, encryptionType);
     }
 
+    /** Outcome of the change, including the new key and encryption type. */
     public static class Result {
         public final boolean success;
         public final SecretKey newEncryptionKey;

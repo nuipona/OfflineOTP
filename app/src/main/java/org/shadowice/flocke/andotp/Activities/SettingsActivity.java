@@ -67,6 +67,7 @@ import javax.crypto.SecretKey;
 import static org.shadowice.flocke.andotp.Utilities.Constants.AuthMethod;
 import static org.shadowice.flocke.andotp.Utilities.Constants.EncryptionType;
 
+/** Settings screen; encryption changes are executed as a background task. */
 public class SettingsActivity extends BackgroundTaskActivity<ChangeEncryptionTask.Result>
         implements SharedPreferences.OnSharedPreferenceChangeListener, EncryptionHelper.EncryptionChangeCallback {
 
@@ -126,6 +127,7 @@ public class SettingsActivity extends BackgroundTaskActivity<ChangeEncryptionTas
         outState.putByteArray(Constants.EXTRA_SETTINGS_ENCRYPTION_KEY, encryptionKey.getEncoded());
     }
 
+    /** Returns the (possibly changed) encryption key to MainActivity. */
     public void finishWithResult() {
         Intent data = new Intent();
 
@@ -193,6 +195,7 @@ public class SettingsActivity extends BackgroundTaskActivity<ChangeEncryptionTas
         fragment.updateAutoBackup();
     }
 
+    /** Generates a new KeyStore key after all keys were wiped. */
     private void generateNewEncryptionKey() {
         if (settings.getEncryption() == EncryptionType.KEYSTORE) {
             encryptionKey = KeyStoreHelper.loadEncryptionKeyFromKeyStore(this, false);
@@ -200,6 +203,7 @@ public class SettingsActivity extends BackgroundTaskActivity<ChangeEncryptionTas
         }
     }
 
+    /** Asks for the password before switching to password encryption. */
     private void tryEncryptionChangeWithAuth(EncryptionType newEnc) {
         Intent authIntent = new Intent(this, AuthenticateActivity.class);
         authIntent.putExtra(Constants.EXTRA_AUTH_NEW_ENCRYPTION, newEnc.name());
@@ -232,6 +236,7 @@ public class SettingsActivity extends BackgroundTaskActivity<ChangeEncryptionTas
         }
     }
 
+    /** Re-encrypts the database with the new key in the background. */
     private void startEncryptionChangeTask(EncryptionType newEnc, byte[] newKey) {
         ChangeEncryptionTask task = new ChangeEncryptionTask(this, encryptionKey, newEnc, newKey);
         startBackgroundTask(task);
@@ -253,6 +258,7 @@ public class SettingsActivity extends BackgroundTaskActivity<ChangeEncryptionTas
         }
     }
 
+    /** Asks for a folder (Storage Access Framework) to store the backups in. */
     private void requestBackupAccess() {
         Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT_TREE);
         intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION
@@ -305,6 +311,7 @@ public class SettingsActivity extends BackgroundTaskActivity<ChangeEncryptionTas
         super.onDestroy();
     }
 
+    /** The preference screen itself; encryption changes are forwarded to the activity. */
     public static class SettingsFragment extends PreferenceFragment {
         PreferenceCategory catUI;
 
@@ -324,6 +331,7 @@ public class SettingsActivity extends BackgroundTaskActivity<ChangeEncryptionTas
         CheckBoxPreference themeBlack;
         ListPreference theme;
 
+        /** Shows the data-loss warning before the encryption type is switched. */
         public void encryptionChangeWithDialog(final EncryptionType encryptionType) {
             AlertDialog.Builder builder = new AlertDialog.Builder(getActivity());
             builder.setTitle(R.string.settings_dialog_title_warning)
@@ -340,6 +348,7 @@ public class SettingsActivity extends BackgroundTaskActivity<ChangeEncryptionTas
                     .show();
         }
 
+        /** Enables auto-backup only when a location and a backup password are set. */
         public void updateAutoBackup() {
             if (useAutoBackup != null) {
                 useAutoBackup.setEnabled(BackupHelper.autoBackupType(getActivity()) == Constants.BackupType.ENCRYPTED);
@@ -354,6 +363,7 @@ public class SettingsActivity extends BackgroundTaskActivity<ChangeEncryptionTas
             }
         }
 
+        /** Passes the new key on to the credentials preference, if it is already created. */
         public void setEncryptionKey(SecretKey encryptionKey) {
             this.encryptionKey = encryptionKey;
 
@@ -361,6 +371,7 @@ public class SettingsActivity extends BackgroundTaskActivity<ChangeEncryptionTas
                 credentialsPreference.setOldEncryptionKey(encryptionKey);
         }
 
+        /** Passes the callback on to the credentials preference, if it is already created. */
         public void setEncryptionChangeCallback(EncryptionHelper.EncryptionChangeCallback changeCallback) {
             this.encryptionChangeCallback = changeCallback;
 
@@ -396,7 +407,7 @@ public class SettingsActivity extends BackgroundTaskActivity<ChangeEncryptionTas
                 autoUnlockAfterAutofill.setSummary(R.string.settings_desc_autofill_requires_android_o);
             }
 
-            // Authentication
+            // Encryption and theme
             catUI = (PreferenceCategory) findPreference(getString(R.string.settings_key_cat_ui));
             encryption = (ListPreference) findPreference(getString(R.string.settings_key_encryption));
             themeMode = (ListPreference) findPreference(getString(R.string.settings_key_theme_mode));
@@ -496,7 +507,8 @@ public class SettingsActivity extends BackgroundTaskActivity<ChangeEncryptionTas
                     return false;
                 });
             }
-            // Remove Theme Mode selection option for devices below Android 10. Disable theme selection if Theme Mode is set auto
+            // Theme mode needs Android 10+; on older devices hide both options. With mode "auto" the manual
+            // theme choice is unused, otherwise the black-theme toggle is.
             if(Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
                 catUI.removePreference(themeMode);
                 catUI.removePreference(themeBlack);

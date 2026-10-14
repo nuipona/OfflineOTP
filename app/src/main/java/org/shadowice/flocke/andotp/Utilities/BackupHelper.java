@@ -12,7 +12,9 @@ import java.nio.charset.StandardCharsets;
 
 import javax.crypto.SecretKey;
 
+/** Filenames, MIME types and file access for the backup files. */
 public class BackupHelper {
+    /** The resolved backup file, or the error to show if it could not be created. */
     public static class BackupFile {
         public DocumentFile file = null;
         public int errorMessage;
@@ -36,6 +38,7 @@ public class BackupHelper {
         return mimeType;
     }
 
+    /** Finds (or creates) the backup file in the configured location. */
     public static BackupFile backupFile(Context context, Uri backupLocationUri, Constants.BackupType type) {
         BackupFile backupFile = new BackupFile();
         DocumentFile backupLocation = DocumentFile.fromTreeUri(context, backupLocationUri);
@@ -49,7 +52,7 @@ public class BackupHelper {
                 backupFile.file = backupLocation.createFile(backupMimeType(type), BackupHelper.backupFilename(context, type));
             }
 
-            // Both failed
+            // Neither an existing nor a new file is available
             if (backupFile.file == null)
                 backupFile.errorMessage = R.string.backup_toast_file_creation_failed;
         } else {
@@ -59,6 +62,7 @@ public class BackupHelper {
         return backupFile;
     }
 
+    /** The file name for the given backup type, optionally with a date/time suffix. */
     public static String backupFilename(Context context, Constants.BackupType type) {
         Settings settings = new Settings(context);
         switch (type) {
@@ -85,6 +89,7 @@ public class BackupHelper {
         return Constants.BACKUP_FILENAME_PLAIN;
     }
 
+    /** Automatic backups need a backup location and password-encrypted backups enabled. */
     public static Constants.BackupType autoBackupType(Context context) {
         Settings settings = new Settings(context);
 
@@ -99,6 +104,7 @@ public class BackupHelper {
         return Constants.BackupType.UNAVAILABLE;
     }
 
+    /** Writes a password-encrypted backup: iteration count + salt + nonce + AES-GCM ciphertext. */
     public static boolean backupToFile(Context context, Uri uri, String password, String plain)
     {
         boolean success;

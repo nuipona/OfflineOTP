@@ -16,6 +16,7 @@ import java.util.Arrays;
 
 import javax.crypto.SecretKey;
 
+/** Reads a password-encrypted backup, in the current or in the legacy format. */
 public class EncryptedRestoreTask extends GenericRestoreTask {
     private final String password;
     private final boolean oldFormat;
@@ -36,11 +37,13 @@ public class EncryptedRestoreTask extends GenericRestoreTask {
             byte[] data = StorageAccessHelper.loadFile(applicationContext, uri);
 
             if (oldFormat) {
+                // Legacy format: AES-GCM data only, key derived as SHA-256 of the password
                 SecretKey key = EncryptionHelper.generateSymmetricKeyFromPassword(password);
                 byte[] decrypted = EncryptionHelper.decrypt(key, data);
 
                 decryptedString = new String(decrypted, StandardCharsets.UTF_8);
             } else {
+                // Current format: [iteration count][salt][nonce + ciphertext]
                 byte[] iterBytes = Arrays.copyOfRange(data, 0, Constants.INT_LENGTH);
                 byte[] salt = Arrays.copyOfRange(data, Constants.INT_LENGTH, Constants.INT_LENGTH + Constants.ENCRYPTION_IV_LENGTH);
                 byte[] encrypted = Arrays.copyOfRange(data, Constants.INT_LENGTH + Constants.ENCRYPTION_IV_LENGTH, data.length);

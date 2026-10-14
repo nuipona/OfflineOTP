@@ -42,6 +42,7 @@ import javax.crypto.SecretKey;
 
 // Use the following command to test in the dev version:
 //   adb shell am broadcast -a org.shadowice.flocke.andotp.broadcast.PLAIN_TEXT_BACKUP org.shadowice.flocke.andotp.dev
+/** Creates an unencrypted backup when the corresponding broadcast is received. */
 public class PlainTextBackupBroadcastReceiver extends BackupBroadcastReceiver {
     private Context context;
 
@@ -74,6 +75,7 @@ public class PlainTextBackupBroadcastReceiver extends BackupBroadcastReceiver {
         task.execute();
     }
 
+    /** Shows the success or failure notification for the finished backup. */
     private void handleTaskResult(BackupTaskResult result) {
         if (result.success) {
             NotificationHelper.notify(context, Constants.NotificationChannel.BACKUP_SUCCESS, R.string.backup_receiver_title_backup_success, result.payload);

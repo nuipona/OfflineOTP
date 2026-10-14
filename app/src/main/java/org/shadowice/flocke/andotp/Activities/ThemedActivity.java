@@ -33,6 +33,7 @@ import org.shadowice.flocke.andotp.Utilities.Tools;
 
 import java.util.Locale;
 
+/** Base activity that applies the selected theme and language. */
 public abstract class ThemedActivity extends AppCompatActivity {
     public Settings settings;
 
@@ -43,7 +44,7 @@ public abstract class ThemedActivity extends AppCompatActivity {
         setTheme(settings.getTheme());
         setLocale();
 
-        //Set navigation bar color
+        // Match the navigation bar to the theme colors
         getWindow().setNavigationBarColor(Tools.getThemeColor(this,R.attr.navigationBarColor));
 
         super.onCreate(savedInstanceState);
@@ -56,6 +57,7 @@ public abstract class ThemedActivity extends AppCompatActivity {
         super.onResume();
     }
 
+    /** Applies the selected language to this activity. */
     public void setLocale() {
         Locale locale = settings.getLocale();
         Locale.setDefault(locale);

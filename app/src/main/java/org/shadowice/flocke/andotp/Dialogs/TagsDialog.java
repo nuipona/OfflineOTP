@@ -40,7 +40,9 @@ import org.shadowice.flocke.andotp.View.TagsAdapter;
 import java.util.HashMap;
 import java.util.concurrent.Callable;
 
+/** Lets the user pick the tags of an entry and create new ones. */
 public class TagsDialog {
+    /** Shows the tag picker; the callables run after a tag was created and after the selection was confirmed. */
     public static void show(Context context, final TagsAdapter tagsAdapter, final Callable newTagCallable, final Callable selectedTagsCallable) {
         int margin = context.getResources().getDimensionPixelSize(R.dimen.activity_margin);
         int marginSmall = context.getResources().getDimensionPixelSize(R.dimen.activity_margin_small);

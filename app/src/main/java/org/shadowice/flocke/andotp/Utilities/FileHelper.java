@@ -30,7 +30,9 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 
+/** Small file helpers used for the encrypted database and the KeyStore key file. */
 class FileHelper {
+    /** Reads the whole file into memory. */
     static byte[] readFileToBytes(File file) throws IOException {
         final InputStream in = new FileInputStream(file);
         try {
@@ -46,6 +48,7 @@ class FileHelper {
         }
     }
 
+    /** Overwrites the file with the given bytes. */
     static void writeBytesToFile(File file, byte[] data) throws IOException {
         try (OutputStream out = new FileOutputStream(file)) {
             out.write(data);
