@@ -14,7 +14,7 @@
  * New feature: Automatic theme selection for Android 10+ (Issue #394, PR #418 by @Ullas-Aithal)
  * New feature: Allow editing digits, period and counter for existing entries (Issue #694)
  * New feature: **mOTP support** (Issue #142, PR #617 by @mantinan)
- * New feature: Show a warning if the automatic time setting is disable on the phone (Issue #285 and #777)
+ * New feature: Show a warning if the automatic time setting is disabled on the phone (Issue #285 and #777)
  * New feature: Share OTP token as keystrokes (PR #693 by @DanielWeigl)
  * New feature: Option to show previous token (Issue #506)
  * Improvement: Perform authentication in the background to improve responsiveness (Issue #635, PR #738 by @jsoberg)
@@ -212,7 +212,7 @@
  * New feature: Advanced options are now hidden in the manual entry dialog (Issue #85)
  * New special feature: Clear the KeyStore (use with caution)
  * Bug fix: Change the format used to store and set the language (Issue #112)
- * Bug fix: Add some extra padding the the RecyclerView (Issue #95)
+ * Bug fix: Add some extra padding to the RecyclerView (Issue #95)
  * Bug fix: Remove gradients from vector thumbnails (Issue #103, PR #97)
  * Thumbnails: a lot of new thumbnails (check the wiki for details)
  * Translation: Catalan (ca-rES) thanks to isard

@@ -213,7 +213,7 @@ public class EncryptionHelper {
         return combined;
     }
 
-    /** RSA encryption, used to wrap the backup password. */
+    /** RSA-encrypts a small secret (e.g. the stored backup password) with a KeyStore public key. */
     public static byte[] encrypt(PublicKey publicKey, byte[] plaintext)
             throws NoSuchPaddingException, BadPaddingException, InvalidKeyException, NoSuchAlgorithmException, IllegalBlockSizeException {
         Cipher cipher = Cipher.getInstance(Constants.ALGORITHM_ASYMMETRIC);

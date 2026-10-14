@@ -4,7 +4,7 @@
 [![Current release](https://img.shields.io/github/release/andOTP/andOTP/all.svg)](https://github.com/andOTP/andOTP/releases/download/v0.9.0.1/andOTP_v0.9.0.1.apk)
 [![Crowdin](https://d322cqt584bo4o.cloudfront.net/andotp/localized.svg)](https://crowdin.com/project/andotp)
 [![Chat - Telegram](https://img.shields.io/badge/chat-Telegram-blue.svg)](https://t.me/andOTP)
-[![Chat - Matrix](https://img.shields.io/badge/chat-Matrix-blue.svg)](https://matrix.to/#/#andOTP:privacytools.io)
+[![Chat - Matrix](https://img.shields.io/badge/chat-Matrix-blue.svg)](https://matrix.to/#/#andOTP:tchncs.de)
 
 ![andOTP](./assets/logo.png)
 
@@ -16,10 +16,10 @@ See [this XDA post](https://forum.xda-developers.com/t/app-4-4-open-source-andot
 
 ## Intro
 
-andOTP is a two-factor authentication App for Android 5.1+.
+andOTP is a two-factor authentication app for Android 5.1+.
 
 It implements Time-based One-time Passwords (TOTP) and HMAC-Based One-Time Passwords (HOTP).
-Simply scan the QR code and login with the generated 6-digit code.
+Simply scan the QR code and log in with the generated 6-digit code.
 
 This project started out as a fork of the great [OTP Authenticator](https://github.com/0xbb/otp-authenticator) app written by [Bruno Bierbaumer](https://github.com/0xbb),
 which has sadly been inactive since 2015. By now almost every aspect of the app has been changed/re-written so the fork status of the Github repository got
@@ -27,7 +27,7 @@ detached upon [user request](https://github.com/andOTP/andOTP/issues/145). But a
 
 ## Help wanted:
 I currently don't have that much time to spend developing andOTP, so any contributions are always welcome.
-Don't worry, I will still continue to develop andOTP it will just slow down from the incredible speed I had going in the beginning.
+Don't worry, I will still continue to develop andOTP. It will just slow down from the incredible speed I had at the beginning.
 
 ## Features:
 
@@ -77,7 +77,7 @@ key, which renders them useless.
 
 ### Automatic backups:
 
- * BroadcastReceivers: AndOTP supports a number of broadcasts to perform automated backups, eg. via Tasker. These will get saved to the defined backup directory. **These only work when KeyStore is used as the encryption mechanism**
+ * BroadcastReceivers: andOTP supports a number of broadcasts to perform automated backups, e.g. via Tasker. These will get saved to the defined backup directory. **These only work when KeyStore is used as the encryption mechanism.**
    - **org.shadowice.flocke.andotp.broadcast.PLAIN_TEXT_BACKUP**: Perform a plain text backup. **WARNING**: This will save your 2FA tokens onto the disk in an unencrypted manner!
    - **org.shadowice.flocke.andotp.broadcast.ENCRYPTED_BACKUP**: Perform an encrypted backup of your 2FA database using the selected password in settings.
 
@@ -97,10 +97,10 @@ So make sure you have a **current backup** before switching!
 
 ## Contribute:
 
- * **Translation**: If you want to help translate andOTP into your language head over to the [Crowdin project](https://crowdin.com/project/andotp).
+ * **Translation**: If you want to help translate andOTP into your language, visit the [Crowdin project](https://crowdin.com/project/andotp).
  * **Bug reports and feature requests**: You can report bugs and request features in the [Issue tracker](https://github.com/andOTP/andOTP/issues) on GitHub.
  * **Requesting thumbnails**: If you are missing a thumbnail you can request it by [opening a thumbnail request](https://github.com/andOTP/andOTP/issues/new/choose).
- * **Discussion and support**: 
+ * **Discussion and support**:
    - [XDA thread](https://forum.xda-developers.com/android/apps-games/app-andotp-android-otp-authenticator-t3636993) (please keep off-topic to a minimum)
    - Telegram group [@andOTP](https://t.me/andOTP) (if you just want important updates you can mute the group so you only get notified about pinned messages)
    - Matrix channel [#andOTP:tchncs.de](https://matrix.to/#/#andOTP:tchncs.de)
