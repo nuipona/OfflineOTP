@@ -21,6 +21,7 @@
 
     <string name="backup_receiver_title_backup_failed">Backup failed</string>
     <string name="backup_receiver_title_backup_success">Backup successful</string>
+    <string name="backup_receiver_unexpected_error">An unexpected error occurred while starting the backup.</string>
 
     <string name="backup_receiver_encrypted_disabled">Encrypted backups are currently not allowed,
         please go to the Settings to enable them</string>

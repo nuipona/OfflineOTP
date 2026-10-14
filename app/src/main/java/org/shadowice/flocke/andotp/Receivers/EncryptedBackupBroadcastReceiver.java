@@ -25,6 +25,7 @@ package org.shadowice.flocke.andotp.Receivers;
 
 import android.content.Context;
 import android.content.Intent;
+import android.util.Log;
 
 import org.shadowice.flocke.andotp.Database.Entry;
 import org.shadowice.flocke.andotp.R;
@@ -40,8 +41,8 @@ import java.util.ArrayList;
 
 import javax.crypto.SecretKey;
 
-// Use the following command to test in the dev version:
-//   adb shell am broadcast -a org.shadowice.flocke.andotp.broadcast.ENCRYPTED_BACKUP org.shadowice.flocke.andotp.dev
+// Test in the dev build (Android 8+ needs an explicit package, hence -p):
+//   adb shell am broadcast -a org.shadowice.flocke.andotp.broadcast.ENCRYPTED_BACKUP -p org.shadowice.flocke.andotp.dev
 /** Creates a password-encrypted backup when the corresponding broadcast is received. */
 public class EncryptedBackupBroadcastReceiver extends BackupBroadcastReceiver {
     private Context context;
@@ -73,13 +74,28 @@ public class EncryptedBackupBroadcastReceiver extends BackupBroadcastReceiver {
             return;
         }
 
-        SecretKey encryptionKey = KeyStoreHelper.loadEncryptionKeyFromKeyStore(context, false);
-        ArrayList<Entry> entries = DatabaseHelper.loadDatabase(context, encryptionKey);
+        // Reading the key and database can take a while, so keep it off the main thread.
+        // goAsync() keeps the broadcast alive until finish() is called once the backup is done.
+        final PendingResult pendingResult = goAsync();
+        final Context appContext = context.getApplicationContext();
 
-        EncryptedBackupTask task = new EncryptedBackupTask(context, entries, password, null);
-        task.setCallback(this::handleTaskResult);
+        new Thread(() -> {
+            try {
+                SecretKey encryptionKey = KeyStoreHelper.loadEncryptionKeyFromKeyStore(appContext, false);
+                ArrayList<Entry> entries = DatabaseHelper.loadDatabase(appContext, encryptionKey);
 
-        task.execute();
+                EncryptedBackupTask task = new EncryptedBackupTask(appContext, entries, password, null);
+                task.setCallback(result -> {
+                    handleTaskResult(result);
+                    pendingResult.finish();
+                });
+                task.execute();
+            } catch (RuntimeException e) {
+                Log.e(EncryptedBackupBroadcastReceiver.class.getSimpleName(), "Encrypted backup failed to start", e);
+                NotificationHelper.notify(appContext, Constants.NotificationChannel.BACKUP_FAILED, R.string.backup_receiver_title_backup_failed, R.string.backup_receiver_unexpected_error);
+                pendingResult.finish();
+            }
+        }).start();
     }
 
     /** Shows the success or failure notification for the finished backup. */

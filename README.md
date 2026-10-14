@@ -70,6 +70,7 @@ key, which renders them useless.
 
  * BroadcastReceivers: andOTP supports a number of broadcasts to perform automated backups, e.g. via Tasker. These will get saved to the defined backup directory. **These only work when KeyStore is used as the encryption mechanism.**
    - **org.shadowice.flocke.andotp.broadcast.ENCRYPTED_BACKUP**: Perform an encrypted backup of your 2FA database using the selected password in settings.
+     Android 8.0 and newer only deliver this broadcast when it is addressed to andOTP. Set the package to `org.shadowice.flocke.andotp` (`org.shadowice.flocke.andotp.dev` for the dev build), e.g. `adb shell am broadcast -a org.shadowice.flocke.andotp.broadcast.ENCRYPTED_BACKUP -p org.shadowice.flocke.andotp`, or use the package field of Tasker's Send Intent action.
 
 ## Migration:
 
