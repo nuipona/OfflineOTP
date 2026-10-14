@@ -74,8 +74,6 @@
         zerbitzuek aplikazioko pasahitzen eremuak irakurtzea</string>
     <string name="settings_desc_auto_unlock_after_autofill">Desblokeatu pasahitza automatikoki
         bete bada</string>
-    <string name="settings_desc_autofill_requires_android_o">Aukera honek Android 8.0 (Oreo) baino
-        handiagoa den bertsioa behar du</string>
     <string name="settings_desc_theme_black_auto">Modu ilunean itxura beltza erabili</string>
     <string name="settings_desc_show_prev_token">Erakutsi aurreko tokena unekoaz gain</string>
     <string name="settings_desc_minimize_on_copy">Aplikazioa minimizatu egingo da OTP gakoa arbelera kopiatzean</string>
@@ -225,7 +223,6 @@ migratzean, berrezarri eskuz Ezarpenetan!</string>
         <item>Etiketetan zehar aldatu (etiketa bat bakarra aukeratzea baimendu)</item>
     </string-array>
     <string-array name="settings_entries_backup_broadcasts">
-        <item>Segurtasun-kopia arruntak</item>
         <item>Zifratutako segurtasun-kopiak</item>
     </string-array>
     <!-- Special -->

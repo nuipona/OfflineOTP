@@ -6,11 +6,8 @@
     <string name="backup_desc_openpgp_provider">شما نیاز دارید که یک فراهم کننده OpenPGP نصب کنید و آن را در <b>تنظیمات</b> فعال کنید تا از این ویژگی استفاده کنید.    </string>
     <string name="backup_desc_openpgp_keyid">قبل از اینکه یک پشتیبان رمزگذاری شده بسازید، باید یک کلید OpenPGP در <b>تنظیمات</b> انتخاب کنید.    </string>
     <!-- Dialogs -->
-    <string name="backup_dialog_title_security_warning">هشدار امنیتی</string>
-    <string name="backup_dialog_msg_export_warning">آیا واقعا می‌خواهید پایگاه داده را به عنوان پرونده JSON متن ساده استخراج کنید؟ این پرونده حاوی همه کلیدهای محرمانه شماست، لطفا <b>آن را امن نگهدارید</b>!    </string>
     <string name="backup_receiver_title_backup_failed">شکست در پشتیبان‌گیری</string>
     <string name="backup_receiver_title_backup_success">پشتیبان‌گیری با موفقیت انجام شد</string>
-    <string name="backup_receiver_plain_disabled">پشتیبان‌های متن ساده در حال حاضر مجاز نیستند، لطفا به تنظیمات بروید و آن‌ها را فعال کنید</string>
     <string name="backup_receiver_encrypted_disabled">پشتیبان‌های رمزگذاری شده در حال حاضر مجاز نیستند، لطفا به تنظیمات بروید و آن‌ها را فعال کنید</string>
     <string name="backup_receiver_read_permission_failed">اجازه خواندن داده نشده، لطفا قبل از تلاش برای پشتیبان‌گیری این اجازه را بدهید</string>
     <string name="backup_receiver_write_permission_failed">اجازه نوشتن داده نشده، لطفا قبل از تلاش برای پشتیبان‌گیری این اجازه را بدهید</string>
@@ -40,14 +37,12 @@ Broadcast Backup پشتیبانی نمی‌شود</string>
     <string name="backup_toast_crypt_password_not_set">گذرواژه تنظیم نشده، <b>تنظیمات</b> را بررسی کنید</string>
     <string name="backup_toast_file_selection_failed">ناتوانی در باز کردن پنجره انتخاب پرونده!</string>
     <string name="backup_label_type">نوع پشتیبان: </string>
-    <string name="backup_label_warning_plain">پشتیبان به صورت رمزگذاری نشده و یک فایل متنی ذخیره می‌شود. لطفا فقط در صورتی که به سختی لازم است، از این روش استفاده کنید و <b>فایل را امن نگه دارید</b>!</string>
     <string name="backup_label_crypt">پشتیبان به صورت رمزگذاری شده با یک رمز عبور شخصی با استفاده از رمزگذاری ۲۵۶-بیتی AES ذخیره می‌شود. اگر نمی‌خواهید که هر بار برای پشتیبان‌گیری رمزعبور را وارد کنید، می‌توانید یک رمز عبور پیشفرض در تنظیمات قرار دهید.</string>
     <string name="backup_label_pgp">پشتیبان به صورت رمزگذاری شده با یک کلید PGP ذخیره می‌شود که شما در تنظیمات قراردادید. رمزگذاری با استفاده از یک برنامه خارجی انجام می‌شود.</string>
     <string name="backup_check_restore_old">بازگردانی پشتیبان با ساختار قدیمی (ساخته شده با یک andOTP با نسخه قدیمی‌تر از ۰.۶.۳)</string>
     <string name="backup_button_backup">ساخت پشتیبان</string>
     <string name="backup_button_restore">بازگردانی پشتیبان</string>
     <string-array name="backup_list_type_names">
-        <item>متن ساده</item>
         <item>رمزگذاری شده</item>
         <item>OpenPGP</item>
     </string-array>

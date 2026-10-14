@@ -39,42 +39,25 @@ import org.shadowice.flocke.andotp.R;
 
 /**
  * Original: http://stackoverflow.com/questions/23122088/colored-boxed-with-letters-a-la-gmail
- * Used to create a {@link Bitmap} that contains a letter used in the English
- * alphabet or digit; otherwise a "?" placeholder is used.
- *
- * Only English language supported.
+ * Creates a {@link Bitmap} tile with the first letter or digit of a name, or a "?" placeholder.
  */
 class LetterBitmap {
 
-    /**
-     * The number of available tile colors
-     */
+    /** The number of available tile colors */
     private static final int NUM_OF_TILE_COLORS = 8;
 
-    /**
-     * The {@link TextPaint} used to draw the letter onto the tile
-     */
+    /** The {@link TextPaint} used to draw the letter onto the tile */
     private final TextPaint mPaint = new TextPaint();
-    /**
-     * The bounds that enclose the letter
-     */
+    /** The bounds that enclose the letter */
     private final Rect mBounds = new Rect();
-    /**
-     * The {@link Canvas} to draw on
-     */
+    /** The {@link Canvas} to draw on */
     private final Canvas mCanvas = new Canvas();
-    /**
-     * The first char of the name being displayed
-     */
+    /** The first char of the name being displayed */
     private final char[] mFirstChar = new char[1];
 
-    /**
-     * The background colors of the tile
-     */
+    /** The background colors of the tile */
     private final TypedArray mColors;
-    /**
-     * The font size used to display the letter
-     */
+    /** The font size used to display the letter */
     private final float mTileLetterFontSizeScale;
 
     /**

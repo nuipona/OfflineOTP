@@ -6,11 +6,8 @@
     <string name="backup_desc_openpgp_provider">Vous devez installer un fournisseur OpenPGP et l\'activer dans les <b>paramètres</b> pour utiliser cette fonctionnalité.</string>
     <string name="backup_desc_openpgp_keyid">Vous devez sélectionner un fournisseur OpenPGP dans les <b>paramètres</b> afin de pouvoir créer des sauvegardes chiffrées.</string>
     <!-- Dialogs -->
-    <string name="backup_dialog_title_security_warning">Avertissement de sécurité</string>
-    <string name="backup_dialog_msg_export_warning">Êtes-vous sûr de vouloir exporter la base de données en clair dans un fichier JSON ? Ce fichier contiendra toutes vos clés privées, <b>veuillez le placer dans un endroit sûr</b> !    </string>
     <string name="backup_receiver_title_backup_failed">La sauvegarde a échoué</string>
     <string name="backup_receiver_title_backup_success">Sauvegarde réussie</string>
-    <string name="backup_receiver_plain_disabled">Les sauvegardes en clair ne sont actuellement pas autorisées, veuillez aller dans les Paramètres afin de les activer</string>
     <string name="backup_receiver_encrypted_disabled">Les sauvegardes chiffrées ne sont actuellement pas autorisées, veuillez aller dans les Paramètres afin de les activer</string>
     <string name="backup_receiver_read_permission_failed">L\'autorisation de lecture n\'est pas accordée, veuillez le faire avant d’effectuer la sauvegarde</string>
     <string name="backup_receiver_write_permission_failed">L\'autorisation d\'écriture n\'est pas accordée, veuillez le faire avant d’effectuer la sauvegarde</string>
@@ -41,8 +38,6 @@
     <string name="backup_toast_crypt_password_not_set">Aucun mot de passe défini, vérifiez les <b>paramètres</b></string>
     <string name="backup_toast_file_selection_failed">Impossible d\'ouvrir la sélection de fichier !</string>
     <string name="backup_label_type">Type de sauvegarde : </string>
-    <string name="backup_label_warning_plain">La sauvegarde sera stockée dans un fichier en texte
-        brut non chiffré. Veuillez utiliser uniquement si strictement nécessaire et <b>gardez le fichier en sécurité</b>!</string>
     <string name="backup_label_crypt">La sauvegarde sera stockée chiffrée avec un mot de passe personnalisé
         en utilisant le chiffrement AES 256-bit. Vous pouvez configurer un mot de passe par défaut dans les paramètres si vous
         ne voulez pas avoir à le saisir chaque fois que vous créez une sauvegarde.</string>
@@ -53,7 +48,6 @@
     <string name="backup_button_backup">Créer une sauvegarde</string>
     <string name="backup_button_restore">Restaurer une sauvegarde</string>
     <string-array name="backup_list_type_names">
-        <item>Texte brut</item>
         <item>Chiffré</item>
         <item>OpenPGP</item>
     </string-array>

@@ -1,25 +1,17 @@
 #  andOTP -  Android OTP Authenticator
 
-[![Build Status](https://travis-ci.org/andOTP/andOTP.svg?branch=master)](https://travis-ci.org/andOTP/andOTP)
-[![Current release](https://img.shields.io/github/release/andOTP/andOTP/all.svg)](https://github.com/andOTP/andOTP/releases/download/v0.9.0.1/andOTP_v0.9.0.1.apk)
-[![Crowdin](https://d322cqt584bo4o.cloudfront.net/andotp/localized.svg)](https://crowdin.com/project/andotp)
-[![Chat - Telegram](https://img.shields.io/badge/chat-Telegram-blue.svg)](https://t.me/andOTP)
-[![Chat - Matrix](https://img.shields.io/badge/chat-Matrix-blue.svg)](https://matrix.to/#/#andOTP:privacytools.io)
-
 ![andOTP](./assets/logo.png)
 
 ## Unmaintained
 
 **This repository is currently unmaintained.**
 
-See [this XDA post](https://forum.xda-developers.com/t/app-4-4-open-source-andotp-open-source-two-factor-authentication-for-android.3636993/post-87021655) for more details.
-
 ## Intro
 
-andOTP is a two-factor authentication App for Android 5.1+.
+andOTP is a two-factor authentication app for Android 9.0+.
 
 It implements Time-based One-time Passwords (TOTP) and HMAC-Based One-Time Passwords (HOTP).
-Simply scan the QR code and login with the generated 6-digit code.
+Simply scan the QR code and log in with the generated 6-digit code.
 
 This project started out as a fork of the great [OTP Authenticator](https://github.com/0xbb/otp-authenticator) app written by [Bruno Bierbaumer](https://github.com/0xbb),
 which has sadly been inactive since 2015. By now almost every aspect of the app has been changed/re-written so the fork status of the Github repository got
@@ -27,7 +19,7 @@ detached upon [user request](https://github.com/andOTP/andOTP/issues/145). But a
 
 ## Help wanted:
 I currently don't have that much time to spend developing andOTP, so any contributions are always welcome.
-Don't worry, I will still continue to develop andOTP it will just slow down from the incredible speed I had going in the beginning.
+Don't worry, I will still continue to develop andOTP. It will just slow down from the incredible speed I had at the beginning.
 
 ## Features:
 
@@ -39,7 +31,6 @@ Don't worry, I will still continue to develop andOTP it will just slow down from
    - Android KeyStore
    - Password / PIN
  * Multiple backup options:
-   - Plain-text
    - Password-protected
    - OpenPGP-encrypted
  * Sleek minimalistic Material Design with three different themes:
@@ -77,33 +68,22 @@ key, which renders them useless.
 
 ### Automatic backups:
 
- * BroadcastReceivers: AndOTP supports a number of broadcasts to perform automated backups, eg. via Tasker. These will get saved to the defined backup directory. **These only work when KeyStore is used as the encryption mechanism**
-   - **org.shadowice.flocke.andotp.broadcast.PLAIN_TEXT_BACKUP**: Perform a plain text backup. **WARNING**: This will save your 2FA tokens onto the disk in an unencrypted manner!
+ * BroadcastReceivers: andOTP supports a number of broadcasts to perform automated backups, e.g. via Tasker. These will get saved to the defined backup directory. **These only work when KeyStore is used as the encryption mechanism.**
    - **org.shadowice.flocke.andotp.broadcast.ENCRYPTED_BACKUP**: Perform an encrypted backup of your 2FA database using the selected password in settings.
+     Android 8.0 and newer only deliver this broadcast when it is addressed to andOTP. Set the package to `org.shadowice.flocke.andotp` (`org.shadowice.flocke.andotp.dev` for the dev build), e.g. `adb shell am broadcast -a org.shadowice.flocke.andotp.broadcast.ENCRYPTED_BACKUP -p org.shadowice.flocke.andotp`, or use the package field of Tasker's Send Intent action.
 
 ## Migration:
 
 Check out [this](https://github.com/andOTP/andOTP/wiki/Migration) wiki page to learn about the different ways to migrate to andOTP from other 2FA apps.
 
-## Downloads:
-
-[<img height=80 alt="Get it on Google Play" src="https://play.google.com/intl/en_us/badges/images/generic/en-play-badge.png" />](https://play.google.com/store/apps/details?id=org.shadowice.flocke.andotp)
-[<img height=80 alt="Get it on F-Droid" src="https://fdroid.gitlab.io/artwork/badge/get-it-on.png" />](https://f-droid.org/packages/org.shadowice.flocke.andotp/)
-[<img height=80 alt="Get it on GitHub" src="https://raw.githubusercontent.com/flocke/andOTP/master/assets/badges/get-it-on-github.png" />](https://github.com/andOTP/andOTP/releases)
-
-**Warning**: All three versions (Google Play, F-Droid and the APKs) are not compatible (not signed by the same key)!
+**Warning**: Builds signed with different keys are not compatible!
 You will have to uninstall one to install the other, which will delete all your data.
 So make sure you have a **current backup** before switching!
 
 ## Contribute:
 
- * **Translation**: If you want to help translate andOTP into your language head over to the [Crowdin project](https://crowdin.com/project/andotp).
  * **Bug reports and feature requests**: You can report bugs and request features in the [Issue tracker](https://github.com/andOTP/andOTP/issues) on GitHub.
  * **Requesting thumbnails**: If you are missing a thumbnail you can request it by [opening a thumbnail request](https://github.com/andOTP/andOTP/issues/new/choose).
- * **Discussion and support**: 
-   - [XDA thread](https://forum.xda-developers.com/android/apps-games/app-andotp-android-otp-authenticator-t3636993) (please keep off-topic to a minimum)
-   - Telegram group [@andOTP](https://t.me/andOTP) (if you just want important updates you can mute the group so you only get notified about pinned messages)
-   - Matrix channel [#andOTP:tchncs.de](https://matrix.to/#/#andOTP:tchncs.de)
 
 #### Donations:
 
@@ -111,25 +91,6 @@ If you want to show your appreciation for our work with a small donation you can
 
  * [Donate to Jakob Nixdorf](https://flocke.shadowice.org/donate.html) (Main developer, maintainer)
  * [Donate to Richy HBM](https://richyhbm.co.uk/donate) (Developer)
-
-## Screenshots:
-#### Light theme:
-
-[<img width=200 alt="Main Activity" src="https://raw.githubusercontent.com/flocke/andOTP/master/assets/screenshots/main_activity.png">](https://raw.githubusercontent.com/flocke/andOTP/master/assets/screenshots/main_activity.png)
-[<img width=200 alt="Settings Activity" src="https://raw.githubusercontent.com/flocke/andOTP/master/assets/screenshots/settings_activity.png">](https://raw.githubusercontent.com/flocke/andOTP/master/assets/screenshots/settings_activity.png)
-[<img width=200 alt="Backup Activity" src="https://raw.githubusercontent.com/flocke/andOTP/master/assets/screenshots/backup_activity.png">](https://raw.githubusercontent.com/flocke/andOTP/master/assets/screenshots/backup_activity.png)
-
-#### Dark theme:
-
-[<img width=200 alt="Main Activity" src="https://raw.githubusercontent.com/flocke/andOTP/master/assets/screenshots/main_activity_dark.png">](https://raw.githubusercontent.com/flocke/andOTP/master/assets/screenshots/main_activity_dark.png)
-[<img width=200 alt="Settings Activity" src="https://raw.githubusercontent.com/flocke/andOTP/master/assets/screenshots/settings_activity_dark.png">](https://raw.githubusercontent.com/flocke/andOTP/master/assets/screenshots/settings_activity_dark.png)
-[<img width=200 alt="Backup Activity" src="https://raw.githubusercontent.com/flocke/andOTP/master/assets/screenshots/backup_activity_dark.png">](https://raw.githubusercontent.com/flocke/andOTP/master/assets/screenshots/backup_activity_dark.png)
-
-#### Black theme:
-
-[<img width=200 alt="Main Activity" src="https://raw.githubusercontent.com/flocke/andOTP/master/assets/screenshots/main_activity_black.png">](https://raw.githubusercontent.com/flocke/andOTP/master/assets/screenshots/main_activity_black.png)
-[<img width=200 alt="Settings Activity" src="https://raw.githubusercontent.com/flocke/andOTP/master/assets/screenshots/settings_activity_black.png">](https://raw.githubusercontent.com/flocke/andOTP/master/assets/screenshots/settings_activity_black.png)
-[<img width=200 alt="Backup Activity" src="https://raw.githubusercontent.com/flocke/andOTP/master/assets/screenshots/backup_activity_black.png">](https://raw.githubusercontent.com/flocke/andOTP/master/assets/screenshots/backup_activity_black.png)
 
 ## Acknowledgments:
 #### Open-source components used:

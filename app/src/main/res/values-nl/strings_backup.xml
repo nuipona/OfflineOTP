@@ -6,11 +6,8 @@
     <string name="backup_desc_openpgp_provider">Je dient een OpenPGP provider te installeren en in de <b>Instellingen</b> in te schakelen om deze functie te gebruiken.    </string>
     <string name="backup_desc_openpgp_keyid">Je dient een OpenPGP-sleutel in de <b>Instellingen</b> te selecteren voor je versleutelde reservekopieën kunt maken.    </string>
     <!-- Dialogs -->
-    <string name="backup_dialog_title_security_warning">Veiligheidswaarschuwing</string>
-    <string name="backup_dialog_msg_export_warning">Wilt u echt de database exporteren als JSON-bestand zonder opmaak? Dit bestand bevat al uw geheime sleutels. <b>Houdt het veilig</b>!    </string>
     <string name="backup_receiver_title_backup_failed">Reservekopie mislukt</string>
     <string name="backup_receiver_title_backup_success">Reservekopie geslaagd</string>
-    <string name="backup_receiver_plain_disabled">Niet-versleutelde reservekopieën zijn op dit moment uitgeschakeld, ga naar de Instellingen om deze in te schakelen</string>
     <string name="backup_receiver_encrypted_disabled">Versleutelde reservekopieën zijn op dit moment uitgeschakeld, ga naar de Instellingen om deze in te schakelen</string>
     <string name="backup_receiver_read_permission_failed">Verleen eerst toestemming om te lezen voordat je een reservekopie gaat maken</string>
     <string name="backup_receiver_write_permission_failed">Geen machtiging tot schrijven verleend, gelieve dit te doen voordat je een reservekopie maakt</string>
@@ -39,7 +36,6 @@
     <string name="backup_toast_crypt_password_not_set">Wachtwoord niet ingesteld, controleer de <b>Instellingen</b></string>
     <string name="backup_toast_file_selection_failed">Kan bestand selectie niet openen!</string>
     <string name="backup_label_type">Back-up type: </string>
-    <string name="backup_label_warning_plain">De back-up zal worden opgeslagen in een niet-versleuteld platte-tekstbestand. Gebruik dit alleen indien strikt noodzakelijk en <b>bewaar het bestand veilig</b>!</string>
     <string name="backup_label_crypt">De back-up wordt versleuteld opgeslagen met een aangepast wachtwoord met behulp van AES 256-bit encryptie. U kunt een standaard wachtwoord instellen in de instellingen als u het niet elke keer in wil voeren als u een back-up maakt.</string>
     <string name="backup_label_pgp">De back-up wordt versleuteld opgeslagen met behulp van de PGP-sleutel die u hebt opgegeven in de instellingen. De encryptie wordt behandeld door een app van een derde partij.</string>
     <string name="backup_check_restore_old">Herstel back-up in oud formaat (gemaakt met een andOTP versie
@@ -47,7 +43,6 @@
     <string name="backup_button_backup">Back-up maken</string>
     <string name="backup_button_restore">Back-up terugzetten</string>
     <string-array name="backup_list_type_names">
-        <item>Platte tekst</item>
         <item>Versleuteld</item>
         <item>OpenPGP</item>
     </string-array>

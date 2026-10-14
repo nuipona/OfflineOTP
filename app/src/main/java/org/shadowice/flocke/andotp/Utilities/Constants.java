@@ -42,7 +42,7 @@ public class Constants {
 
     /** The kind of backup file; UNAVAILABLE disables the backup/restore controls. */
     public enum BackupType {
-        PLAIN_TEXT, ENCRYPTED, OPEN_PGP, UNAVAILABLE
+        ENCRYPTED, OPEN_PGP, UNAVAILABLE
     }
 
     /** How selected tags are combined: any tag (OR), all tags (AND), or only one tag at a time. */
@@ -87,8 +87,6 @@ public class Constants {
     public final static int INTENT_MAIN_INTRO                   = 103;
     public final static int INTENT_MAIN_QR_OPEN_IMAGE           = 104;
 
-    public final static int INTENT_BACKUP_OPEN_DOCUMENT_PLAIN       = 200;
-    public final static int INTENT_BACKUP_SAVE_DOCUMENT_PLAIN       = 201;
     public final static int INTENT_BACKUP_OPEN_DOCUMENT_CRYPT       = 202;
     public final static int INTENT_BACKUP_SAVE_DOCUMENT_CRYPT       = 203;
     public final static int INTENT_BACKUP_OPEN_DOCUMENT_PGP         = 204;
@@ -150,15 +148,12 @@ public class Constants {
     public final static String FILENAME_DATABASE_BACKUP = "secrets.dat.bck";
 
     // Backup files
-    public final static String BACKUP_FILENAME_PLAIN    = "otp_accounts.json";
     public final static String BACKUP_FILENAME_CRYPT    = "otp_accounts.json.aes";
     public final static String BACKUP_FILENAME_PGP      = "otp_accounts.json.gpg";
 
-    public final static String BACKUP_FILENAME_PLAIN_FORMAT    = "otp_accounts_%s.json";
     public final static String BACKUP_FILENAME_CRYPT_FORMAT    = "otp_accounts_%s.json.aes";
     public final static String BACKUP_FILENAME_PGP_FORMAT      = "otp_accounts_%s.json.gpg";
 
-    public final static String BACKUP_MIMETYPE_PLAIN    = "application/json";
     public final static String BACKUP_MIMETYPE_CRYPT    = "binary/aes";
     public final static String BACKUP_MIMETYPE_PGP      = "application/pgp-encrypted";
 }

@@ -6,7 +6,6 @@ import com.google.android.material.textfield.TextInputLayout;
 
 import androidx.appcompat.app.AppCompatDialog;
 
-import android.os.Build;
 import android.text.Editable;
 import android.text.TextUtils;
 import android.text.TextWatcher;
@@ -60,7 +59,7 @@ public class PasswordEntryDialog extends AppCompatDialog
             passwordConfirm.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
         }
 
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && blockAutofill) {
+        if (blockAutofill) {
             passwordLayout.setImportantForAutofill(View.IMPORTANT_FOR_AUTOFILL_NO_EXCLUDE_DESCENDANTS);
             passwordConfirm.setImportantForAutofill(View.IMPORTANT_FOR_AUTOFILL_NO);
         }

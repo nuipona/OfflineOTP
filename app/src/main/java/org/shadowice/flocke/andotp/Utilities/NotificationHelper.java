@@ -23,11 +23,13 @@
 
 package org.shadowice.flocke.andotp.Utilities;
 
+import android.Manifest;
 import android.app.NotificationChannel;
 import android.app.NotificationManager;
 import android.content.Context;
-import android.os.Build;
+import android.content.pm.PackageManager;
 import androidx.core.app.NotificationCompat;
+import androidx.core.content.ContextCompat;
 
 import org.shadowice.flocke.andotp.R;
 
@@ -35,41 +37,55 @@ import static android.content.Context.NOTIFICATION_SERVICE;
 
 /** Creates the backup notification channels and posts the backup notifications. */
 public class NotificationHelper {
+    private static final String POST_NOTIFICATIONS_PERMISSION = Manifest.permission.POST_NOTIFICATIONS;
+    private static final int POST_NOTIFICATIONS_REQUEST_CODE = 1;
+
+    /**
+     * Asks for the notification permission on Android 13+ if it is not granted yet.
+     * A no-op before Android 13 (API 33).
+     */
+    public static void requestNotificationPermission(android.app.Fragment fragment) {
+        Context context = fragment.getActivity();
+        if (context == null || android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.TIRAMISU) {
+            return;
+        }
+
+        if (ContextCompat.checkSelfPermission(context, POST_NOTIFICATIONS_PERMISSION) != PackageManager.PERMISSION_GRANTED) {
+            fragment.requestPermissions(new String[] { POST_NOTIFICATIONS_PERMISSION }, POST_NOTIFICATIONS_REQUEST_CODE);
+        }
+    }
+
     private static String channelId(Constants.NotificationChannel channel) {
         return "andOTP_" + channel.name().toLowerCase();
     }
 
-    /** Creates the channel for the given type (no-op before Android 8). */
+    /** Creates the channel for the given type. */
     private static void createNotificationChannel(Context context, Constants.NotificationChannel channel) {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            NotificationChannel notificationChannel = new NotificationChannel(channelId(channel), context.getString(R.string.app_name), NotificationManager.IMPORTANCE_DEFAULT);
+        NotificationChannel notificationChannel = new NotificationChannel(channelId(channel), context.getString(R.string.app_name), NotificationManager.IMPORTANCE_DEFAULT);
 
-            switch(channel) {
-                case BACKUP_FAILED:
-                    notificationChannel.setName(context.getString(R.string.notification_channel_name_backup_failed));
-                    notificationChannel.setDescription(context.getString(R.string.notification_channel_desc_backup_failed));
-                    notificationChannel.setImportance(NotificationManager.IMPORTANCE_HIGH);
-                    break;
-                case BACKUP_SUCCESS:
-                    notificationChannel.setName(context.getString(R.string.notification_channel_name_backup_success));
-                    notificationChannel.setDescription(context.getString(R.string.notification_channel_desc_backup_success));
-                    notificationChannel.setImportance(NotificationManager.IMPORTANCE_LOW);
-                    break;
-                default:
-                    break;
-            }
-
-            NotificationManager notificationManager = (NotificationManager) context.getSystemService(NOTIFICATION_SERVICE);
-            notificationManager.createNotificationChannel(notificationChannel);
+        switch(channel) {
+            case BACKUP_FAILED:
+                notificationChannel.setName(context.getString(R.string.notification_channel_name_backup_failed));
+                notificationChannel.setDescription(context.getString(R.string.notification_channel_desc_backup_failed));
+                notificationChannel.setImportance(NotificationManager.IMPORTANCE_HIGH);
+                break;
+            case BACKUP_SUCCESS:
+                notificationChannel.setName(context.getString(R.string.notification_channel_name_backup_success));
+                notificationChannel.setDescription(context.getString(R.string.notification_channel_desc_backup_success));
+                notificationChannel.setImportance(NotificationManager.IMPORTANCE_LOW);
+                break;
+            default:
+                break;
         }
+
+        NotificationManager notificationManager = (NotificationManager) context.getSystemService(NOTIFICATION_SERVICE);
+        notificationManager.createNotificationChannel(notificationChannel);
     }
 
     /** Creates all notification channels the app can use. */
     public static void initializeNotificationChannels(Context context) {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            for (Constants.NotificationChannel channel : Constants.NotificationChannel.values()) {
-                NotificationHelper.createNotificationChannel(context, channel);
-            }
+        for (Constants.NotificationChannel channel : Constants.NotificationChannel.values()) {
+            NotificationHelper.createNotificationChannel(context, channel);
         }
     }
 
@@ -85,10 +101,6 @@ public class NotificationHelper {
                 .setContentTitle(context.getText(resIdTitle))
                 .setStyle(new NotificationCompat.BigTextStyle()
                     .bigText(resBody));
-
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) {
-            builder.setPriority(NotificationCompat.PRIORITY_HIGH);
-        }
 
         createNotificationChannel(context, channel);
         builder.setChannelId(channelId(channel));

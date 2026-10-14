@@ -71,8 +71,6 @@
         hasła w aplikacji</string>
     <string name="settings_desc_auto_unlock_after_autofill">Odblokuj, jeśli hasło zostało wypełnione
         przez autowypełnienie</string>
-    <string name="settings_desc_autofill_requires_android_o">Ta funkcja wymaga systemu Android w wersji
-        powyżej 8.0 (Oreo)</string>
     <string name="settings_desc_theme_black_auto">Użyj czarnego motywu w trybie ciemnym</string>
     <string name="settings_desc_show_prev_token">Pokaż poprzedni token jako dodatek do bieżącego</string>
     <string name="settings_desc_minimize_on_copy">Aplikacja zostanie zminimalizowana po skopiowaniu OTP do schowka</string>
@@ -199,7 +197,6 @@
         <item>Przełącz między etykietami (pozwól aby tylko jedna etykieta mogła być zaznaczona)</item>
     </string-array>
     <string-array name="settings_entries_backup_broadcasts">
-        <item>Niezaszyfrowana kopia zapasowa</item>
         <item>Zaszyfrowana kopia zapasowa</item>
     </string-array>
     <!-- Special -->

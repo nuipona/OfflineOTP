@@ -12,14 +12,8 @@
         mielőtt titkosított biztonsági mentéseket hozhat létre.
     </string>
     <!-- Dialogs -->
-    <string name="backup_dialog_title_security_warning">Biztonsági figyelmeztetés</string>
-    <string name="backup_dialog_msg_export_warning">Biztos, hogy egyszerű szöveges JSON-fájlként
-        exportálja az adatbázist? Ez a fájl tartalmazza az összes titkos kulcsot, így <b>tartsa biztonságban</b>!
-    </string>
     <string name="backup_receiver_title_backup_failed">A biztonsági mentés sikertelen</string>
     <string name="backup_receiver_title_backup_success">A biztonsági mentés sikeres</string>
-    <string name="backup_receiver_plain_disabled">Az egyszerű szöveges biztonsági mentések nem engedélyezettek,
-        az engedélyezéshez menjen a Beállításokba</string>
     <string name="backup_receiver_encrypted_disabled">A titkosított biztonsági mentések nem engedélyezettek,
         az engedélyezéshez menjen a Beállításokba</string>
     <string name="backup_receiver_read_permission_failed">Az olvasási engedély nincs megadva, engedélyezze
@@ -56,8 +50,6 @@
     <string name="backup_toast_crypt_password_not_set">A jelszó nincs beállítva, ellenőrizze a <b>Beállítások</b> alatt</string>
     <string name="backup_toast_file_selection_failed">A fájlválasztó párbeszédablak nem nyitható meg!</string>
     <string name="backup_label_type">Biztonsági mentés típusa: </string>
-    <string name="backup_label_warning_plain">A biztonsági mentés egy titkosítatlan, egyszerű szöveges fájlban lesz.
-        Csak akkor használja, ha feltétlenül szükséges, és <b>tartsa biztonságban</b>.</string>
     <string name="backup_label_crypt">A biztonsági mentés egyéni jelszóval, 256 bites AES titkosítással lesz tárolva.
         Beállíthat egy alapértelmezett jelszót a beállításokban, ha nem akarja mindig megadni,
         amikor biztonsági mentést hoz létre.</string>
@@ -68,7 +60,6 @@
     <string name="backup_button_backup">Biztonsági mentés létrehozása</string>
     <string name="backup_button_restore">Biztonsági mentés visszaállítása</string>
     <string-array name="backup_list_type_names">
-        <item>Egyszerű szöveges</item>
         <item>Titkosított</item>
         <item>OpenPGP</item>
     </string-array>

@@ -12,14 +12,8 @@
         prima di poter creare backup crittografati.
     </string>
     <!-- Dialogs -->
-    <string name="backup_dialog_title_security_warning">Avviso di sicurezza</string>
-    <string name="backup_dialog_msg_export_warning">Sei veramente sicuro di voler esportare il database
-        come file JSON non crittografato? Questo file conterrà tutte le tue chiavi segrete, perciò <b>tienilo al sicuro</b>!
-    </string>
     <string name="backup_receiver_title_backup_failed">Backup fallito</string>
     <string name="backup_receiver_title_backup_success">Backup eseguito con successo</string>
-    <string name="backup_receiver_plain_disabled">Attualmente i backup non crittografati non sono permessi,
-        vai nelle Impostazioni per abilitarli</string>
     <string name="backup_receiver_encrypted_disabled">Attualmente i backup crittografati non sono permessi,
         vai nelle Impostazioni per abilitarli</string>
     <string name="backup_receiver_read_permission_failed">Permessi di lettura non concessi, si prega
@@ -56,8 +50,6 @@
     <string name="backup_toast_crypt_password_not_set">Password non impostata, controlla le <b>Impostazioni</b></string>
     <string name="backup_toast_file_selection_failed">Impossibile aprire la finestra di selezione!</string>
     <string name="backup_label_type">Tipo di backup: </string>
-    <string name="backup_label_warning_plain">Il backup verrà salvato in un file di testo in chiaro.
-        Usalo solo se strettamente necessario e <b>tieni il file al sicuro</b>!</string>
     <string name="backup_label_crypt">Il backup verrà salvato crittografato con una password personalizzata
         usando la crittografia AES a 256 bit. Puoi impostare una password predefinita nelle impostazioni se
         non vuoi doverla inserire ogni volta che crei un backup.</string>
@@ -68,7 +60,6 @@
     <string name="backup_button_backup">Crea backup</string>
     <string name="backup_button_restore">Ripristina backup</string>
     <string-array name="backup_list_type_names">
-        <item>Testo semplice</item>
         <item>Crittografato</item>
         <item>OpenPGP</item>
     </string-array>

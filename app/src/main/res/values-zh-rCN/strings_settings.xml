@@ -66,8 +66,6 @@
     <string name="settings_desc_block_autofill">阻止自动填充服务访问应用内的密码        区域</string>
     <string name="settings_desc_auto_unlock_after_autofill">解锁，前提是自动填充功能已
         填写了密码</string>
-    <string name="settings_desc_autofill_requires_android_o">此功能需要 Android 8.0 (Oreo)
-        以上版本</string>
     <string name="settings_desc_theme_black_auto">在深色模式下使用黑色主题</string>
     <string name="settings_desc_show_prev_token">除了当前的令牌外，显示先前的令牌</string>
     <string name="settings_desc_minimize_on_copy">当您复制 OTP 到剪贴板时应用将被最小化</string>
@@ -185,7 +183,6 @@
         <item>在各个标签之间切换（同时只能选中一个标签）</item>
     </string-array>
     <string-array name="settings_entries_backup_broadcasts">
-        <item>明文备份</item>
         <item>加密的备份</item>
     </string-array>
     <!-- Special -->

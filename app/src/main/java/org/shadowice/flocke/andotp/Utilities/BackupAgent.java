@@ -26,6 +26,7 @@ package org.shadowice.flocke.andotp.Utilities;
 import android.app.backup.BackupAgentHelper;
 import android.app.backup.BackupDataInput;
 import android.app.backup.BackupDataOutput;
+import android.app.backup.FullBackupDataOutput;
 import android.app.backup.FileBackupHelper;
 import android.app.backup.SharedPreferencesBackupHelper;
 import android.os.ParcelFileDescriptor;
@@ -38,11 +39,6 @@ import java.io.IOException;
 public class BackupAgent extends BackupAgentHelper {
     static final String PREFS_BACKUP_KEY = "prefs";
     static final String FILES_BACKUP_KEY = "files";
-
-    // PreferenceManager.getDefaultSharedPreferencesName() is only public since API 24, so mirror its implementation
-    String getDefaultSharedPreferencesName() {
-        return getPackageName() + "_preferences";
-    }
 
     @Override
     public void onBackup(ParcelFileDescriptor oldState, BackupDataOutput data, ParcelFileDescriptor newState) throws IOException {
@@ -57,6 +53,19 @@ public class BackupAgent extends BackupAgentHelper {
             }
         }
         Log.d(BackupAgent.class.getSimpleName(), stringBuilder.toString());
+    }
+
+    /** With fullBackupOnly, the system uses this path instead of onBackup, so it must honor the setting too. */
+    @Override
+    public void onFullBackup(FullBackupDataOutput data) throws IOException {
+        Settings settings = new Settings(this);
+        if (!settings.getAndroidBackupServiceEnabled()) {
+            Log.d(BackupAgent.class.getSimpleName(), "onFullBackup skipped, backup service disabled");
+            return;
+        }
+        synchronized (DatabaseHelper.DatabaseFileLock) {
+            super.onFullBackup(data);
+        }
     }
 
     @Override
@@ -74,7 +83,7 @@ public class BackupAgent extends BackupAgentHelper {
 
     @Override
     public void onCreate() {
-        String prefs = getDefaultSharedPreferencesName();
+        String prefs = android.preference.PreferenceManager.getDefaultSharedPreferencesName(this);
 
         SharedPreferencesBackupHelper sharedPreferencesBackupHelper = new SharedPreferencesBackupHelper(this, prefs);
         addHelper(PREFS_BACKUP_KEY, sharedPreferencesBackupHelper);

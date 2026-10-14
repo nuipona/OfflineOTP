@@ -30,7 +30,6 @@ import android.content.res.TypedArray;
 import android.graphics.ColorFilter;
 import android.graphics.PorterDuff;
 import android.graphics.PorterDuffColorFilter;
-import android.os.Build;
 import android.os.Environment;
 import android.widget.Toast;
 
@@ -84,13 +83,8 @@ public class Tools {
         return new PorterDuffColorFilter(getThemeColor(context, colorAttr), PorterDuff.Mode.SRC_IN);
     }
 
-    @SuppressWarnings("deprecation")
     public static Locale getSystemLocale() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
-            return Resources.getSystem().getConfiguration().getLocales().get(0);
-        } else {
-            return Resources.getSystem().getConfiguration().locale;
-        }
+        return Resources.getSystem().getConfiguration().getLocales().get(0);
     }
 
     /** Formats the token with leading zeros (without grouping separators). */

@@ -6,11 +6,8 @@
     <string name="backup_desc_openpgp_provider">Aby móc użyć tej funkcji, należy zainstalować dostawcę OpenPGP i włączyć go w <b>Ustawieniach</b>.</string>
     <string name="backup_desc_openpgp_keyid">Zanim będzie można tworzyć zaszyfrowane kopie zapasowe, należy wybrać klucz OpenPGP w <b>Ustawieniach</b>.</string>
     <!-- Dialogs -->
-    <string name="backup_dialog_title_security_warning">Ostrzeżenie bezpieczeństwa</string>
-    <string name="backup_dialog_msg_export_warning">Czy na pewno chcesz zapisać bazę danych do niezaszyfrowanego pliku JSON? Plik ten zawiera wszystkie twoje klucze prywatne. <b>Przechowuj go w bezpiecznym miejscu!</b></string>
     <string name="backup_receiver_title_backup_failed">Tworzenie kopii zapasowej nie powiodło się</string>
     <string name="backup_receiver_title_backup_success">Kopia zapasowa wykonana pomyślnie</string>
-    <string name="backup_receiver_plain_disabled">Niezaszyfrowane kopie zapasowe nie są obecnie dozwolone, proszę przejść do ustawień, aby je włączyć</string>
     <string name="backup_receiver_encrypted_disabled">Zaszyfrowane kopie zapasowe nie są obecnie dozwolone, proszę przejść do ustawień, aby je włączyć</string>
     <string name="backup_receiver_read_permission_failed">Uprawnienia odczytu nie przyznane, proszę
         nadaj uprawnienia przed rozpoczęciem przywracania kopii</string>
@@ -43,8 +40,6 @@
     <string name="backup_toast_crypt_password_not_set">Nie ustawiono hasła, sprawdź <b>Ustawienia</b></string>
     <string name="backup_toast_file_selection_failed">Nie można otworzyć okna wyboru pliku!</string>
     <string name="backup_label_type">Typ kopii zapasowej: </string>
-    <string name="backup_label_warning_plain">Kopia zapasowa zostanie zapisana w niezaszyfrowanym pliku tekstowym.
-        Proszę używać tego tylko wtedy, gdy jest to absolutnie konieczne i <b>zachować ten plik w bezpiecznym miejscu</b>!</string>
     <string name="backup_label_crypt">Kopia zapasowa będzie przechowywana zaszyfrowana hasłem niestandardowym
         przy użyciu 256-bitowego szyfrowania AES. W ustawieniach można skonfigurować hasło domyślne,
         jeśli nie chcesz wprowadzać go za każdym razem podczas tworzenia kopii zapasowej.</string>
@@ -55,7 +50,6 @@
     <string name="backup_button_backup">Utwórz kopię zapasową</string>
     <string name="backup_button_restore">Przywróć kopię zapasową</string>
     <string-array name="backup_list_type_names">
-        <item>Niezaszyfrowane</item>
         <item>Zaszyfrowane</item>
         <item>OpenPGP</item>
     </string-array>

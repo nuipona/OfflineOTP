@@ -74,8 +74,6 @@
         als camps de contrasenya en l\'aplicació</string>
     <string name="settings_desc_auto_unlock_after_autofill">Desbloquejar si la contrasenya s\'ha omplert
         mitjançant l\'emplenament automàtic</string>
-    <string name="settings_desc_autofill_requires_android_o">Aquesta funció necessita una versió d\'Android
-        superior a 8.0 (Oreo)</string>
     <string name="settings_desc_theme_black_auto">Fer servir el tema negre en el mode fosc</string>
     <string name="settings_desc_show_prev_token">Mostra el token anterior a part de l\'actual</string>
     <string name="settings_desc_minimize_on_copy">L\'aplicació es minimitzarà després d\'haver copiat l\'OTP al portaretalls</string>
@@ -221,7 +219,6 @@
         <item>Commuta entre etiquetes (només permet de seleccionar una etiqueta cada vegada)</item>
     </string-array>
     <string-array name="settings_entries_backup_broadcasts">
-        <item>Còpies de seguretat en text pla</item>
         <item>Còpies de seguretat xifrada</item>
     </string-array>
     <!-- Special -->

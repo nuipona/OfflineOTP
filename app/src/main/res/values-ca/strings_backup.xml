@@ -12,14 +12,8 @@
         per a poder crear còpies xifrades.
     </string>
     <!-- Dialogs -->
-    <string name="backup_dialog_title_security_warning">Avís de seguretat</string>
-    <string name="backup_dialog_msg_export_warning">Realment voleu exportar la base de dades com a
-        fitxer de text net JSON? Aquest fitxer contindrà les vostres claus secretes; per favor, manteniu-lo <b>ben protegit</b>!
-    </string>
     <string name="backup_receiver_title_backup_failed">La còpia de seguretat ha fallat</string>
     <string name="backup_receiver_title_backup_success">S\'ha realitzat la còpia de seguretat</string>
-    <string name="backup_receiver_plain_disabled">Les còpies de seguretat en text pla no són permeses,
-        podeu activar-les a Preferències</string>
     <string name="backup_receiver_encrypted_disabled">Les còpies de seguretat xifrades no són permeses,
         podeu activar-les a Preferències</string>
     <string name="backup_receiver_read_permission_failed">No s\'ha donat permís de lectura, per favor
@@ -56,8 +50,6 @@
     <string name="backup_toast_crypt_password_not_set">No hi ha cap contrasenya establerta, comproveu les <b>Preferències</b></string>
     <string name="backup_toast_file_selection_failed">No ha estat possible obrir el diàleg de seleccio de fitxers!</string>
     <string name="backup_label_type">Tipus de còpia de seguretat: </string>
-    <string name="backup_label_warning_plain">La còpia de seguretat s\'emmagatzemarà en un fitxer de text sense encriptar. Feu servir aquest
-         mètode només si és estrictament necessari i <b>mantingueu el fitxer estalvi</b>!</string>
     <string name="backup_label_crypt">La còpia de seguretat s\'emmagatzemarà encriptada amb una contrasenya
         AES 256-bit. Podeu establir una contrasenya per defecte en la configuració si no
          voleu haver d\'escriure-la cada vegada que creeu una còpia de seguretat.</string>
@@ -68,7 +60,6 @@
     <string name="backup_button_backup">Crea una còpia de seguretat</string>
     <string name="backup_button_restore">Restaura còpia de seguretat</string>
     <string-array name="backup_list_type_names">
-        <item>Text sense format</item>
         <item>Encriptat</item>
         <item>OpenPGP</item>
     </string-array>

@@ -43,7 +43,7 @@ public class ChangeEncryptionTask extends UiBasedBackgroundTask<ChangeEncryption
         return new Result(result, this.newEncryptionKey, this.newEncryptionType);
     }
 
-    /** Detailed outcome of the change (see EncryptionChangeResult) plus the new key and type. */
+    /** Detailed outcome of the change (see {@link EncryptionHelper.EncryptionChangeResult}) plus the new key and type. */
     public static class Result {
         public final EncryptionHelper.EncryptionChangeResult result;
         public final SecretKey newEncryptionKey;

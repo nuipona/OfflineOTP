@@ -6,11 +6,8 @@
     <string name="backup_desc_openpgp_provider">Θα πρέπει να εγκαταστήσετε έναν πάροχο OpenPGP και να τον ενεργοποιήσετε στις <b>Ρυθμίσεις</b> για να χρησιμοποιήσετε αυτή τη λειτουργία.    </string>
     <string name="backup_desc_openpgp_keyid">Θα πρέπει να επιλέξετε ένα κλειδί OpenPGP στις <b>Ρυθμίσεις</b> πριν μπορέσετε να δημιουργήσετε κρυπτογραφημένα αντίγραφα ασφαλείας.    </string>
     <!-- Dialogs -->
-    <string name="backup_dialog_title_security_warning">Προειδοποίηση ασφαλείας</string>
-    <string name="backup_dialog_msg_export_warning">Θέλετε πραγματικά να εξαγάγετε τη βάση δεδομένων ως αρχείο JSON απλού κειμένου; Αυτό το αρχείο περιέχει όλα τα μυστικά κλειδιά σας, παρακαλούμε να <b>το κρατήσετε ασφαλές</b>!    </string>
     <string name="backup_receiver_title_backup_failed">Αποτυχία δημιουργίας αντιγράφου ασφαλείας</string>
     <string name="backup_receiver_title_backup_success">Επιτυχής δημιουργία αντιγράφου ασφαλείας</string>
-    <string name="backup_receiver_plain_disabled">Τα αντίγραφα ασφαλείας απλού-κειμένου δεν επιτρέπονται αυτή τη στιγμή, παρακαλώ ενεργοποιήστε τα στις Ρυθμίσεις</string>
     <string name="backup_receiver_encrypted_disabled">Τα κρυπτογραφημένα αντίγραφα ασφαλείας δεν επιτρέπονται αυτή τη στιγμή, παρακαλώ ενεργοποιήστε τα στις Ρυθμίσεις</string>
     <string name="backup_receiver_read_permission_failed">Η άδεια για ανάγνωση δεν έχει δοθεί, παρακαλώ παραχωρήστε την πριν προσπαθήσετε να πάρετε αντίγραφο ασφαλείας</string>
     <string name="backup_receiver_write_permission_failed">Η άδεια για εγγραφή δεν έχει δοθεί, παρακαλώ παραχωρήστε την πριν προσπαθήσετε να πάρετε αντίγραφο ασφαλείας</string>
@@ -41,8 +38,6 @@
     <string name="backup_toast_crypt_password_not_set">Ο κωδικός πρόσβασης δεν έχει οριστεί, ελέγξτε τις <b>ρυθμίσεις</b></string>
     <string name="backup_toast_file_selection_failed">Δεν είναι δυνατό το άνοιγμα διαλόγου επιλογής αρχείων!</string>
     <string name="backup_label_type">Τύπος αντιγράφου: </string>
-    <string name="backup_label_warning_plain">Το αντίγραφο ασφαλείας θα αποθηκευτεί σε μη κρυπτογραφημένο απλό κείμενο
-         αρχείο. Χρησιμοποιήστε μόνο εάν είναι απολύτως απαραίτητο και <b> διατηρήστε το αρχείο ασφαλές </b>!</string>
     <string name="backup_label_crypt">Το αντίγραφο ασφαλείας θα αποθηκευτεί κρυπτογραφημένα με προσαρμοσμένο κωδικό πρόσβασης
         χρησιμοποιώντας κρυπτογράφηση AES 256-bit. Μπορείτε να ρυθμίσετε έναν προεπιλεγμένο κωδικό πρόσβασης στις ρυθμίσεις αν
         δεν θέλετε να τον εισάγετε κάθε φορά που δημιουργείτε ένα αντίγραφο ασφαλείας.</string>
@@ -53,7 +48,6 @@
     <string name="backup_button_backup">Δημιουργία αντιγράφου ασφαλείας</string>
     <string name="backup_button_restore">Επαναφορά αντιγράφου</string>
     <string-array name="backup_list_type_names">
-        <item>Απλό κείμενο</item>
         <item>Κρυπτογραφημένο</item>
         <item>OpenPGP</item>
     </string-array>

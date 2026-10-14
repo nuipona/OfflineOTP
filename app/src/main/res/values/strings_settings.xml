@@ -84,8 +84,6 @@
         fields inside the app</string>
     <string name="settings_desc_auto_unlock_after_autofill">Unlock if the password has been filled
         in by autofill</string>
-    <string name="settings_desc_autofill_requires_android_o">This feature requires an Android version
-        above 8.0 (Oreo)</string>
 
     <string name="settings_desc_theme_black_auto">Use the black theme in dark mode</string>
     <string name="settings_desc_show_prev_token">Show the previous token in addition to the current one</string>
@@ -264,7 +262,6 @@
     </string-array>
 
     <string-array name="settings_entries_backup_broadcasts">
-        <item>Plain-text backups</item>
         <item>Encrypted backups</item>
     </string-array>
     

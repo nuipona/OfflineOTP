@@ -7,11 +7,8 @@
     <string name="backup_desc_openpgp_provider">您需安裝 OpenPGP 程式，並在 <b>設定</b> 中啟用之以使用此功能。    </string>
     <string name="backup_desc_openpgp_keyid">您需在創建加密備份前，于 <b>設定</b> 選取一隻 OpenPGP 金鑰。    </string>
     <!-- Dialogs -->
-    <string name="backup_dialog_title_security_warning">安全性警告</string>
-    <string name="backup_dialog_msg_export_warning">您確認要將資料庫匯出為明碼 JSON 檔嗎？該檔將包含您所有的安全權杖，務必<b>安全存取</b>！    </string>
     <string name="backup_receiver_title_backup_failed">備份失敗</string>
     <string name="backup_receiver_title_backup_success">備份成功</string>
-    <string name="backup_receiver_plain_disabled">當前不允許明碼備份，請前往設定啟用之</string>
     <string name="backup_receiver_encrypted_disabled">當前不允許加密備份，請前往設定啟用之</string>
     <string name="backup_receiver_read_permission_failed">讀取被拒絕，請在備份前允許此權限</string>
     <string name="backup_receiver_write_permission_failed">寫入被拒絕，請在備份前允許此權限</string>
@@ -40,14 +37,12 @@
     <string name="backup_toast_crypt_password_not_set">無密碼，請檢查<b>設定</b></string>
     <string name="backup_toast_file_selection_failed">無法開啟檔案選取對話框！</string>
     <string name="backup_label_type">備份類型: </string>
-    <string name="backup_label_warning_plain">備份將儲存在未加密的明碼檔案中。 請僅在絕對必要的情況下使用，並<b>確保備份檔案安全</b>！</string>
     <string name="backup_label_crypt">備份將使用AES 256以及自定義密碼加密儲存。 如果您不想在每次創建備份時都輸入密碼，則可以在設置中設定預設密碼。</string>
     <string name="backup_label_pgp">備份將使用你在設置中指定的PGP密鑰進行加密存儲。 加密將由第三方應用程序處理。</string>
     <string name="backup_check_restore_old">還原舊的備份格式(使用版本0.6.3之前的andOTP創建)</string>
     <string name="backup_button_backup">建立備份</string>
     <string name="backup_button_restore">還原備份</string>
     <string-array name="backup_list_type_names">
-        <item>明碼</item>
         <item>加密</item>
         <item>OpenPGP</item>
     </string-array>

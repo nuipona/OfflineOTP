@@ -74,8 +74,6 @@
         πεδία εντός της εφαρμογής</string>
     <string name="settings_desc_auto_unlock_after_autofill">Ξεκλείδωμα αν ο κωδικός πρόσβασης έχει συμπληρωθεί
         με αυτόματη συμπλήρωση</string>
-    <string name="settings_desc_autofill_requires_android_o">Αυτή η λειτουργία απαιτεί έκδοση Android
-        πάνω από 8.0 (Oreo)</string>
     <string name="settings_desc_theme_black_auto">Χρήση του μαύρου θέματος σε σκοτεινή λειτουργία</string>
     <string name="settings_desc_show_prev_token">Εμφάνιση του προηγούμενου διακριτικού εκτός από το τρέχον</string>
     <string name="settings_desc_minimize_on_copy">Η εφαρμογή θα ελαχιστοποιείται όταν αντιγράφετε το OTP στο πρόχειρο</string>
@@ -225,7 +223,6 @@
         <item>Εναλλαγή μεταξύ ετικετών (επιτρέπεται μόνο μια ετικέτα να επιλέγεται ταυτόχρονα)</item>
     </string-array>
     <string-array name="settings_entries_backup_broadcasts">
-        <item>Αντίγραφα απλού κειμένου</item>
         <item>Κρυπτογραφημένα αντίγραφα</item>
     </string-array>
     <!-- Special -->

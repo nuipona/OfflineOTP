@@ -76,6 +76,14 @@ public class Settings {
             remove(R.string.settings_key_auth_pin);
         }
 
+        // The theme mode key was misspelled as "perf_theme_mode" before; move the stored value over.
+        if (settings.contains("perf_theme_mode")) {
+            settings.edit()
+                    .putString(getResString(R.string.settings_key_theme_mode), settings.getString("perf_theme_mode", ""))
+                    .remove("perf_theme_mode")
+                    .apply();
+        }
+
         if (settings.contains(getResString(R.string.settings_key_locale))) {
             String lang = getString(R.string.settings_key_locale, R.string.settings_default_lang);
 
@@ -481,10 +489,6 @@ public class Settings {
         return settings.getStringSet(getResString(R.string.settings_key_backup_broadcasts), Collections.emptySet());
     }
 
-    public boolean isPlainTextBackupBroadcastEnabled() {
-        return getBackupBroadcasts().contains("plain");
-    }
-
     public boolean isEncryptedBackupBroadcastEnabled() {
         return getBackupBroadcasts().contains("encrypted");
     }
@@ -680,7 +684,12 @@ public class Settings {
 
     public Constants.BackupType getDefaultBackupType() {
         String defaultType = getString(R.string.settings_key_backup_default_type, Constants.BackupType.ENCRYPTED.name());
-        return Constants.BackupType.valueOf(defaultType.toUpperCase(Locale.ENGLISH));
+        try {
+            return Constants.BackupType.valueOf(defaultType.toUpperCase(Locale.ENGLISH));
+        } catch (IllegalArgumentException e) {
+            // Stored value is no longer a valid type (e.g. a removed plain-text setting)
+            return Constants.BackupType.ENCRYPTED;
+        }
     }
 
     public Constants.LabelDisplay getLabelDisplay() {

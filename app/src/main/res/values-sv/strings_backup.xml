@@ -12,14 +12,8 @@
         innan du kan skapa krypterade säkerhetskopior.
     </string>
     <!-- Dialogs -->
-    <string name="backup_dialog_title_security_warning">Säkerhetsvarning</string>
-    <string name="backup_dialog_msg_export_warning">Vill du verkligen exportera databasen som
-        klartext JSON-fil? Den här filen innehåller alla dina hemliga nycklar, vänligen <b>håll den säkert</b>!
-    </string>
     <string name="backup_receiver_title_backup_failed">Säkerhetskopiering misslyckades</string>
     <string name="backup_receiver_title_backup_success">Säkerhetskopiering lyckades</string>
-    <string name="backup_receiver_plain_disabled">Säkerhetskopior av klartext är för närvarande inte tillåtna,
-        vänligen gå till inställningarna för att aktivera dem</string>
     <string name="backup_receiver_encrypted_disabled">Krypterade säkerhetskopior är för närvarande inte tillåtna,
         vänligen gå till inställningarna för att aktivera dem</string>
     <string name="backup_receiver_read_permission_failed">Lästbehörighet inte beviljad, gör
@@ -56,8 +50,6 @@
     <string name="backup_toast_crypt_password_not_set">Lösenordet är inte inställt, kontrollera <b>Inställningar</b></string>
     <string name="backup_toast_file_selection_failed">Kan inte öppna fildialogrutan!</string>
     <string name="backup_label_type">Typ av säkethetskopia: </string>
-    <string name="backup_label_warning_plain">The backup will be stored in an unencrypted plain-text
-        file. Please only use if strictly necessary and <b>keep the file safe</b>!</string>
     <string name="backup_label_crypt">The backup will be stored encrypted with a custom password
         using AES 256-bit encryption. You can setup a default password in the settings if you
         don\'t want to have to enter it every time you create a backup.</string>
@@ -68,7 +60,6 @@
     <string name="backup_button_backup">Skapa säkerhetskopia</string>
     <string name="backup_button_restore">Återställ säkerhetskopia</string>
     <string-array name="backup_list_type_names">
-        <item>Plain-text</item>
         <item>Krypterad</item>
         <item>OpenPGP</item>
     </string-array>

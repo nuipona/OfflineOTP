@@ -65,7 +65,6 @@
     <string name="settings_desc_block_accessibility">Sembunyikan bidang sensitif dari layanan aksesibilitas. <b>JANGAN mengaktifkan ini jika Anda bergantung kepada layanan aksesibilitas</b></string>
     <string name="settings_desc_block_autofill">Blokir layanan pengisian otomatis dari mengakses bidang kata sandi di dalam aplikasi</string>
     <string name="settings_desc_auto_unlock_after_autofill">Buka kunci jika kata sandi telah diisi oleh pengisian otomatis</string>
-    <string name="settings_desc_autofill_requires_android_o">Fitur ini membutuhkan Android versi di atas 8.0 (Oreo)</string>
     <string name="settings_desc_theme_black_auto">Gunakan tema hitam dalam mode gelap</string>
     <string name="settings_desc_show_prev_token">Perlihatkan token sebelumnya dengan yang sekarang</string>
     <string name="settings_desc_minimize_on_copy">Aplikasi akan dikecilkan ketika anda menyalin OTP ke papan klip</string>
@@ -182,7 +181,6 @@
         <item>Beralih antara tanda (hanya izinkan satu tanda yang dipilih dalam satu waktu)</item>
     </string-array>
     <string-array name="settings_entries_backup_broadcasts">
-        <item>Cadangan teks biasa</item>
         <item>Cadangan terenkripsi</item>
     </string-array>
     <!-- Special -->

@@ -17,6 +17,6 @@
 
     <color name="fab_small_label_background">#212121</color>
 
-    <color name="expiring_red_light">#f05545</color>            <!--Light color from https://material.io/resources/color/#!/?view.left=0&view.right=0&primary.color=B71C1C-->
-    <color name="expiring_red_dark">#d50000</color>             <!--Dark color from https://material.io/resources/color/#!/?view.left=0&view.right=0&primary.color=D50000-->
+    <color name="expiring_red_light">#f05545</color>            <!-- Light variant of the expiring-entry red -->
+    <color name="expiring_red_dark">#d50000</color>             <!-- Dark variant of the expiring-entry red -->
 </resources>

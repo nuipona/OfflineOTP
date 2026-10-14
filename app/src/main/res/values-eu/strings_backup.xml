@@ -12,14 +12,8 @@
         atalean zifratutako segurtasun-kopiak sortu aurretik.
     </string>
     <!-- Dialogs -->
-    <string name="backup_dialog_title_security_warning">Segurtasun oharra</string>
-    <string name="backup_dialog_msg_export_warning">Datu-basea JSON formatuko testu fitxategi gisa esportatu nahi duzu?
-        Fitxategiak zure gako-pribatuak ditu, mesedez <b>gorde ezazu ondo</b>!
-    </string>
     <string name="backup_receiver_title_backup_failed">Segurtasun-kopia egiteak huts egin du</string>
     <string name="backup_receiver_title_backup_success">Backup Arrakastatsua</string>
-    <string name="backup_receiver_plain_disabled">Ezin dira testu arrunteko segurtasun-kopiak egin,
-        joan ezarpenetara hau aktibatzeko</string>
     <string name="backup_receiver_encrypted_disabled">Ezin dira zifratutako segurtasun-kopiak egin,
         joan ezarpenetara hau aktibatzeko</string>
     <string name="backup_receiver_read_permission_failed">Ez dut irakurtzeko baimenik, eman baimena
@@ -56,8 +50,6 @@
     <string name="backup_toast_crypt_password_not_set">Pasahitza ez dago ezarrita, begiratu <b>Ezarpenak</b> atalean</string>
     <string name="backup_toast_file_selection_failed">Ezin da fitxategia aukeratzeko leihoa ireki!</string>
     <string name="backup_label_type">Babeskopia-mota: </string>
-    <string name="backup_label_warning_plain">Babeskopia zifratu gabeko testu-arrunteko fitxategi baten
-        gordeko da. Guztiz beharrezkoa bada bakarrik erabili eta <b>gorde fitxategia ondo</b>!</string>
     <string name="backup_label_crypt">Segurtasun kopia AES 256-biteko zifratzea eta zuk ezarritako
         pasahitza erabiliz gordeko da. Babeskopia egiten den bakoitzean pasahitza
         idazten eze ibiltzeko, ezarpenetan defektuzko pasahitz bat ezarri dezakezu.</string>
@@ -68,7 +60,6 @@
     <string name="backup_button_backup">Sortu babeskopia</string>
     <string name="backup_button_restore">Berrezarri babeskopia</string>
     <string-array name="backup_list_type_names">
-        <item>Testu-arrunta</item>
         <item>Zifratuta</item>
         <item>OpenPGP</item>
     </string-array>

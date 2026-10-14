@@ -21,21 +21,14 @@ public class BackupHelper {
     }
 
     private static String backupMimeType(Constants.BackupType type) {
-        String mimeType = Constants.BACKUP_MIMETYPE_PLAIN;
-
         switch(type) {
-            case PLAIN_TEXT:
-                mimeType = Constants.BACKUP_MIMETYPE_PLAIN;
-                break;
             case ENCRYPTED:
-                mimeType = Constants.BACKUP_MIMETYPE_CRYPT;
-                break;
+                return Constants.BACKUP_MIMETYPE_CRYPT;
             case OPEN_PGP:
-                mimeType = Constants.BACKUP_MIMETYPE_PGP;
-                break;
+                return Constants.BACKUP_MIMETYPE_PGP;
+            default:
+                return "application/octet-stream";
         }
-
-        return mimeType;
     }
 
     /** Finds (or creates) the backup file in the configured location. */
@@ -66,12 +59,6 @@ public class BackupHelper {
     public static String backupFilename(Context context, Constants.BackupType type) {
         Settings settings = new Settings(context);
         switch (type) {
-            case PLAIN_TEXT:
-                if (settings.getIsAppendingDateTimeToBackups()) {
-                    return String.format(Constants.BACKUP_FILENAME_PLAIN_FORMAT, Tools.getDateTimeString());
-                } else {
-                    return Constants.BACKUP_FILENAME_PLAIN;
-                }
             case ENCRYPTED:
                 if (settings.getIsAppendingDateTimeToBackups()) {
                     return String.format(Constants.BACKUP_FILENAME_CRYPT_FORMAT, Tools.getDateTimeString());
@@ -86,7 +73,7 @@ public class BackupHelper {
                 }
         }
 
-        return Constants.BACKUP_FILENAME_PLAIN;
+        return Constants.BACKUP_FILENAME_CRYPT;
     }
 
     /** Automatic backups need a backup location and password-encrypted backups enabled. */

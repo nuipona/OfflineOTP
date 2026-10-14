@@ -70,7 +70,6 @@
     <string name="settings_desc_block_autofill">Automatische aanvullen blokkeren om toegang te krijgen tot wachtwoorden
         velden in de app</string>
     <string name="settings_desc_auto_unlock_after_autofill">Ontgrendel nadat wachtwoord automatisch is ingevuld</string>
-    <string name="settings_desc_autofill_requires_android_o">Deze functie vereist een hogere versie dan Android 8.0 (Oreo)</string>
     <string name="settings_desc_theme_black_auto">Gebruik zwart thema in donkere modus</string>
     <string name="settings_desc_show_prev_token">Toon het vorige token naast het huidige token</string>
     <string name="settings_desc_minimize_on_copy">Nadat je de OTP naar het klembord kopieert wordt de app geminimaliseerd</string>
@@ -197,7 +196,6 @@ Doordat de <b>Database encryptie</b> is ingesteld op <b>Android sleutelopslag</b
         <item>Schakel tussen tags (maar één tag tegelijk te selecteren is toegestaan)</item>
     </string-array>
     <string-array name="settings_entries_backup_broadcasts">
-        <item>Niet-versleutelde reservekopieën</item>
         <item>Versleutelde reservekopieën</item>
     </string-array>
     <!-- Special -->

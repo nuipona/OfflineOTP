@@ -65,7 +65,6 @@
     <string name="settings_desc_block_accessibility">Skryť polia s citlivými informáciami pred službami pre uľahčenie prístupu. <b>NEAKTIVUJTE pokiaľ sa spoliehate na služby uľahčenia prístupu!</b></string>
     <string name="settings_desc_block_autofill">Blokovať službám automatického dopĺňania prístup k poliam slúžiacim k zadaniu hesla v aplikácií</string>
     <string name="settings_desc_auto_unlock_after_autofill">Odomknúť ak bolo heslo zadané automatickým vypĺňaním</string>
-    <string name="settings_desc_autofill_requires_android_o">Táto funkcia vyžaduje verziu Androidu vyššiu ako 8.0 (Oreo)</string>
     <string name="settings_desc_theme_black_auto">Použiť čiernu tému v tmavom móde</string>
     <string name="settings_desc_show_prev_token">Zobraziť aj predchádzajúci token okrem aktuálneho</string>
     <string name="settings_desc_minimize_on_copy">Aplikácia bude minimalizovaná, keď skopírujete OTP do schránky</string>
@@ -184,7 +183,6 @@ V prípade chyby bude obnovená interná záloha a šifrovanie zostane nezmenen�
         <item>Prepínať medzi štítkami (iba jeden štítok môže byť vybraný)</item>
     </string-array>
     <string-array name="settings_entries_backup_broadcasts">
-        <item>Nechránené zálohy</item>
         <item>Šifrované zálohy</item>
     </string-array>
     <!-- Special -->

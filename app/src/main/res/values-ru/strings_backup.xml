@@ -9,12 +9,8 @@
     <string name="backup_desc_openpgp_keyid">Необходимо выбрать ключ OpenPGP в <b>Настройках</b>, прежде чем создавать зашифрованные резервные копии.
        </string>
     <!-- Dialogs -->
-    <string name="backup_dialog_title_security_warning">Предупреждение безопасности</string>
-    <string name="backup_dialog_msg_export_warning">Вы действительно хотите экспортировать базу данных как текстовый JSON-файл? Этот файл содержит все ваши секретные ключи, пожалуйста, <b>надёжно сохраните его</b>!    </string>
     <string name="backup_receiver_title_backup_failed">Не удалось выполнить резервное копирование</string>
     <string name="backup_receiver_title_backup_success">Резервная копия создана</string>
-    <string name="backup_receiver_plain_disabled">Текстовые резервные копии не разрешены,
-включите возможность их создания в «Настройках»</string>
     <string name="backup_receiver_encrypted_disabled">Зашифрованные резервные копии не разрешены,
 включите возможность их создания в «Настройках»</string>
     <string name="backup_receiver_read_permission_failed">Нет разрешения на чтение,
@@ -48,14 +44,12 @@
     <string name="backup_toast_crypt_password_not_set">Пароль не установлен, проверьте <b>Настройки</b></string>
     <string name="backup_toast_file_selection_failed">Не удаётся открыть диалог выбора файла!</string>
     <string name="backup_label_type">Тип резервной копии: </string>
-    <string name="backup_label_warning_plain">Резервная копия будет храниться в незашифрованном текстовом файле. Пожалуйста, используйте только при необходимости и <b>храните файл в безопасности</b>!</string>
     <string name="backup_label_crypt">Резервная копия будет храниться зашифрованной алгоритмом AES 256 бит с использованием указанного пользователем пароля. Вы можете установить пароль по умолчанию в настройках, если не хотите вводить его каждый раз при создании резервной копии.</string>
     <string name="backup_label_pgp">Резервная копия будет храниться в зашифрованном виде с использованием ключа PGP, который вы указали в настройках. Шифрование будет выполнять стороннее приложение.</string>
     <string name="backup_check_restore_old">Восстановить старый формат резервной копии (созданный версией andOTP до 0.6.3)</string>
     <string name="backup_button_backup">Создать копию</string>
     <string name="backup_button_restore">Восстановить из копии</string>
     <string-array name="backup_list_type_names">
-        <item>Обычный текст</item>
         <item>Зашифрованный</item>
         <item>OpenPGP</item>
     </string-array>

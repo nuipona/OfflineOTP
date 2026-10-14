@@ -8,12 +8,8 @@
         auswählen, bevor du verschlüsselte Backups erstellen kannst.
     </string>
     <!-- Dialogs -->
-    <string name="backup_dialog_title_security_warning">Sicherheitswarnung</string>
-    <string name="backup_dialog_msg_export_warning">Möchtest du wirklich die Datenbank als
-        Klartext-JSON-Datei exportieren? Diese Datei enthält alle deine geheimen Schlüssel. Bitte <b>sicher aufbewahren</b>!    </string>
     <string name="backup_receiver_title_backup_failed">Sicherung fehlgeschlagen</string>
     <string name="backup_receiver_title_backup_success">Sicherung erfolgreich</string>
-    <string name="backup_receiver_plain_disabled">Sicherungen als Klartext sind derzeit deaktiviert. Bitte öffne die Einstellungen, um diese zu aktivieren</string>
     <string name="backup_receiver_encrypted_disabled">Verschlüsselte Sicherungen sind derzeit deaktiviert. Bitte öffne die Einstellungen, um diese zu aktivieren</string>
     <string name="backup_receiver_read_permission_failed">Keine Lese-Berechtigung, wird aber
         zum Sichern benötigt</string>
@@ -45,14 +41,12 @@
     <string name="backup_toast_crypt_password_not_set">Kein Passwort gesetzt, überprüfe die <b>Einstellungen</b></string>
     <string name="backup_toast_file_selection_failed">Dialog zur Dateiauswahl kann nicht geöffnet werden!</string>
     <string name="backup_label_type">Sicherungstyp: </string>
-    <string name="backup_label_warning_plain">Die Sicherung wird als unverschlüsselte Klartext-Datei gespeichert. Bitte nur verwenden, wenn dies erforderlich ist und <b>die Datei sicher halten</b>!</string>
     <string name="backup_label_crypt">Die Sicherung wird verschlüsselt mit einem selbst erstellten Passwort mit AES 256-bit Verschlüsselung. Sie können einen Standard Passwort einstellen wenn sie nicht möchten, denn jedes mal einzugeben bei der Sicherung.</string>
     <string name="backup_label_pgp">Die Sicherung wird mit einem PGP-Schüssel gespeichert, den sie in der Einstellung angegeben haben. Die Verschlüsselung wird von einen Drittanbieter-App benutzt.</string>
     <string name="backup_check_restore_old">Alte Sicherungformat widerherstellen (erstellt mit der andOTP Version unter 0.6.3)</string>
     <string name="backup_button_backup">Sicherung erstellen</string>
     <string name="backup_button_restore">Sicherung wiederherstellen</string>
     <string-array name="backup_list_type_names">
-        <item>Klartext</item>
         <item>Verschlüsselt</item>
         <item>OpenPGP</item>
     </string-array>

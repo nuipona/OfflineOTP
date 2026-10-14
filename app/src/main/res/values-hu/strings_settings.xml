@@ -75,8 +75,6 @@
         jelszómezőkhöz</string>
     <string name="settings_desc_auto_unlock_after_autofill">Feloldás, ha a jelszó automatikus kitöltéssel
         került megadásra</string>
-    <string name="settings_desc_autofill_requires_android_o">A funkcióhoz 8.0-s (Oreo) vagy újabb
-        Android verzió szükséges</string>
     <string name="settings_desc_theme_black_auto">A fekete téma használata sötét módban</string>
     <string name="settings_desc_show_prev_token">Az előző token megjelenítése a jelenlegi mellett</string>
     <string name="settings_desc_minimize_on_copy">Az alkalmazás minimalizálva lesz, ha a vágólapra másolja az OTP-t</string>
@@ -224,7 +222,6 @@
         <item>Váltás a címkék között (egyszerre csak egy címkét lehet kiválasztani)</item>
     </string-array>
     <string-array name="settings_entries_backup_broadcasts">
-        <item>Egyszerű szöveges biztonsági mentések</item>
         <item>Titkosított biztonsági mentések</item>
     </string-array>
     <!-- Special -->

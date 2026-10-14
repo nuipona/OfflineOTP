@@ -34,6 +34,10 @@ import androidx.appcompat.widget.Toolbar;
 import android.view.View;
 import android.view.ViewStub;
 
+import java.io.InputStream;
+import java.util.Scanner;
+
+import com.mikepenz.aboutlibraries.Libs;
 import com.mikepenz.aboutlibraries.LibsBuilder;
 
 import org.shadowice.flocke.andotp.Fragments.AboutFragment;
@@ -91,12 +95,20 @@ public class AboutActivity extends BaseActivity {
                     return new AboutFragment();
                 case 1:
                     return new LibsBuilder()
-                            .withFields(R.string.class.getFields())
+                            .withLibs(loadLibs())
                             .withLicenseShown(true)
                             .withVersionShown(true)
                             .supportFragment();
                 default:
                     return null;
+            }
+        }
+
+        /** Loads the library list generated at build time by the AboutLibraries plugin. */
+        private Libs loadLibs() {
+            try (InputStream in = getResources().openRawResource(R.raw.aboutlibraries);
+                 Scanner scanner = new Scanner(in, "UTF-8").useDelimiter("\\A")) {
+                return new Libs.Builder().withJson(scanner.hasNext() ? scanner.next() : "{}").build();
             }
         }
 

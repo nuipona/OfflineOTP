@@ -26,7 +26,7 @@
     <string name="settings_key_cat_ui" translatable="false">perf_cat_ui</string>
     <string name="settings_key_lang" translatable="false">pref_lang</string>
     <string name="settings_key_locale" translatable="false">pref_locale</string>                        <!-- Deprecated -->
-    <string name="settings_key_theme_mode" translatable="false">perf_theme_mode</string>
+    <string name="settings_key_theme_mode" translatable="false">pref_theme_mode</string>
     <string name="settings_key_theme_black_auto" translatable="false">pref_theme_black_auto</string>
     <string name="settings_key_theme" translatable="false">pref_theme</string>
     <string name="settings_key_show_prev_token" translatable="false">pref_show_prev_token</string>
@@ -59,7 +59,7 @@
     <string name="settings_key_openpgp_key_encrypt" translatable="false">pref_openpgp_key_encrypt</string>
     <string name="settings_key_openpgp_key_sign" translatable="false">pref_openpgp_key_sign</string>
     <string name="settings_key_openpgp_verify" translatable="false">pref_openpgp_verify</string>
-    <string name="settings_key_new_backup_format_dialog_shown" translatable="false">pref_new_backup_dialog_shown</string>   <!--Deprecated -->
+    <string name="settings_key_new_backup_format_dialog_shown" translatable="false">pref_new_backup_dialog_shown</string>   <!-- Deprecated -->
     <string name="settings_key_backup_default_type" translatable="false">pref_backup_default_type</string>
 
     <string name="settings_key_security_backup_warning" translatable="false">pref_security_backup_warning_shown</string>
@@ -223,7 +223,6 @@
     </string-array>
 
     <string-array name="settings_values_backup_broadcasts" translatable="false">
-        <item>plain</item>
         <item>encrypted</item>
     </string-array>
 

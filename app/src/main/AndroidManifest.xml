@@ -6,8 +6,6 @@
     android:installLocation="auto"
     package="org.shadowice.flocke.andotp">
 
-    <uses-sdk tools:overrideLibrary="com.google.zxing.client.android" /> <!-- Needed to support SDK below 24, see build.gradle -->
-
     <application
         android:allowBackup="true"
         android:backupAgent=".Utilities.BackupAgent"
@@ -20,6 +18,7 @@
         <!-- TODO: Rework configuration changes to properly recreate the activity -->
         <activity
             android:name=".Activities.MainActivity"
+            android:exported="true"
             android:label="@string/app_name"
             android:theme="@style/AppTheme.NoActionBar"
             android:configChanges="orientation|screenSize|screenLayout|keyboardHidden|keyboard">
@@ -67,6 +66,7 @@
         <activity android:name=".Activities.SecureCaptureActivity" />
         <activity
             android:name=".Activities.PanicResponderActivity"
+            android:exported="true"
             android:launchMode="singleInstance"
             android:noHistory="true"
             android:theme="@android:style/Theme.NoDisplay">
@@ -76,21 +76,24 @@
             </intent-filter>
         </activity>
 
-        <receiver android:name=".Receivers.PlainTextBackupBroadcastReceiver">
-            <intent-filter>
-                <action android:name="org.shadowice.flocke.andotp.broadcast.PLAIN_TEXT_BACKUP" />
-            </intent-filter>
-        </receiver>
-
-        <receiver android:name=".Receivers.EncryptedBackupBroadcastReceiver">
+        <receiver
+            android:name=".Receivers.EncryptedBackupBroadcastReceiver"
+            android:exported="true">
             <intent-filter>
                 <action android:name="org.shadowice.flocke.andotp.broadcast.ENCRYPTED_BACKUP" />
             </intent-filter>
         </receiver>
     </application>
 
-    <!-- Required on Android 11+ for andOTP to be able to select a PGP provider -->
+    <!-- Android 13+: needed to show backup notifications (requested at runtime) -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+
+    <!-- Required on Android 11+ for andOTP to be able to select a PGP provider and a keystroke receiver -->
     <queries>
         <package android:name="org.sufficientlysecure.keychain" />
+        <intent>
+            <action android:name="android.intent.action.SEND" />
+            <data android:mimeType="text/x-keystrokes" />
+        </intent>
     </queries>
 </manifest>

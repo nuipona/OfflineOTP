@@ -25,7 +25,6 @@ package org.shadowice.flocke.andotp.Preferences;
 import android.app.AlertDialog;
 import android.app.KeyguardManager;
 import android.content.Context;
-import android.os.Build;
 import android.preference.DialogPreference;
 import android.text.Editable;
 import android.text.InputType;
@@ -151,7 +150,7 @@ public class CredentialsPreference extends DialogPreference
             passwordConfirm.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
         }
 
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && settings.getBlockAutofill()) {
+        if (settings.getBlockAutofill()) {
             passwordLayout.setImportantForAutofill(View.IMPORTANT_FOR_AUTOFILL_NO_EXCLUDE_DESCENDANTS);
             passwordConfirm.setImportantForAutofill(View.IMPORTANT_FOR_AUTOFILL_NO);
         }

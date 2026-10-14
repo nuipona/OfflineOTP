@@ -1,7 +1,6 @@
 package org.shadowice.flocke.andotp.View.AutoFillable;
 
 import android.content.Context;
-import android.os.Build;
 import android.util.AttributeSet;
 import android.view.autofill.AutofillValue;
 
@@ -13,9 +12,6 @@ import androidx.annotation.Nullable;
 /**
  * {@link TextInputEditText} that allows setting a {@link AutoFillTextListener} for getting notified when
  * this field was filled in by autofill.
- *
- * On devices running Android 7.1 (API 25) and below the listener will never be called, because
- * autofill is not supported.
  */
 public class AutoFillableTextInputEditText extends TextInputEditText {
 
@@ -36,7 +32,7 @@ public class AutoFillableTextInputEditText extends TextInputEditText {
     @Override
     public void autofill(AutofillValue value) {
         super.autofill(value);
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O || listener == null) {
+        if (listener == null) {
             return;
         }
 
