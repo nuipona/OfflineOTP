@@ -65,7 +65,6 @@
     <string name="settings_desc_block_accessibility">पहुँच सेवाओं से संवेदनशील फ़ील्ड छिपाएँ। <b>यदि आप पहुंच सेवाओं पर भरोसा करते हैं तो इसे सक्षम न करें!</b></string>
     <string name="settings_desc_block_autofill">ऐप के अंदर पासवर्ड फ़ील्ड तक उपयोग से ऑटोफ़िल सेवाओं को ब्लॉक करें</string>
     <string name="settings_desc_auto_unlock_after_autofill">यदि पासवर्ड ऑटोफिल द्वारा भरा गया है तो अनलॉक करें</string>
-    <string name="settings_desc_autofill_requires_android_o">इस सुविधा के लिए 8.0 (ओरियो) से ऊपर के एंड्रॉयड संस्करण की आवश्यकता होती है</string>
     <string name="settings_desc_theme_black_auto">डार्क मोड में ब्लैक थीम का उपयोग करें</string>
     <string name="settings_desc_show_prev_token">वर्तमान एक के अलावा पिछले टोकन दिखाएं</string>
     <string name="settings_desc_minimize_on_copy">जब आप ओटीपी को क्लिपबोर्ड पर कॉपी करेंगे तो ऐप को छोटा कर दिया जाएगा</string>

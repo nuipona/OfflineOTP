@@ -266,7 +266,7 @@ public class SettingsActivity extends BackgroundTaskActivity<ChangeEncryptionTas
                 | Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION
                 | Intent.FLAG_GRANT_PREFIX_URI_PERMISSION);
 
-        if (android.os.Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && settings.isBackupLocationSet())
+        if (settings.isBackupLocationSet())
             intent.putExtra(DocumentsContract.EXTRA_INITIAL_URI, settings.getBackupLocation());
 
         startActivityForResult(intent, Constants.INTENT_SETTINGS_BACKUP_LOCATION);
@@ -395,17 +395,10 @@ public class SettingsActivity extends BackgroundTaskActivity<ChangeEncryptionTas
 
             CheckBoxPreference blockAutofill = (CheckBoxPreference) findPreference(getString(R.string.settings_key_block_autofill));
             CheckBoxPreference autoUnlockAfterAutofill = (CheckBoxPreference) findPreference(getString(R.string.settings_key_auto_unlock_after_autofill));
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                blockAutofill.setEnabled(true);
-                blockAutofill.setSummary(R.string.settings_desc_block_autofill);
-                autoUnlockAfterAutofill.setEnabled(true);
-                autoUnlockAfterAutofill.setSummary(R.string.settings_desc_auto_unlock_after_autofill);
-            } else {
-                blockAutofill.setEnabled(false);
-                blockAutofill.setSummary(R.string.settings_desc_autofill_requires_android_o);
-                autoUnlockAfterAutofill.setEnabled(false);
-                autoUnlockAfterAutofill.setSummary(R.string.settings_desc_autofill_requires_android_o);
-            }
+            blockAutofill.setEnabled(true);
+            blockAutofill.setSummary(R.string.settings_desc_block_autofill);
+            autoUnlockAfterAutofill.setEnabled(true);
+            autoUnlockAfterAutofill.setSummary(R.string.settings_desc_auto_unlock_after_autofill);
 
             // Encryption and theme
             catUI = (PreferenceCategory) findPreference(getString(R.string.settings_key_cat_ui));

@@ -65,7 +65,6 @@
     <string name="settings_desc_block_accessibility">Скрывать конфиденциальные поля от службы специальных возможностей. <b>НЕ ВКЛЮЧАЙТЕ эту настройку, если используете службу специальных возможностей!</b></string>
     <string name="settings_desc_block_autofill">Запретить службам автозаполнения доступ к полям пароля внутри приложения</string>
     <string name="settings_desc_auto_unlock_after_autofill">Разблокировать, если пароль был введён автозаполнением</string>
-    <string name="settings_desc_autofill_requires_android_o">Эта функция требует Android версии выше 8.0 (Оreo)</string>
     <string name="settings_desc_theme_black_auto">Использовать чёрную тему в тёмном режиме</string>
     <string name="settings_desc_show_prev_token">Показывать предыдущий токен в дополнение к текущему</string>
     <string name="settings_desc_minimize_on_copy">Приложение будет свёрнуто после копирования токена</string>

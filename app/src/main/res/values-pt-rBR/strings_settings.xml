@@ -72,8 +72,6 @@
         campos de senha dentro do aplicativo</string>
     <string name="settings_desc_auto_unlock_after_autofill">Desbloquear se a senha foi preenchida
         por autopreenchimento</string>
-    <string name="settings_desc_autofill_requires_android_o">Este recurso requer uma versão do Android
-        a partir da 8.0 (Oreo)</string>
     <string name="settings_desc_theme_black_auto">Usar tema escuro no modo escuro</string>
     <string name="settings_desc_show_prev_token">Mostrar o token anterior, além do atual</string>
     <string name="settings_desc_minimize_on_copy">O aplicativo será minimizado quando você copiar o OTP para a área de transferência</string>

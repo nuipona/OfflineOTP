@@ -39,11 +39,6 @@ public class BackupAgent extends BackupAgentHelper {
     static final String PREFS_BACKUP_KEY = "prefs";
     static final String FILES_BACKUP_KEY = "files";
 
-    // PreferenceManager.getDefaultSharedPreferencesName() is only public since API 24, so mirror its implementation
-    String getDefaultSharedPreferencesName() {
-        return getPackageName() + "_preferences";
-    }
-
     @Override
     public void onBackup(ParcelFileDescriptor oldState, BackupDataOutput data, ParcelFileDescriptor newState) throws IOException {
         Settings settings = new Settings(this);
@@ -74,7 +69,7 @@ public class BackupAgent extends BackupAgentHelper {
 
     @Override
     public void onCreate() {
-        String prefs = getDefaultSharedPreferencesName();
+        String prefs = android.preference.PreferenceManager.getDefaultSharedPreferencesName(this);
 
         SharedPreferencesBackupHelper sharedPreferencesBackupHelper = new SharedPreferencesBackupHelper(this, prefs);
         addHelper(PREFS_BACKUP_KEY, sharedPreferencesBackupHelper);

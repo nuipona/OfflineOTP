@@ -72,7 +72,6 @@
     <string name="settings_desc_block_autofill">Блокирати услуге аутоматског попуњавања да приступе
         пољима лозинке унутар апликације</string>
     <string name="settings_desc_auto_unlock_after_autofill">Откључајте ако је лозинка испуњена са ауто-пуњењем</string>
-    <string name="settings_desc_autofill_requires_android_o">За ову функцију је потребна верзијаAndroid-а изнад 8.0 (Oreo)</string>
     <string name="settings_desc_theme_black_auto">Користите црну тему у тамном режиму</string>
     <string name="settings_desc_show_prev_token">Покажите претходни жетон поред тренутног</string>
     <string name="settings_desc_minimize_on_copy">Апликација ће бити смањена када копирате ОТП у оставу</string>

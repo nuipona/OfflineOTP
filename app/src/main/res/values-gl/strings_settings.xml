@@ -73,8 +73,6 @@
 a campos de contrasinal dentro da app</string>
     <string name="settings_desc_auto_unlock_after_autofill">Desbloquear se o contrasinal foi completado
         de xeito automático</string>
-    <string name="settings_desc_autofill_requires_android_o">Esta característica require unha versión de
-        Android superior a 8.0 (Oreo)</string>
     <string name="settings_desc_theme_black_auto">Usa o decorado negro no modo escuro</string>
     <string name="settings_desc_show_prev_token">Mostra o token anterior en adición ao actual</string>
     <string name="settings_desc_minimize_on_copy">A app minimizarase ao copiar o OTP ao portapapeis</string>

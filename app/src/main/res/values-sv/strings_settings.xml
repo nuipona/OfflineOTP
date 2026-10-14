@@ -74,8 +74,6 @@
         fält i appen</string>
     <string name="settings_desc_auto_unlock_after_autofill">Unlock if the password has been filled
         in by autofill</string>
-    <string name="settings_desc_autofill_requires_android_o">Denna funktion kräver en Android-version
-        över 8.0 (Oreo)</string>
     <string name="settings_desc_theme_black_auto">Använd det svarta temat i mörkt läge</string>
     <string name="settings_desc_show_prev_token">Visa föregående token utöver den aktuella</string>
     <string name="settings_desc_minimize_on_copy">Appen kommer att minimeras när du kopierar OTP</string>

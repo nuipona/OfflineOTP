@@ -70,8 +70,6 @@
         du mot de passe dans l\'appli</string>
     <string name="settings_desc_auto_unlock_after_autofill">Déverrouiller si le mot de passe a été renseigné
         par saisie automatique</string>
-    <string name="settings_desc_autofill_requires_android_o">Cette fonctionnalité nécessite une version Android
-        supérieure à 8.0 (Oreo)</string>
     <string name="settings_desc_theme_black_auto">Utiliser le thème noir en mode sombre</string>
     <string name="settings_desc_show_prev_token">Afficher le jeton précédent en plus du jeton actuel</string>
     <string name="settings_desc_minimize_on_copy">L\'appli sera réduite à la copie du jeton OTP dans le presse-papiers</string>

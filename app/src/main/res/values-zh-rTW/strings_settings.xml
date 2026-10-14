@@ -69,8 +69,6 @@
         中的密碼欄位</string>
     <string name="settings_desc_auto_unlock_after_autofill">如果密碼被自動填入
         則解鎖</string>
-    <string name="settings_desc_autofill_requires_android_o">此功能需要 Android 版本
-        8.0 (Oreo) 以上</string>
     <string name="settings_desc_theme_black_auto">在深色主題下使用黑色主題</string>
     <string name="settings_desc_show_prev_token">顯示當前以及上一個權杖</string>
     <string name="settings_desc_minimize_on_copy">應用程式將會在您把 OTP 複製到剪貼簿時最小化</string>

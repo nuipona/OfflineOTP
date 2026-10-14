@@ -70,7 +70,6 @@
     <string name="settings_desc_block_accessibility">Verstecke vertrauliche Einträge vor den Eingabehilfsdiensten.        <b>NICHT aktivieren, wenn Eingabehilfe benötigt wird!</b></string>
     <string name="settings_desc_block_autofill">Hindert Autofill-Dienste am Zugriff auf Passwortfelder in der App</string>
     <string name="settings_desc_auto_unlock_after_autofill">Entsperren wenn das Passwort durch Autofill gefüllt wurde</string>
-    <string name="settings_desc_autofill_requires_android_o">Dieses Funktion erfordert eine Android-Version 8.0 (Oreo) oder höher</string>
     <string name="settings_desc_theme_black_auto">Schwarzes Thema im Nachtmodus verwenden</string>
     <string name="settings_desc_show_prev_token">Zeige die vorherigen Token zusätzlich zum aktuellen Token</string>
     <string name="settings_desc_minimize_on_copy">App wird minimiert wenn der OTP Code kopiert wurde</string>

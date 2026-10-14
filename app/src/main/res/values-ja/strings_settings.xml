@@ -66,7 +66,6 @@
     <string name="settings_desc_block_autofill">自動入力サービスによるアプリ内のパスワードフィールドへのアクセスをブロックします</string>
     <string name="settings_desc_auto_unlock_after_autofill">Unlock if the password has been filled
         in by autofill</string>
-    <string name="settings_desc_autofill_requires_android_o">この機能を利用するには Android 8.0 (Oreo) 以上のバージョンが必要です</string>
     <string name="settings_desc_theme_black_auto">ダークモードでブラックテーマを使用</string>
     <string name="settings_desc_show_prev_token">Show the previous token in addition to the current one</string>
     <string name="settings_desc_minimize_on_copy">OTP をクリップボードにコピーしたら、アプリを最小化する</string>

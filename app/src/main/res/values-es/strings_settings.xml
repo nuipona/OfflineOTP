@@ -73,8 +73,6 @@
         dentro de la aplicación</string>
     <string name="settings_desc_auto_unlock_after_autofill">Desbloquear si la contraseña ha sido rellenada
         por autorrelleno</string>
-    <string name="settings_desc_autofill_requires_android_o">Esta función requiere una versión de Android
-        superior a 8.0 (Oreo)</string>
     <string name="settings_desc_theme_black_auto">Usar el tema negro en modo oscuro</string>
     <string name="settings_desc_show_prev_token">Mostrar el token anterior además del actual</string>
     <string name="settings_desc_minimize_on_copy">La aplicación se minimizará cuando copie el OTP al portapapeles</string>

@@ -70,7 +70,6 @@
     <string name="settings_desc_block_autofill">خدمت‌های پرکردن خودکار را در مقابل دسترسی به قسمت‌های
         مربوط به گذرواژه در برنامه مسدود کنید</string>
     <string name="settings_desc_auto_unlock_after_autofill">اگر رمزعبور با پرکردن خودکار پر شده بود، قفل را باز کن</string>
-    <string name="settings_desc_autofill_requires_android_o">این ویژگی نیازمند داشتن اندروید بالاتر از نسخه ۸ (اورئو) است</string>
     <string name="settings_desc_theme_black_auto">در حالت تاریک، از تم سیاه استفاه کن</string>
     <string name="settings_desc_show_prev_token">علاوه بر توکن فعلی، توکن قبلی را نیز نشان بده</string>
     <string name="settings_desc_minimize_on_copy">برنامه زمانی که شما رمز یکبار مصرف را به کلیپ بورد روگیری کنید کوچک خواهد شد</string>

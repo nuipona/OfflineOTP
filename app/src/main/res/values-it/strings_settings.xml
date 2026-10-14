@@ -74,8 +74,6 @@ sarà richiesta nuovamente l\'autenticazione</string>
         delle password nell\'app</string>
     <string name="settings_desc_auto_unlock_after_autofill">Sblocca se la password è stata inserita
         dall\'autocompletamento</string>
-    <string name="settings_desc_autofill_requires_android_o">Questa funzione richiede una versione di Android
-        superiore alla 8.0 (Oreo)</string>
     <string name="settings_desc_theme_black_auto">Usa il tema nero in modalità notturna</string>
     <string name="settings_desc_show_prev_token">Mostra il token precedente oltre a quello attuale</string>
     <string name="settings_desc_minimize_on_copy">L\'app verrà minimizzata quando si copia un codice OTP negli appunti</string>

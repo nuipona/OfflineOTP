@@ -72,7 +72,6 @@
         içindeki parola alanlarına erişimini engeller</string>
     <string name="settings_desc_auto_unlock_after_autofill">Eğer parola otomatik doldurma programları ile doldurulduysa
         kilidi aç</string>
-    <string name="settings_desc_autofill_requires_android_o">Bu özellik Android 8.0 (Oreo) veya üstü sürüm gerektirir</string>
     <string name="settings_desc_theme_black_auto">Karanlık modda siyah temayı kullan</string>
     <string name="settings_desc_show_prev_token">Mevcut token\'a ek olarak bir önceki token\'ı da göster</string>
     <string name="settings_desc_minimize_on_copy">OTP\'yi panoya kopyaladığınızda uygulama minimize edilecek</string>
