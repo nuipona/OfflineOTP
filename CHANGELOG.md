@@ -41,7 +41,7 @@
  * Internal: Perform encryption change in the settings in a background task
  * Internal: Use our own NumberPickerPreference class
  * Thumbnails: LOTS of new thumbnails (thanks to all contributors)
- * Translations: Indonesian, Serbian and Slovak (thanks to all contributors on Crowdin)
+ * Translations: Indonesian, Serbian and Slovak (thanks to all contributors)
 
 #### v0.8.0
 
@@ -91,7 +91,7 @@
  * Bug fix: Fix some remaining issues with the intro dialog (Issue #486)
  * Bug fix: Fix images containing gradients on API versions below 24 (Issue #539)
  * Thumbnails: Lots of new ones (thanks to all contributors)
- * Translations: Bulgarian (thanks to all the contributors on Crowdin)
+ * Translations: Bulgarian (thanks to all contributors)
 
 #### v0.7.0
 
@@ -121,7 +121,7 @@
  * Internal: Migrate to AndroidX
  * Internal: Update Gradle and a lot of dependencies
  * Thumbnails: Lots of new ones (thanks to all contributors)
- * Translations: Greek, Hindi (thanks to all the contributors on Crowdin)
+ * Translations: Greek, Hindi (thanks to all contributors)
 
 #### v0.6.3.1
 
@@ -150,7 +150,7 @@
  * Bug fix: Proper handling of RTL layouts by forcing LTR for the tokens (PR #280 by @ahangarha)
  * Internal: Image compression (thanks to @Peppernrino)
  * Thumbnail: Add a LOT of new thumbnails (thanks to everybody that contributed)
- * Translation: New Arabic, Traditional Chinese, Japanese, Persian and Swedish translations (thanks to all contributors on Crowdin)
+ * Translation: New Arabic, Traditional Chinese, Japanese, Persian and Swedish translations (thanks to all contributors)
 
 #### v0.6.1
 

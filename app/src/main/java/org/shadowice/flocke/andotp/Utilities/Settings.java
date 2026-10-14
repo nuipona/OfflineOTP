@@ -76,6 +76,14 @@ public class Settings {
             remove(R.string.settings_key_auth_pin);
         }
 
+        // The theme mode key was misspelled as "perf_theme_mode" before; move the stored value over.
+        if (settings.contains("perf_theme_mode")) {
+            settings.edit()
+                    .putString(getResString(R.string.settings_key_theme_mode), settings.getString("perf_theme_mode", ""))
+                    .remove("perf_theme_mode")
+                    .apply();
+        }
+
         if (settings.contains(getResString(R.string.settings_key_locale))) {
             String lang = getString(R.string.settings_key_locale, R.string.settings_default_lang);
 

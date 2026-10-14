@@ -75,8 +75,6 @@ key, which renders them useless.
 
 Check out [this](https://github.com/andOTP/andOTP/wiki/Migration) wiki page to learn about the different ways to migrate to andOTP from other 2FA apps.
 
-## Downloads:
-
 **Warning**: Builds signed with different keys are not compatible!
 You will have to uninstall one to install the other, which will delete all your data.
 So make sure you have a **current backup** before switching!
