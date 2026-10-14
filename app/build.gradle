@@ -3,7 +3,7 @@ apply plugin: 'com.mikepenz.aboutlibraries.plugin.android'
 
 android {
     namespace "org.shadowice.flocke.andotp"
-    compileSdk 35
+    compileSdk 36
 
     defaultConfig {
         applicationId "org.shadowice.flocke.andotp"
