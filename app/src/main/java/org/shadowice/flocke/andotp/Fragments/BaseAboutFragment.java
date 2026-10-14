@@ -1,6 +1,7 @@
 package org.shadowice.flocke.andotp.Fragments;
 
 import android.app.AlertDialog;
+import android.content.ActivityNotFoundException;
 import android.content.ClipData;
 import android.content.ClipboardManager;
 import android.content.Context;
@@ -214,7 +215,12 @@ public class BaseAboutFragment extends Fragment {
     public void openURI(String uri) {
         Intent openURI = new Intent(Intent.ACTION_VIEW);
         openURI.setData(Uri.parse(uri));
-        startActivity(openURI);
+
+        try {
+            startActivity(openURI);
+        } catch (ActivityNotFoundException e) {
+            copyToClipboard(uri);
+        }
     }
 
     /** Copies the URI to the clipboard (fallback when no app can open it). */

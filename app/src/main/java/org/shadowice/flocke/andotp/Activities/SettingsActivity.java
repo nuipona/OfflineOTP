@@ -57,6 +57,7 @@ import org.shadowice.flocke.andotp.Utilities.Constants;
 import org.shadowice.flocke.andotp.Utilities.DatabaseHelper;
 import org.shadowice.flocke.andotp.Utilities.EncryptionHelper;
 import org.shadowice.flocke.andotp.Utilities.KeyStoreHelper;
+import org.shadowice.flocke.andotp.Utilities.NotificationHelper;
 import org.shadowice.flocke.andotp.Utilities.Settings;
 import org.shadowice.flocke.andotp.Utilities.UIHelper;
 
@@ -466,6 +467,14 @@ public class SettingsActivity extends BackgroundTaskActivity<ChangeEncryptionTas
 
             useAutoBackup = (ListPreference)findPreference(getString(R.string.settings_key_auto_backup_password_enc));
             updateAutoBackup();
+
+            Preference backupBroadcasts = findPreference(getString(R.string.settings_key_backup_broadcasts));
+            backupBroadcasts.setOnPreferenceChangeListener((preference, newValue) -> {
+                if (newValue instanceof java.util.Set && !((java.util.Set<?>) newValue).isEmpty()) {
+                    NotificationHelper.requestNotificationPermission(this);
+                }
+                return true;
+            });
 
             useAndroidSync = (CheckBoxPreference) findPreference(getString(R.string.settings_key_enable_android_backup_service));
             useAndroidSync.setEnabled(settings.getEncryption() == EncryptionType.PASSWORD);

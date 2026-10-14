@@ -83,8 +83,15 @@
         </receiver>
     </application>
 
-    <!-- Required on Android 11+ for andOTP to be able to select a PGP provider -->
+    <!-- Android 13+: needed to show backup notifications (requested at runtime) -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+
+    <!-- Required on Android 11+ for andOTP to be able to select a PGP provider and a keystroke receiver -->
     <queries>
         <package android:name="org.sufficientlysecure.keychain" />
+        <intent>
+            <action android:name="android.intent.action.SEND" />
+            <data android:mimeType="text/x-keystrokes" />
+        </intent>
     </queries>
 </manifest>
