@@ -6,8 +6,6 @@
     <string name="backup_desc_openpgp_provider">Anda harus mengunduh provider OpenPGP dan mengaktifkannya di <b>Pengaturan</b> untuk menggunakan fitur ini.    </string>
     <string name="backup_desc_openpgp_keyid">Anda harus memilih kunci OpenPGP di <b>Pengaturan</b> sebelum Anda dapat membuat cadangan terenkripsi.</string>
     <!-- Dialogs -->
-    <string name="backup_dialog_title_security_warning">Peringatan keamanan</string>
-    <string name="backup_dialog_msg_export_warning">Apakah Anda ingin mengekspor basis data sebagai berkas teks biasa JSON? Berkas ini memuat semua kunci rahasia Anda, mohon <b>jaga dengan aman</b>!    </string>
     <string name="backup_receiver_title_backup_failed">Gagal mencadangkan</string>
     <string name="backup_receiver_title_backup_success">Pencadangan berhasil</string>
     <string name="backup_receiver_encrypted_disabled">Pencadangan terenkripsi tidak diperbolehkan, silakan ke Pengaturan untuk mengaktifkannya</string>
@@ -38,14 +36,12 @@
     <string name="backup_toast_crypt_password_not_set">Kata sandi belum ditentukan, cek ke <b>Pengaturan</b></string>
     <string name="backup_toast_file_selection_failed">Tidak dapat membuka berkas yang dipilih!</string>
     <string name="backup_label_type">Tipe pencadangan: </string>
-    <string name="backup_label_warning_plain">Berkas cadangan akan disimpan dalam teks biasa tak terenkripsi. Tolong untuk menggunakannya jika sangat dibutuhkan dan <b>amankan berkasnya</b>!</string>
     <string name="backup_label_crypt">Cadangan akan disimpan terenkripsi dengan kata sandi menggunakan enkripsi AES 256-bit. Anda bisa menentukan kata sandi baku di Pengaturan jika Anda tidak ingin memasukkannya setiap kali Anda membuat cadangan.</string>
     <string name="backup_label_pgp">Cadangan akan disimpan terenkripsi menggunakan kunci PGP (PGP key) yang Anda tentukan di Pengaturan. Enkripsi akan ditangani oleh aplikasi pihak ketiga.</string>
     <string name="backup_check_restore_old">Mengembalikan cadangan format lama (dibuat dengan andOTP versi sebelum 0.6.3)</string>
     <string name="backup_button_backup">Membuat cadangan</string>
     <string name="backup_button_restore">Mengembalikan cadangan</string>
     <string-array name="backup_list_type_names">
-        <item>Teks biasa</item>
         <item>Terenkripsi</item>
         <item>OpenPGP</item>
     </string-array>

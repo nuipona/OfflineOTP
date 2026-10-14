@@ -12,10 +12,6 @@
         antes de crear una copia de seguridad cifrada.
     </string>
     <!-- Dialogs -->
-    <string name="backup_dialog_title_security_warning">Advertencia de seguridad</string>
-    <string name="backup_dialog_msg_export_warning">¿Realmente quieres exportar la base de datos como
-        fichero JSON de texto plano? Este fichero incluye las claves secretas, por favor <b>mántenlo seguro</b>!
-    </string>
     <string name="backup_receiver_title_backup_failed">Falló la copia de seguridad</string>
     <string name="backup_receiver_title_backup_success">Copia de seguridad correcta</string>
     <string name="backup_receiver_encrypted_disabled">Las copias de seguridad cifradas no están permitidas por ahora, por favor vé a los Ajutes para activarlas</string>
@@ -51,8 +47,6 @@
     <string name="backup_toast_crypt_password_not_set">Contraseña no establecida, revise los <b>Ajustes</b></string>
     <string name="backup_toast_file_selection_failed">¡No se puede abrir el diálogo de selección de archivos!</string>
     <string name="backup_label_type">Tipo de copia de seguridad: </string>
-    <string name="backup_label_warning_plain">La copia de seguridad se almacenará en un archivo
-        de texto plano sin cifrar. Por favor, utilice sólo si es estrictamente necesario y <b>mantenga el archivo a salvo</b>!</string>
     <string name="backup_label_crypt">La copia de seguridad se almacenará cifrada con una contraseña personalizada
         usando el cifrado AES de 256 bits. Puede configurar una contraseña por defecto en la configuración si
         no quiere tener que introducirla cada vez que cree una copia de seguridad.</string>
@@ -63,7 +57,6 @@
     <string name="backup_button_backup">Crear copia de seguridad</string>
     <string name="backup_button_restore">Restaurar copia de seguridad</string>
     <string-array name="backup_list_type_names">
-        <item>Texto plano</item>
         <item>Cifrado</item>
         <item>OpenPGP</item>
     </string-array>

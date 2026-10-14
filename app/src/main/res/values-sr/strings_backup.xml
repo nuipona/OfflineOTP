@@ -12,10 +12,6 @@
         пре него што будете могли да креирате шифроване резервне копије.
     </string>
     <!-- Dialogs -->
-    <string name="backup_dialog_title_security_warning">Безбедносно упозорење</string>
-    <string name="backup_dialog_msg_export_warning">Да ли стварно желите да извезете базу података као
-        JSON датотека у обичном тексту? Ова датотека садржи све ваше тајне кључеве, <b>чувајте је на сигурном</b>!
-    </string>
     <string name="backup_receiver_title_backup_failed">Неуспешна израда резервне копије</string>
     <string name="backup_receiver_title_backup_success">Успешна израда резервне копије</string>
     <string name="backup_receiver_encrypted_disabled">Шифроване резервне копије тренутно нису дозвољене,
@@ -54,8 +50,6 @@
     <string name="backup_toast_crypt_password_not_set">Лозинка није постављена, проверите <b>Подешавања</b></string>
     <string name="backup_toast_file_selection_failed">Није могуће отворити дијалог за одабир датотеке!</string>
     <string name="backup_label_type">Врста резервне копије: </string>
-    <string name="backup_label_warning_plain">Резервна копија ће бити смештена у нешифровану текстуалну
-        датотеку. Молимо вас да користите само ако је строго потребно и <b>чувајте датотеку на сигурно</b>!</string>
     <string name="backup_label_crypt">Резервна копија ће се чувати шифрирана прилагођеном лозинком
 користећи АЕС 256-битну енкрипцију. Можете да поставите подразумевану лозинку у подешавањима
 ако не желите да је унесете сваки пут када креирате резервну копију.</string>
@@ -64,7 +58,6 @@
     <string name="backup_button_backup">Направите резервну копију</string>
     <string name="backup_button_restore">Вратити из резервне копије</string>
     <string-array name="backup_list_type_names">
-        <item>Обичан текст</item>
         <item>Шифровано</item>
         <item>OpenPGP</item>
     </string-array>

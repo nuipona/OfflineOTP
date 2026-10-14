@@ -18,10 +18,6 @@
     </string>
 
     <!-- Dialogs -->
-    <string name="backup_dialog_title_security_warning">Security warning</string>
-    <string name="backup_dialog_msg_export_warning">Do you really want to export the database as
-        plain-text JSON file? This file contains all your secret keys, please <b>keep it safe</b>!
-    </string>
 
     <string name="backup_receiver_title_backup_failed">Backup failed</string>
     <string name="backup_receiver_title_backup_success">Backup successful</string>
@@ -69,8 +65,6 @@
 
     <string name="backup_label_type">Backup type: </string>
 
-    <string name="backup_label_warning_plain">The backup will be stored in an unencrypted plain-text
-        file. Please only use if strictly necessary and <b>keep the file safe</b>!</string>
     <string name="backup_label_crypt">The backup will be stored encrypted with a custom password
         using AES 256-bit encryption. You can setup a default password in the settings if you
         don\'t want to have to enter it every time you create a backup.</string>
@@ -84,13 +78,11 @@
     <string name="backup_button_restore">Restore backup</string>
 
     <string-array name="backup_list_type_names">
-        <item>Plain-text</item>
         <item>Encrypted</item>
         <item>OpenPGP</item>
     </string-array>
 
     <string-array name="backup_list_type_values" translatable="false">
-        <item>plain</item>
         <item>crypt</item>
         <item>pgp</item>
     </string-array>

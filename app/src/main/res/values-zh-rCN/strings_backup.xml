@@ -6,8 +6,6 @@
     <string name="backup_desc_openpgp_provider">您需要安装 OpenPGP 提供程序，并在 <b>设置</b> 中启用，才能使用此功能。</string>
     <string name="backup_desc_openpgp_keyid">在创建加密备份前，您需要在 <b>设置</b> 中选择一个 OpenPGP 密钥。</string>
     <!-- Dialogs -->
-    <string name="backup_dialog_title_security_warning">安全警告</string>
-    <string name="backup_dialog_msg_export_warning">是否确实要将数据库导出为纯文本 JSON 文件？此文件包含您的所有密钥，请注意<b>保持安全</b>！</string>
     <string name="backup_receiver_title_backup_failed">备份失败</string>
     <string name="backup_receiver_title_backup_success">备份成功</string>
     <string name="backup_receiver_encrypted_disabled">目前不允许加密备份，请转到“设置”以启用它们</string>
@@ -40,8 +38,6 @@
     <string name="backup_toast_crypt_password_not_set">未设置密码，请检查 <b>设置</b></string>
     <string name="backup_toast_file_selection_failed">无法打开文件选择对话框！</string>
     <string name="backup_label_type">备份类型： </string>
-    <string name="backup_label_warning_plain">备份将存储于一个未加密的纯文本
-        文件。请仅在必要时使用，并<b>保管好文件</b>！</string>
     <string name="backup_label_crypt">备份将使用自定义的
         密码进行AES 256位加密存储。你可以在设置中设置一个默认密码，如果你
         不想每次创建备份时都必须输入这个密码。</string>
@@ -52,7 +48,6 @@
     <string name="backup_button_backup">创建备份</string>
     <string name="backup_button_restore">还原备份</string>
     <string-array name="backup_list_type_names">
-        <item>纯文本</item>
         <item>已加密</item>
         <item>OpenPGP</item>
     </string-array>

@@ -31,7 +31,6 @@ Don't worry, I will still continue to develop andOTP. It will just slow down fro
    - Android KeyStore
    - Password / PIN
  * Multiple backup options:
-   - Plain-text
    - Password-protected
    - OpenPGP-encrypted
  * Sleek minimalistic Material Design with three different themes:

@@ -6,8 +6,6 @@
     <string name="backup_desc_openpgp_provider">Você precisa instalar um provedor OpenPGP e habilitá-lo nas <b>configurações</b> para usar este recurso.    </string>
     <string name="backup_desc_openpgp_keyid">Você precisa selecionar uma chave OpenPGP nas <b>configurações</b> antes de criar backups criptografados.    </string>
     <!-- Dialogs -->
-    <string name="backup_dialog_title_security_warning">Aviso de segurança</string>
-    <string name="backup_dialog_msg_export_warning">Você tem certeza de que deseja exportar o banco de dados como um arquivo JSON desprotegido? Este arquivo contém todas suas senhas, portanto <b>mantenha-o seguro</b>!    </string>
     <string name="backup_receiver_title_backup_failed">Erro ao fazer backup</string>
     <string name="backup_receiver_title_backup_success">Backup realizado com sucesso</string>
     <string name="backup_receiver_encrypted_disabled">Backups criptografados não são permitidos,         vá até as Configurações para habilitá-los</string>
@@ -40,8 +38,6 @@
     <string name="backup_toast_crypt_password_not_set">A senha não foi definida. Verifique as <b>Configurações</b></string>
     <string name="backup_toast_file_selection_failed">Erro ao abrir diálogo de seleção de arquivo!</string>
     <string name="backup_label_type">Tipo de backup: </string>
-    <string name="backup_label_warning_plain">O backup será armazenado em um arquivo de texto simples sem
-        criptografia. Use isto apenas se for estritamente necessário e  <b>mantenha o arquivo seguro</b>!</string>
     <string name="backup_label_crypt">O backup será armazenado de forma criptografada com uma senha personalizada
         usando criptografia AES 256-bit. Você pode definir a senha padrão nas
         configurações se não quiser digitar todas as vezes que criar um backup.</string>
@@ -52,7 +48,6 @@
     <string name="backup_button_backup">Criar backup</string>
     <string name="backup_button_restore">Restaurar backup</string>
     <string-array name="backup_list_type_names">
-        <item>Texto simples</item>
         <item>Criptografado</item>
         <item>OpenPGP</item>
     </string-array>

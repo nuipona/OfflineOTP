@@ -11,10 +11,6 @@
         antes de crear unha copia de apoio cifrada.
     </string>
     <!-- Dialogs -->
-    <string name="backup_dialog_title_security_warning">Advertencia de seguranza</string>
-    <string name="backup_dialog_msg_export_warning">¿Queres exportar a base de datos como
-        ficheiro de texto plano JSON? Este ficheiro inclúe as túas chaves segredas, por favor <b>manteno seguro</b>!
-    </string>
     <string name="backup_receiver_title_backup_failed">Erro na copia de apoio</string>
     <string name="backup_receiver_title_backup_success">Copia realizada correctamente</string>
     <string name="backup_receiver_encrypted_disabled">Actualmente non se permiten as copias cifradas,
@@ -53,8 +49,6 @@
     <string name="backup_toast_crypt_password_not_set">No se estableceu un contrasinal, revisa os <b>axustes</b></string>
     <string name="backup_toast_file_selection_failed">Non se pode abrir o cadro de selección!</string>
     <string name="backup_label_type">Tipo de copia: </string>
-    <string name="backup_label_warning_plain">A copia de apoio gardarase nun ficheiro de texto plano non cifrado.
-        Utiliza este método só se é estritamente necesario e <b>gárdao de xeito seguro</b>!</string>
     <string name="backup_label_crypt">A copia vaise gardar cifrada cun contrasinal personal
         utilizando cifrado AES 256-bit. Podes configurar o contrasinal por defecto nos axustes se
         non queres ter que escribilo cada vez que fas unha copia de apoio.</string>
@@ -65,7 +59,6 @@
     <string name="backup_button_backup">Crear copia de apoio</string>
     <string name="backup_button_restore">Restablecer copia de apoio</string>
     <string-array name="backup_list_type_names">
-        <item>Texto plano</item>
         <item>Cifrada</item>
         <item>OpenPGP</item>
     </string-array>

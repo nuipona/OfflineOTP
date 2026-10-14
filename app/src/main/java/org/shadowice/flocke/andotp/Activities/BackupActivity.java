@@ -58,8 +58,6 @@ import org.shadowice.flocke.andotp.Tasks.EncryptedBackupTask;
 import org.shadowice.flocke.andotp.Tasks.EncryptedRestoreTask;
 import org.shadowice.flocke.andotp.Tasks.PGPBackupTask;
 import org.shadowice.flocke.andotp.Tasks.PGPRestoreTask;
-import org.shadowice.flocke.andotp.Tasks.PlainTextBackupTask;
-import org.shadowice.flocke.andotp.Tasks.PlainTextRestoreTask;
 import org.shadowice.flocke.andotp.Tasks.UiBasedBackgroundTask;
 import org.shadowice.flocke.andotp.Utilities.BackupHelper;
 import org.shadowice.flocke.andotp.Utilities.Constants;
@@ -75,7 +73,7 @@ import java.util.ArrayList;
 
 import javax.crypto.SecretKey;
 
-/** Backup/restore screen for plain-text, password-encrypted and OpenPGP backups. */
+/** Backup/restore screen for password-encrypted and OpenPGP backups. */
 public class BackupActivity extends BackgroundTaskActivity<BackupTaskResult> {
     private final static String TAG = BackupActivity.class.getSimpleName();
 
@@ -146,9 +144,6 @@ public class BackupActivity extends BackgroundTaskActivity<BackupTaskResult> {
 
         btnBackup.setOnClickListener(view -> {
             switch (backupType) {
-                case PLAIN_TEXT:
-                    backupPlainWithWarning();
-                    break;
                 case ENCRYPTED:
                     showSaveFileSelector(Constants.BACKUP_MIMETYPE_CRYPT, Constants.BackupType.ENCRYPTED, Constants.INTENT_BACKUP_SAVE_DOCUMENT_CRYPT);
                     break;
@@ -160,9 +155,6 @@ public class BackupActivity extends BackgroundTaskActivity<BackupTaskResult> {
 
         btnRestore.setOnClickListener(view -> {
             switch (backupType) {
-                case PLAIN_TEXT:
-                    showOpenFileSelector(Constants.INTENT_BACKUP_OPEN_DOCUMENT_PLAIN);
-                    break;
                 case ENCRYPTED:
                     if (chkOldFormat.isChecked())
                         showOpenFileSelector(Constants.INTENT_BACKUP_OPEN_DOCUMENT_CRYPT_OLD);
@@ -179,16 +171,6 @@ public class BackupActivity extends BackgroundTaskActivity<BackupTaskResult> {
     /** Shows the controls and warnings for the selected backup type and remembers the choice. */
     private void setupBackupType(Constants.BackupType type) {
         switch (type) {
-            case PLAIN_TEXT:
-                txtBackupLabel.setText(R.string.backup_label_warning_plain);
-
-                chkOldFormat.setVisibility(View.GONE);
-                txtBackupWarning.setVisibility(View.GONE);
-
-                btnBackup.setEnabled(true);
-                btnRestore.setEnabled(true);
-
-                break;
             case ENCRYPTED:
                 txtBackupLabel.setText(R.string.backup_label_crypt);
 
@@ -357,15 +339,7 @@ public class BackupActivity extends BackgroundTaskActivity<BackupTaskResult> {
     protected void onActivityResult(int requestCode, int resultCode, Intent intent) {
         super.onActivityResult(requestCode, resultCode, intent);
 
-        if (requestCode == Constants.INTENT_BACKUP_OPEN_DOCUMENT_PLAIN && resultCode == RESULT_OK) {
-            if (intent != null) {
-                doRestorePlain(intent.getData());
-            }
-        } else if (requestCode == Constants.INTENT_BACKUP_SAVE_DOCUMENT_PLAIN && resultCode == RESULT_OK) {
-            if (intent != null) {
-                doBackupPlain(intent.getData());
-            }
-        } else if (requestCode == Constants.INTENT_BACKUP_OPEN_DOCUMENT_CRYPT && resultCode == RESULT_OK) {
+        if (requestCode == Constants.INTENT_BACKUP_OPEN_DOCUMENT_CRYPT && resultCode == RESULT_OK) {
             if (intent != null) {
                 doRestoreCrypt(intent.getData(), false);
             }
@@ -424,9 +398,7 @@ public class BackupActivity extends BackgroundTaskActivity<BackupTaskResult> {
             startActivityForResult(intent, intentId);
         } else {
             if (settings.isBackupLocationSet()) {
-                if (intentId == Constants.INTENT_BACKUP_SAVE_DOCUMENT_PLAIN) {
-                    doBackupPlain(null);
-                } else if (intentId == Constants.INTENT_BACKUP_SAVE_DOCUMENT_CRYPT) {
+                if (intentId == Constants.INTENT_BACKUP_SAVE_DOCUMENT_CRYPT) {
                     doBackupCrypt(null);
                 } else if (intentId == Constants.INTENT_BACKUP_SAVE_DOCUMENT_PGP) {
                     backupEncryptedWithPGP(null, null);
@@ -461,40 +433,6 @@ public class BackupActivity extends BackgroundTaskActivity<BackupTaskResult> {
         } else {
             Toast.makeText(this, R.string.backup_toast_import_no_entries, Toast.LENGTH_LONG).show();
         }
-    }
-
-    /* Plain-text backup functions */
-
-    private void doRestorePlain(Uri uri) {
-        if (Tools.isExternalStorageReadable()) {
-            PlainTextRestoreTask task = new PlainTextRestoreTask(this, uri);
-            startBackgroundTask(task, BackupTaskResult.ResultType.RESTORE);
-        } else {
-            Toast.makeText(this, R.string.backup_toast_storage_not_accessible, Toast.LENGTH_LONG).show();
-        }
-    }
-
-    private void doBackupPlain(Uri uri) {
-        if (Tools.isExternalStorageWritable()) {
-            ArrayList<Entry> entries = DatabaseHelper.loadDatabase(this, encryptionKey);
-
-            PlainTextBackupTask task = new PlainTextBackupTask(this, entries, uri);
-            startBackgroundTask(task, BackupTaskResult.ResultType.BACKUP);
-        } else {
-            Toast.makeText(this, R.string.backup_toast_storage_not_accessible, Toast.LENGTH_LONG).show();
-        }
-    }
-
-    private void backupPlainWithWarning() {
-        AlertDialog.Builder builder = new AlertDialog.Builder(this);
-
-        builder.setTitle(R.string.backup_dialog_title_security_warning)
-                .setMessage(R.string.backup_dialog_msg_export_warning)
-                .setPositiveButton(R.string.yes, (dialogInterface, i) -> showSaveFileSelector(Constants.BACKUP_MIMETYPE_PLAIN, Constants.BackupType.PLAIN_TEXT, Constants.INTENT_BACKUP_SAVE_DOCUMENT_PLAIN))
-                .setNegativeButton(R.string.no, (dialogInterface, i) -> {})
-                .setIcon(android.R.drawable.ic_dialog_alert)
-                .create()
-                .show();
     }
 
     /* Encrypted backup functions */

@@ -676,7 +676,12 @@ public class Settings {
 
     public Constants.BackupType getDefaultBackupType() {
         String defaultType = getString(R.string.settings_key_backup_default_type, Constants.BackupType.ENCRYPTED.name());
-        return Constants.BackupType.valueOf(defaultType.toUpperCase(Locale.ENGLISH));
+        try {
+            return Constants.BackupType.valueOf(defaultType.toUpperCase(Locale.ENGLISH));
+        } catch (IllegalArgumentException e) {
+            // Stored value is no longer a valid type (e.g. a removed plain-text setting)
+            return Constants.BackupType.ENCRYPTED;
+        }
     }
 
     public Constants.LabelDisplay getLabelDisplay() {
