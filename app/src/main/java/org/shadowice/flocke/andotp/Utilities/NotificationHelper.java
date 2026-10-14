@@ -23,6 +23,7 @@
 
 package org.shadowice.flocke.andotp.Utilities;
 
+import android.Manifest;
 import android.app.NotificationChannel;
 import android.app.NotificationManager;
 import android.content.Context;
@@ -36,16 +37,16 @@ import static android.content.Context.NOTIFICATION_SERVICE;
 
 /** Creates the backup notification channels and posts the backup notifications. */
 public class NotificationHelper {
-    private static final String POST_NOTIFICATIONS_PERMISSION = "android.permission.POST_NOTIFICATIONS";
+    private static final String POST_NOTIFICATIONS_PERMISSION = Manifest.permission.POST_NOTIFICATIONS;
     private static final int POST_NOTIFICATIONS_REQUEST_CODE = 1;
 
     /**
      * Asks for the notification permission on Android 13+ if it is not granted yet.
-     * Written with literals so it compiles against older SDKs; a no-op before Android 13 (API 33).
+     * A no-op before Android 13 (API 33).
      */
     public static void requestNotificationPermission(android.app.Fragment fragment) {
         Context context = fragment.getActivity();
-        if (context == null || android.os.Build.VERSION.SDK_INT < 33) {
+        if (context == null || android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.TIRAMISU) {
             return;
         }
 

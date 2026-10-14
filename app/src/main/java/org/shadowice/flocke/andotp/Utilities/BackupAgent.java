@@ -26,6 +26,7 @@ package org.shadowice.flocke.andotp.Utilities;
 import android.app.backup.BackupAgentHelper;
 import android.app.backup.BackupDataInput;
 import android.app.backup.BackupDataOutput;
+import android.app.backup.FullBackupDataOutput;
 import android.app.backup.FileBackupHelper;
 import android.app.backup.SharedPreferencesBackupHelper;
 import android.os.ParcelFileDescriptor;
@@ -52,6 +53,19 @@ public class BackupAgent extends BackupAgentHelper {
             }
         }
         Log.d(BackupAgent.class.getSimpleName(), stringBuilder.toString());
+    }
+
+    /** With fullBackupOnly, the system uses this path instead of onBackup, so it must honor the setting too. */
+    @Override
+    public void onFullBackup(FullBackupDataOutput data) throws IOException {
+        Settings settings = new Settings(this);
+        if (!settings.getAndroidBackupServiceEnabled()) {
+            Log.d(BackupAgent.class.getSimpleName(), "onFullBackup skipped, backup service disabled");
+            return;
+        }
+        synchronized (DatabaseHelper.DatabaseFileLock) {
+            super.onFullBackup(data);
+        }
     }
 
     @Override
