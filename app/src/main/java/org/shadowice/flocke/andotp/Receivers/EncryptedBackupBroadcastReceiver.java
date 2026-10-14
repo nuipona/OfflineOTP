@@ -25,31 +25,25 @@ package org.shadowice.flocke.andotp.Receivers;
 
 import android.content.Context;
 import android.content.Intent;
-import android.util.Log;
 
-import org.shadowice.flocke.andotp.Database.Entry;
+import androidx.work.ExistingWorkPolicy;
+import androidx.work.OneTimeWorkRequest;
+import androidx.work.WorkManager;
+
 import org.shadowice.flocke.andotp.R;
-import org.shadowice.flocke.andotp.Tasks.BackupTaskResult;
-import org.shadowice.flocke.andotp.Tasks.EncryptedBackupTask;
+import org.shadowice.flocke.andotp.Tasks.EncryptedBackupWorker;
 import org.shadowice.flocke.andotp.Utilities.Constants;
-import org.shadowice.flocke.andotp.Utilities.DatabaseHelper;
-import org.shadowice.flocke.andotp.Utilities.KeyStoreHelper;
 import org.shadowice.flocke.andotp.Utilities.NotificationHelper;
 import org.shadowice.flocke.andotp.Utilities.Settings;
 
-import java.util.ArrayList;
-
-import javax.crypto.SecretKey;
-
 // Test in the dev build (Android 8+ needs an explicit package, hence -p):
 //   adb shell am broadcast -a org.shadowice.flocke.andotp.broadcast.ENCRYPTED_BACKUP -p org.shadowice.flocke.andotp.dev
-/** Creates a password-encrypted backup when the corresponding broadcast is received. */
+/** Queues a password-encrypted backup when the corresponding broadcast is received. */
 public class EncryptedBackupBroadcastReceiver extends BackupBroadcastReceiver {
-    private Context context;
+    private static final String UNIQUE_WORK_NAME = "encrypted_backup";
 
     @Override
     public void onReceive(Context context, Intent intent) {
-        this.context = context;
         Settings settings = new Settings(context);
 
         if (!settings.isEncryptedBackupBroadcastEnabled()) {
@@ -64,7 +58,7 @@ public class EncryptedBackupBroadcastReceiver extends BackupBroadcastReceiver {
 
         String password = settings.getBackupPasswordEnc();
 
-        if (password.isEmpty()) {
+        if (password == null || password.isEmpty()) {
             NotificationHelper.notify(context, Constants.NotificationChannel.BACKUP_FAILED, R.string.backup_receiver_title_backup_failed, R.string.backup_receiver_no_password_set);
             return;
         }
@@ -74,36 +68,12 @@ public class EncryptedBackupBroadcastReceiver extends BackupBroadcastReceiver {
             return;
         }
 
-        // Reading the key and database can take a while, so keep it off the main thread.
-        // goAsync() keeps the broadcast alive until finish() is called once the backup is done.
-        final PendingResult pendingResult = goAsync();
-        final Context appContext = context.getApplicationContext();
-
-        new Thread(() -> {
-            try {
-                SecretKey encryptionKey = KeyStoreHelper.loadEncryptionKeyFromKeyStore(appContext, false);
-                ArrayList<Entry> entries = DatabaseHelper.loadDatabase(appContext, encryptionKey);
-
-                EncryptedBackupTask task = new EncryptedBackupTask(appContext, entries, password, null);
-                task.setCallback(result -> {
-                    handleTaskResult(result);
-                    pendingResult.finish();
-                });
-                task.execute();
-            } catch (RuntimeException e) {
-                Log.e(EncryptedBackupBroadcastReceiver.class.getSimpleName(), "Encrypted backup failed to start", e);
-                NotificationHelper.notify(appContext, Constants.NotificationChannel.BACKUP_FAILED, R.string.backup_receiver_title_backup_failed, R.string.backup_receiver_unexpected_error);
-                pendingResult.finish();
-            }
-        }).start();
-    }
-
-    /** Shows the success or failure notification for the finished backup. */
-    private void handleTaskResult(BackupTaskResult result) {
-        if (result.success) {
-            NotificationHelper.notify(context, Constants.NotificationChannel.BACKUP_SUCCESS, R.string.backup_receiver_title_backup_success, result.payload);
-        } else {
-            NotificationHelper.notify(context, Constants.NotificationChannel.BACKUP_FAILED, R.string.backup_receiver_title_backup_failed, result.messageId);
-        }
+        // WorkManager runs the backup in the background, so it is not limited by the broadcast's
+        // short time budget and keeps going after this method returns. KEEP means a backup that is
+        // already queued or running is not duplicated.
+        WorkManager.getInstance(context).enqueueUniqueWork(
+                UNIQUE_WORK_NAME,
+                ExistingWorkPolicy.KEEP,
+                new OneTimeWorkRequest.Builder(EncryptedBackupWorker.class).build());
     }
 }
