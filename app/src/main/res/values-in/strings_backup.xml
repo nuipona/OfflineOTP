@@ -10,7 +10,6 @@
     <string name="backup_dialog_msg_export_warning">Apakah Anda ingin mengekspor basis data sebagai berkas teks biasa JSON? Berkas ini memuat semua kunci rahasia Anda, mohon <b>jaga dengan aman</b>!    </string>
     <string name="backup_receiver_title_backup_failed">Gagal mencadangkan</string>
     <string name="backup_receiver_title_backup_success">Pencadangan berhasil</string>
-    <string name="backup_receiver_plain_disabled">Pencadangan teks biasa tidak diperbolehkan, silakan ke Pengaturan untuk mengaktifkannya</string>
     <string name="backup_receiver_encrypted_disabled">Pencadangan terenkripsi tidak diperbolehkan, silakan ke Pengaturan untuk mengaktifkannya</string>
     <string name="backup_receiver_read_permission_failed">Izin baca tidak diberikan, silakan lakukan ini sebelum pencadangan</string>
     <string name="backup_receiver_write_permission_failed">Izin tulis tidak diberikan, silakan lakukan ini sebelum pencadangan</string>

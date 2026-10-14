@@ -221,7 +221,6 @@
         <item>Commuta entre etiquetes (només permet de seleccionar una etiqueta cada vegada)</item>
     </string-array>
     <string-array name="settings_entries_backup_broadcasts">
-        <item>Còpies de seguretat en text pla</item>
         <item>Còpies de seguretat xifrada</item>
     </string-array>
     <!-- Special -->

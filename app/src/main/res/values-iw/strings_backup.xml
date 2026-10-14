@@ -18,7 +18,6 @@
     </string>
     <string name="backup_receiver_title_backup_failed">הגיבוי נכשל</string>
     <string name="backup_receiver_title_backup_success">הגיבוי הצליח</string>
-    <string name="backup_receiver_plain_disabled">גיבויים בטקסט פשוט לא מורשים כרגע,         אנא עבור להגדרות כדי לאפשר אותם</string>
     <string name="backup_receiver_encrypted_disabled">גיבויים מוצפנים לא מורשים כרגע,         אנא עבור להגדרות כדי לאפשר אותם</string>
     <string name="backup_receiver_read_permission_failed">הרשאת קריאה לא ניתנה, אנא עשה         זאת לפני נסיון גיבוי</string>
     <string name="backup_receiver_write_permission_failed">הרשאת כתיבה לא ניתנה, אנא עשה         זאת לפני נסיון גיבוי</string>

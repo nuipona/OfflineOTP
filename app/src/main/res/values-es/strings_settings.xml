@@ -224,7 +224,6 @@
         <item>Alternar etiquetas (sólo permitir una etiqueta seleccionada a la vez)</item>
     </string-array>
     <string-array name="settings_entries_backup_broadcasts">
-        <item>Copias de seguridad en texto plano</item>
         <item>Copias de seguridad cifradas</item>
     </string-array>
     <!-- Special -->

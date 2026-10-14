@@ -236,7 +236,6 @@ d\'accesibilidá!</b></string>
         <item>Cambéu ente etiquetes (namás se permite una etiqueta esbillada al empar)</item>
     </string-array>
     <string-array name="settings_entries_backup_broadcasts">
-        <item>Copies de seguranza en testu planu</item>
         <item>Copies de seguranza cifraes</item>
     </string-array>
     <!-- Special -->

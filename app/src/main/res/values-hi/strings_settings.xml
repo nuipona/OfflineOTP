@@ -182,7 +182,6 @@
         <item>टैग के बीच चयन करें (केवल एक टैग को एक बार में चुनने की अनुमति दें)</item>
     </string-array>
     <string-array name="settings_entries_backup_broadcasts">
-        <item>सादा-पाठ बैकअप</item>
         <item>कुटलिखित बैकअप</item>
     </string-array>
     <!-- Special -->

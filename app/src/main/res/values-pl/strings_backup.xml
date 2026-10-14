@@ -10,7 +10,6 @@
     <string name="backup_dialog_msg_export_warning">Czy na pewno chcesz zapisać bazę danych do niezaszyfrowanego pliku JSON? Plik ten zawiera wszystkie twoje klucze prywatne. <b>Przechowuj go w bezpiecznym miejscu!</b></string>
     <string name="backup_receiver_title_backup_failed">Tworzenie kopii zapasowej nie powiodło się</string>
     <string name="backup_receiver_title_backup_success">Kopia zapasowa wykonana pomyślnie</string>
-    <string name="backup_receiver_plain_disabled">Niezaszyfrowane kopie zapasowe nie są obecnie dozwolone, proszę przejść do ustawień, aby je włączyć</string>
     <string name="backup_receiver_encrypted_disabled">Zaszyfrowane kopie zapasowe nie są obecnie dozwolone, proszę przejść do ustawień, aby je włączyć</string>
     <string name="backup_receiver_read_permission_failed">Uprawnienia odczytu nie przyznane, proszę
         nadaj uprawnienia przed rozpoczęciem przywracania kopii</string>

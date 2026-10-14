@@ -70,7 +70,6 @@ key, which renders them useless.
 ### Automatic backups:
 
  * BroadcastReceivers: andOTP supports a number of broadcasts to perform automated backups, e.g. via Tasker. These will get saved to the defined backup directory. **These only work when KeyStore is used as the encryption mechanism.**
-   - **org.shadowice.flocke.andotp.broadcast.PLAIN_TEXT_BACKUP**: Perform a plain text backup. **WARNING**: This will save your 2FA tokens onto the disk in an unencrypted manner!
    - **org.shadowice.flocke.andotp.broadcast.ENCRYPTED_BACKUP**: Perform an encrypted backup of your 2FA database using the selected password in settings.
 
 ## Migration:

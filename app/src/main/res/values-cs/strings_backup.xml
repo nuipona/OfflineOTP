@@ -18,8 +18,6 @@
     </string>
     <string name="backup_receiver_title_backup_failed">Zálohování selhalo</string>
     <string name="backup_receiver_title_backup_success">Zálohování proběhlo úspěšně</string>
-    <string name="backup_receiver_plain_disabled">Nechráněné zálohy nejsou v tuto chvíli povoleny,
-        pro jejich povolení přejděte, prosím do Nastavení</string>
     <string name="backup_receiver_encrypted_disabled">Šifrované zálohy nejsou v tuto chvíli povoleny, pro jejich zpřístupnění
         přejděte, prosím, do Nastavení</string>
     <string name="backup_receiver_read_permission_failed">Nebylo uděleno oprávnění ke čtení, prosím,

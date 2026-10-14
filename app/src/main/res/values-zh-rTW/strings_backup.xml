@@ -11,7 +11,6 @@
     <string name="backup_dialog_msg_export_warning">您確認要將資料庫匯出為明碼 JSON 檔嗎？該檔將包含您所有的安全權杖，務必<b>安全存取</b>！    </string>
     <string name="backup_receiver_title_backup_failed">備份失敗</string>
     <string name="backup_receiver_title_backup_success">備份成功</string>
-    <string name="backup_receiver_plain_disabled">當前不允許明碼備份，請前往設定啟用之</string>
     <string name="backup_receiver_encrypted_disabled">當前不允許加密備份，請前往設定啟用之</string>
     <string name="backup_receiver_read_permission_failed">讀取被拒絕，請在備份前允許此權限</string>
     <string name="backup_receiver_write_permission_failed">寫入被拒絕，請在備份前允許此權限</string>

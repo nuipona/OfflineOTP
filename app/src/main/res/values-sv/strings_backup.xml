@@ -18,8 +18,6 @@
     </string>
     <string name="backup_receiver_title_backup_failed">Säkerhetskopiering misslyckades</string>
     <string name="backup_receiver_title_backup_success">Säkerhetskopiering lyckades</string>
-    <string name="backup_receiver_plain_disabled">Säkerhetskopior av klartext är för närvarande inte tillåtna,
-        vänligen gå till inställningarna för att aktivera dem</string>
     <string name="backup_receiver_encrypted_disabled">Krypterade säkerhetskopior är för närvarande inte tillåtna,
         vänligen gå till inställningarna för att aktivera dem</string>
     <string name="backup_receiver_read_permission_failed">Lästbehörighet inte beviljad, gör

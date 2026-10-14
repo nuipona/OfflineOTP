@@ -225,7 +225,6 @@
         <item>Εναλλαγή μεταξύ ετικετών (επιτρέπεται μόνο μια ετικέτα να επιλέγεται ταυτόχρονα)</item>
     </string-array>
     <string-array name="settings_entries_backup_broadcasts">
-        <item>Αντίγραφα απλού κειμένου</item>
         <item>Κρυπτογραφημένα αντίγραφα</item>
     </string-array>
     <!-- Special -->

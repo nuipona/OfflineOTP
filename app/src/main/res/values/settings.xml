@@ -223,7 +223,6 @@
     </string-array>
 
     <string-array name="settings_values_backup_broadcasts" translatable="false">
-        <item>plain</item>
         <item>encrypted</item>
     </string-array>
 

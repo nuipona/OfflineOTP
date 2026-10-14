@@ -10,7 +10,6 @@
     <string name="backup_dialog_msg_export_warning">Θέλετε πραγματικά να εξαγάγετε τη βάση δεδομένων ως αρχείο JSON απλού κειμένου; Αυτό το αρχείο περιέχει όλα τα μυστικά κλειδιά σας, παρακαλούμε να <b>το κρατήσετε ασφαλές</b>!    </string>
     <string name="backup_receiver_title_backup_failed">Αποτυχία δημιουργίας αντιγράφου ασφαλείας</string>
     <string name="backup_receiver_title_backup_success">Επιτυχής δημιουργία αντιγράφου ασφαλείας</string>
-    <string name="backup_receiver_plain_disabled">Τα αντίγραφα ασφαλείας απλού-κειμένου δεν επιτρέπονται αυτή τη στιγμή, παρακαλώ ενεργοποιήστε τα στις Ρυθμίσεις</string>
     <string name="backup_receiver_encrypted_disabled">Τα κρυπτογραφημένα αντίγραφα ασφαλείας δεν επιτρέπονται αυτή τη στιγμή, παρακαλώ ενεργοποιήστε τα στις Ρυθμίσεις</string>
     <string name="backup_receiver_read_permission_failed">Η άδεια για ανάγνωση δεν έχει δοθεί, παρακαλώ παραχωρήστε την πριν προσπαθήσετε να πάρετε αντίγραφο ασφαλείας</string>
     <string name="backup_receiver_write_permission_failed">Η άδεια για εγγραφή δεν έχει δοθεί, παρακαλώ παραχωρήστε την πριν προσπαθήσετε να πάρετε αντίγραφο ασφαλείας</string>

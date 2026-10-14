@@ -223,7 +223,6 @@
         <item>עבור בין תגים (אפשר לבחור רק תווית אחת בכל פעם)</item>
     </string-array>
     <string-array name="settings_entries_backup_broadcasts">
-        <item>גיבויים בטקסט פשוט</item>
         <item>גיבויים מוצפנים</item>
     </string-array>
     <!-- Special -->

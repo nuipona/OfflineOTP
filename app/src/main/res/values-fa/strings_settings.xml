@@ -192,7 +192,6 @@
         <item>تغییر بین تگ‌ها (فقط یک تگ می‌تواند در هر بار انتخاب شود)</item>
     </string-array>
     <string-array name="settings_entries_backup_broadcasts">
-        <item>پشتیبان‌های متن آشکار</item>
         <item>پشتیبان‌های رمزگذاری شده</item>
     </string-array>
     <!-- Special -->

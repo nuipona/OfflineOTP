@@ -10,7 +10,6 @@
     <string name="backup_dialog_msg_export_warning">Naozaj chcete exportovať databázu ako nechránený JSON súbor? Tento súbor obsahuje všetky vaše tajné kľúče, prosím <b>majte ho v bezpečí</b>!    </string>
     <string name="backup_receiver_title_backup_failed">Zálohovanie zlyhalo</string>
     <string name="backup_receiver_title_backup_success">Zálohovanie prebehlo úspešne</string>
-    <string name="backup_receiver_plain_disabled">Nechránené zálohy nie sú v tuto chvíli povolené, pre ich sprístupnenie prejdite prosím do Nastavení</string>
     <string name="backup_receiver_encrypted_disabled">Šifrované zálohy nie sú v tejto chvíli povolené, pre ich sprístupnenie prejdite prosím do Nastavení</string>
     <string name="backup_receiver_read_permission_failed">Povolenie k čítaniu nebolo udelené, prosím udeľte ho pred pokusom o zálohovanie</string>
     <string name="backup_receiver_write_permission_failed">Povolenie k zápisu nebolo udelené, prosím udeľte ho pred pokusom o zálohovanie</string>

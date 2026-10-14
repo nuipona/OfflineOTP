@@ -223,7 +223,6 @@
         <item>Перемикання між мітками (одночасно дозволено вибирати тільки одну мітку)</item>
     </string-array>
     <string-array name="settings_entries_backup_broadcasts">
-        <item>Текстові резервні копії</item>
         <item>Зашифровані резервні копії</item>
     </string-array>
     <!-- Special -->

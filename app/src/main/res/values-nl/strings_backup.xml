@@ -10,7 +10,6 @@
     <string name="backup_dialog_msg_export_warning">Wilt u echt de database exporteren als JSON-bestand zonder opmaak? Dit bestand bevat al uw geheime sleutels. <b>Houdt het veilig</b>!    </string>
     <string name="backup_receiver_title_backup_failed">Reservekopie mislukt</string>
     <string name="backup_receiver_title_backup_success">Reservekopie geslaagd</string>
-    <string name="backup_receiver_plain_disabled">Niet-versleutelde reservekopieën zijn op dit moment uitgeschakeld, ga naar de Instellingen om deze in te schakelen</string>
     <string name="backup_receiver_encrypted_disabled">Versleutelde reservekopieën zijn op dit moment uitgeschakeld, ga naar de Instellingen om deze in te schakelen</string>
     <string name="backup_receiver_read_permission_failed">Verleen eerst toestemming om te lezen voordat je een reservekopie gaat maken</string>
     <string name="backup_receiver_write_permission_failed">Geen machtiging tot schrijven verleend, gelieve dit te doen voordat je een reservekopie maakt</string>

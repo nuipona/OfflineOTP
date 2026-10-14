@@ -10,7 +10,6 @@
     <string name="backup_dialog_msg_export_warning">آیا واقعا می‌خواهید پایگاه داده را به عنوان پرونده JSON متن ساده استخراج کنید؟ این پرونده حاوی همه کلیدهای محرمانه شماست، لطفا <b>آن را امن نگهدارید</b>!    </string>
     <string name="backup_receiver_title_backup_failed">شکست در پشتیبان‌گیری</string>
     <string name="backup_receiver_title_backup_success">پشتیبان‌گیری با موفقیت انجام شد</string>
-    <string name="backup_receiver_plain_disabled">پشتیبان‌های متن ساده در حال حاضر مجاز نیستند، لطفا به تنظیمات بروید و آن‌ها را فعال کنید</string>
     <string name="backup_receiver_encrypted_disabled">پشتیبان‌های رمزگذاری شده در حال حاضر مجاز نیستند، لطفا به تنظیمات بروید و آن‌ها را فعال کنید</string>
     <string name="backup_receiver_read_permission_failed">اجازه خواندن داده نشده، لطفا قبل از تلاش برای پشتیبان‌گیری این اجازه را بدهید</string>
     <string name="backup_receiver_write_permission_failed">اجازه نوشتن داده نشده، لطفا قبل از تلاش برای پشتیبان‌گیری این اجازه را بدهید</string>

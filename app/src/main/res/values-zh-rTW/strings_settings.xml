@@ -190,7 +190,6 @@
         <item>在標籤之間切換（一次只允許選定一個標籤）</item>
     </string-array>
     <string-array name="settings_entries_backup_broadcasts">
-        <item>明碼備份</item>
         <item>加密備份</item>
     </string-array>
     <!-- Special -->

@@ -18,9 +18,6 @@
         secretes polo que <b>guárdalu con curiáu</b></string>
     <string name="backup_receiver_title_backup_failed">Falló la copia de seguranza</string>
     <string name="backup_receiver_title_backup_success">La copia de seguranza tuvo ésitu</string>
-    <string name="backup_receiver_plain_disabled">Anguaño nun se permiten les copies de
-        seguranza en testu planu, vete a Axustes
-        p\'activales</string>
     <string name="backup_receiver_encrypted_disabled">Anguaño les copies de seguranza cifraes nun
         tán permitíes, vete a axustes p\'activales</string>
     <string name="backup_receiver_read_permission_failed">Nun se concedió\'l permisu de llectura,

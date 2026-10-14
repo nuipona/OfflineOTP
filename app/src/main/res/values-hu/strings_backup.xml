@@ -18,8 +18,6 @@
     </string>
     <string name="backup_receiver_title_backup_failed">A biztonsági mentés sikertelen</string>
     <string name="backup_receiver_title_backup_success">A biztonsági mentés sikeres</string>
-    <string name="backup_receiver_plain_disabled">Az egyszerű szöveges biztonsági mentések nem engedélyezettek,
-        az engedélyezéshez menjen a Beállításokba</string>
     <string name="backup_receiver_encrypted_disabled">A titkosított biztonsági mentések nem engedélyezettek,
         az engedélyezéshez menjen a Beállításokba</string>
     <string name="backup_receiver_read_permission_failed">Az olvasási engedély nincs megadva, engedélyezze

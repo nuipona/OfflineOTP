@@ -225,7 +225,6 @@ kodiranjem, <b>izvedite raje ročno varnostno kopiranje!</b></string>
         <item>Preklopi med oznakami (dovoli samo eno izbrano oznako naenkrat)</item>
     </string-array>
     <string-array name="settings_entries_backup_broadcasts">
-        <item>Navadne varnostne kopije</item>
         <item>Kodirane varnostne kopije</item>
     </string-array>
     <!-- Special -->

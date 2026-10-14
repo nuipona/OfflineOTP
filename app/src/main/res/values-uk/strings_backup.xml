@@ -14,7 +14,6 @@
     <string name="backup_dialog_msg_export_warning">Ви дійсно впевнені в тому, що хочете експортувати цю базу даних        у текстовий JSON файл? Цей файл містить усі Ваші секретні ключі, будь ласка, <b>надійно їх зберігайте</b>!    </string>
     <string name="backup_receiver_title_backup_failed">Резервне копіювання завершилося невдало</string>
     <string name="backup_receiver_title_backup_success">Резервне копiювання завершлося вдало</string>
-    <string name="backup_receiver_plain_disabled">Створення текстових резервних копій наразі не дозволено,         будь ласка, перейдіть до Налаштувань, щоб дозволити їх створення</string>
     <string name="backup_receiver_encrypted_disabled">Створення зашифрованих резервних копій наразі не дозволено,         будь ласка, перейдіть до Налаштувань, щоб дозволити їх створення</string>
     <string name="backup_receiver_read_permission_failed">Дозволу на читання не надано, будь ласка,        надайте доступ на читання перед тим, як почнете створення резервної копії</string>
     <string name="backup_receiver_write_permission_failed">Дозволу на запис не надано, будь ласка,        надайте доступ на запис перед тим, як почнете створення резервної копії</string>

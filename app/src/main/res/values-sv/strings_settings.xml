@@ -225,7 +225,6 @@
         <item>Växla mellan taggar (låt bara en tagg väljas åt gången)</item>
     </string-array>
     <string-array name="settings_entries_backup_broadcasts">
-        <item>Säkerhetskopior i klartext</item>
         <item>Krypterade säkerhetskopior</item>
     </string-array>
     <!-- Special -->

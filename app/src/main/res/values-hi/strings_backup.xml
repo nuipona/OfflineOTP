@@ -10,7 +10,6 @@
     <string name="backup_dialog_msg_export_warning">क्या आप वास्तव में डेटाबेस को सादे पाठ JSON फ़ाइल में निर्यात करना चाहते हैं        इस फ़ाइल में आपकी सभी गुप्त कुंजियाँ हैं, कृपया<b>इसे सुरक्षित रखें</b>!    </string>
     <string name="backup_receiver_title_backup_failed">बैकअप असफल रहा</string>
     <string name="backup_receiver_title_backup_success">बैकअप सफल</string>
-    <string name="backup_receiver_plain_disabled">सादा पाठ बैकअप वर्तमान में अनुमति नहीं है,        कृपया उन्हें सक्षम करने के लिए सेटिंग में जाएं</string>
     <string name="backup_receiver_encrypted_disabled">गोपित बैकअप वर्तमान में अनुमति नहीं है,         कृपया उन्हें सक्षम करने के लिए सेटिंग में जाएं</string>
     <string name="backup_receiver_read_permission_failed">कृपया बैकअप का प्रयास करने से         पहले पढ़ने की अनुमति प्रदान करें</string>
     <string name="backup_receiver_write_permission_failed">कृपया बैकअप का प्रयास करने से         पहले लेखन की अनुमति प्रदान करें</string>

@@ -184,7 +184,6 @@ V prípade chyby bude obnovená interná záloha a šifrovanie zostane nezmenen�
         <item>Prepínať medzi štítkami (iba jeden štítok môže byť vybraný)</item>
     </string-array>
     <string-array name="settings_entries_backup_broadcasts">
-        <item>Nechránené zálohy</item>
         <item>Šifrované zálohy</item>
     </string-array>
     <!-- Special -->

@@ -18,8 +18,6 @@
     </string>
     <string name="backup_receiver_title_backup_failed">Varnostna kopija ni uspela</string>
     <string name="backup_receiver_title_backup_success">Varnostna kopija uspela</string>
-    <string name="backup_receiver_plain_disabled">Navadne varnostne kopije trenutno niso dovoljene,
-        prosimo, pojdite v Nastavitve, da jih omogočite</string>
     <string name="backup_receiver_encrypted_disabled">Kodirane varnostne kopije trenutno niso dovoljene,
         prosimo, pojdite v Nastavitve, da jih omogočite</string>
     <string name="backup_receiver_read_permission_failed">Dovoljenja za branje niso odobrena, prosimo, da

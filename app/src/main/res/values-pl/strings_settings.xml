@@ -199,7 +199,6 @@
         <item>Przełącz między etykietami (pozwól aby tylko jedna etykieta mogła być zaznaczona)</item>
     </string-array>
     <string-array name="settings_entries_backup_broadcasts">
-        <item>Niezaszyfrowana kopia zapasowa</item>
         <item>Zaszyfrowana kopia zapasowa</item>
     </string-array>
     <!-- Special -->

@@ -17,8 +17,6 @@
     </string>
     <string name="backup_receiver_title_backup_failed">Erro na copia de apoio</string>
     <string name="backup_receiver_title_backup_success">Copia realizada correctamente</string>
-    <string name="backup_receiver_plain_disabled">Actualmente non se permiten as copias en texto plano,
-        vai aos Axustes para activalos</string>
     <string name="backup_receiver_encrypted_disabled">Actualmente non se permiten as copias cifradas,
         vai aos Axustes para activalos</string>
     <string name="backup_receiver_read_permission_failed">Non tes permiso de lectura, por favor 

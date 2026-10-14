@@ -18,8 +18,6 @@
     </string>
     <string name="backup_receiver_title_backup_failed">Backup fallito</string>
     <string name="backup_receiver_title_backup_success">Backup eseguito con successo</string>
-    <string name="backup_receiver_plain_disabled">Attualmente i backup non crittografati non sono permessi,
-        vai nelle Impostazioni per abilitarli</string>
     <string name="backup_receiver_encrypted_disabled">Attualmente i backup crittografati non sono permessi,
         vai nelle Impostazioni per abilitarli</string>
     <string name="backup_receiver_read_permission_failed">Permessi di lettura non concessi, si prega

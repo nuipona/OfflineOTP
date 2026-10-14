@@ -15,8 +15,6 @@
          некриптиран JSON файл? Този файл съдържа всички ваши секретни ключове, моля <b>Пазете го</b>!    </string>
     <string name="backup_receiver_title_backup_failed">Архивирането не бе успешно</string>
     <string name="backup_receiver_title_backup_success">Архивирането е успешно</string>
-    <string name="backup_receiver_plain_disabled">В момента, некриптираните резервни копия не са позволени,
-         моля, отидете в Настройките, за да ги активирате</string>
     <string name="backup_receiver_encrypted_disabled">В момента, криптираните резервни копия не са позволени,
          моля, отидете в Настройките, за да ги активирате</string>
     <string name="backup_receiver_read_permission_failed">Разрешението за четене не е предоставено, моля, направете

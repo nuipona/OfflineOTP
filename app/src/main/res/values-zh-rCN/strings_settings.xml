@@ -185,7 +185,6 @@
         <item>在各个标签之间切换（同时只能选中一个标签）</item>
     </string-array>
     <string-array name="settings_entries_backup_broadcasts">
-        <item>明文备份</item>
         <item>加密的备份</item>
     </string-array>
     <!-- Special -->

@@ -18,8 +18,6 @@
     </string>
     <string name="backup_receiver_title_backup_failed">Segurtasun-kopia egiteak huts egin du</string>
     <string name="backup_receiver_title_backup_success">Backup Arrakastatsua</string>
-    <string name="backup_receiver_plain_disabled">Ezin dira testu arrunteko segurtasun-kopiak egin,
-        joan ezarpenetara hau aktibatzeko</string>
     <string name="backup_receiver_encrypted_disabled">Ezin dira zifratutako segurtasun-kopiak egin,
         joan ezarpenetara hau aktibatzeko</string>
     <string name="backup_receiver_read_permission_failed">Ez dut irakurtzeko baimenik, eman baimena

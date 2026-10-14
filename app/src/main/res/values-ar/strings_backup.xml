@@ -12,7 +12,6 @@
     <string name="backup_dialog_msg_export_warning">هل حقا تريد تصدير قاعدة البيانات كملف JSON نص مجرّد؟ الملف يحتوي جميع المفاتيح السرية. الرجاء <b>الحفاظ عليها آمنة</b>!    </string>
     <string name="backup_receiver_title_backup_failed">فشل النسخ الاحتياطي</string>
     <string name="backup_receiver_title_backup_success">نجحت عملية النسخ الاحتياطي</string>
-    <string name="backup_receiver_plain_disabled">النسخ الاحتياطية نص-مجرّد غير مسموح بها حاليًا. الرجاء الذهاب إلى الإعدادات لتفعيلها</string>
     <string name="backup_receiver_encrypted_disabled">النسخ الاحتياطية المشفرة غير مسموح بها حاليًا. الرجاء الذهاب إلى الإعدادات لتفعيلها</string>
     <string name="backup_receiver_read_permission_failed">إذن القراءة لم يمنح. الرجاء منحه قبل محاولة النسخ الاحتياطي</string>
     <string name="backup_receiver_write_permission_failed">إذن الكتابة لم يمنح. الرجاء منحه قبل محاولة النسخ الاحتياطي</string>

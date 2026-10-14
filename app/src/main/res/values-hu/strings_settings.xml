@@ -224,7 +224,6 @@
         <item>Váltás a címkék között (egyszerre csak egy címkét lehet kiválasztani)</item>
     </string-array>
     <string-array name="settings_entries_backup_broadcasts">
-        <item>Egyszerű szöveges biztonsági mentések</item>
         <item>Titkosított biztonsági mentések</item>
     </string-array>
     <!-- Special -->

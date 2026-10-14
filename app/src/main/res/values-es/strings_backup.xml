@@ -18,7 +18,6 @@
     </string>
     <string name="backup_receiver_title_backup_failed">Falló la copia de seguridad</string>
     <string name="backup_receiver_title_backup_success">Copia de seguridad correcta</string>
-    <string name="backup_receiver_plain_disabled">Las copias de seguridad sin cifrar no están permitidas por ahora, por favor vé a los Ajutes para activarlas</string>
     <string name="backup_receiver_encrypted_disabled">Las copias de seguridad cifradas no están permitidas por ahora, por favor vé a los Ajutes para activarlas</string>
     <string name="backup_receiver_read_permission_failed">Permisos de lectura no concedidos, por favor
         hazlo antes de intentar hacer una copia de seguridad</string>

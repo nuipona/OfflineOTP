@@ -218,7 +218,6 @@ beklenmedik durumlar karşısında her zaman bir yedek barındırmak iyi bir al�
         <item>Etiketler arası geçiş (tek seferde sadece bir etiket seçilebilir)</item>
     </string-array>
     <string-array name="settings_entries_backup_broadcasts">
-        <item>Düz metin yedekler</item>
         <item>Şifrelenmiş yedekler</item>
     </string-array>
     <!-- Special -->

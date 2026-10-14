@@ -193,7 +193,6 @@
         <item>Zwischen Labels umschalten (es kann jeweils nur ein Label ausgewählt werden)</item>
     </string-array>
     <string-array name="settings_entries_backup_broadcasts">
-        <item>Klartext-Datensicherungen</item>
         <item>Verschlüsselte Datensicherung</item>
     </string-array>
     <!-- Special -->

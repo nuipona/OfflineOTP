@@ -197,7 +197,6 @@ Doordat de <b>Database encryptie</b> is ingesteld op <b>Android sleutelopslag</b
         <item>Schakel tussen tags (maar één tag tegelijk te selecteren is toegestaan)</item>
     </string-array>
     <string-array name="settings_entries_backup_broadcasts">
-        <item>Niet-versleutelde reservekopieën</item>
         <item>Versleutelde reservekopieën</item>
     </string-array>
     <!-- Special -->

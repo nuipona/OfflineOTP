@@ -10,7 +10,6 @@
     <string name="backup_dialog_msg_export_warning">Êtes-vous sûr de vouloir exporter la base de données en clair dans un fichier JSON ? Ce fichier contiendra toutes vos clés privées, <b>veuillez le placer dans un endroit sûr</b> !    </string>
     <string name="backup_receiver_title_backup_failed">La sauvegarde a échoué</string>
     <string name="backup_receiver_title_backup_success">Sauvegarde réussie</string>
-    <string name="backup_receiver_plain_disabled">Les sauvegardes en clair ne sont actuellement pas autorisées, veuillez aller dans les Paramètres afin de les activer</string>
     <string name="backup_receiver_encrypted_disabled">Les sauvegardes chiffrées ne sont actuellement pas autorisées, veuillez aller dans les Paramètres afin de les activer</string>
     <string name="backup_receiver_read_permission_failed">L\'autorisation de lecture n\'est pas accordée, veuillez le faire avant d’effectuer la sauvegarde</string>
     <string name="backup_receiver_write_permission_failed">L\'autorisation d\'écriture n\'est pas accordée, veuillez le faire avant d’effectuer la sauvegarde</string>

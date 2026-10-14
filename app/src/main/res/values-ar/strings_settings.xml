@@ -205,7 +205,6 @@
         <item>التبديل بين العلامات (إسمح فقط لعلامة واحدة في آن واحد)</item>
     </string-array>
     <string-array name="settings_entries_backup_broadcasts">
-        <item>النُّسَخ الإحتياطية نص مجرّد</item>
         <item>نسخ احتياطية مشفرة</item>
     </string-array>
     <!-- Special -->

@@ -18,8 +18,6 @@
     </string>
     <string name="backup_receiver_title_backup_failed">La còpia de seguretat ha fallat</string>
     <string name="backup_receiver_title_backup_success">S\'ha realitzat la còpia de seguretat</string>
-    <string name="backup_receiver_plain_disabled">Les còpies de seguretat en text pla no són permeses,
-        podeu activar-les a Preferències</string>
     <string name="backup_receiver_encrypted_disabled">Les còpies de seguretat xifrades no són permeses,
         podeu activar-les a Preferències</string>
     <string name="backup_receiver_read_permission_failed">No s\'ha donat permís de lectura, per favor

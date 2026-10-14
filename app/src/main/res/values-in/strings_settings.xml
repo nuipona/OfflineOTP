@@ -182,7 +182,6 @@
         <item>Beralih antara tanda (hanya izinkan satu tanda yang dipilih dalam satu waktu)</item>
     </string-array>
     <string-array name="settings_entries_backup_broadcasts">
-        <item>Cadangan teks biasa</item>
         <item>Cadangan terenkripsi</item>
     </string-array>
     <!-- Special -->

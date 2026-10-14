@@ -13,7 +13,6 @@
         Klartext-JSON-Datei exportieren? Diese Datei enthält alle deine geheimen Schlüssel. Bitte <b>sicher aufbewahren</b>!    </string>
     <string name="backup_receiver_title_backup_failed">Sicherung fehlgeschlagen</string>
     <string name="backup_receiver_title_backup_success">Sicherung erfolgreich</string>
-    <string name="backup_receiver_plain_disabled">Sicherungen als Klartext sind derzeit deaktiviert. Bitte öffne die Einstellungen, um diese zu aktivieren</string>
     <string name="backup_receiver_encrypted_disabled">Verschlüsselte Sicherungen sind derzeit deaktiviert. Bitte öffne die Einstellungen, um diese zu aktivieren</string>
     <string name="backup_receiver_read_permission_failed">Keine Lese-Berechtigung, wird aber
         zum Sichern benötigt</string>

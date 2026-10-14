@@ -16,8 +16,6 @@ kısmından OpenPGP anahtarı seçmelisiniz.    </string>
         düz metin Json dosyası olarak dışa aktarmak istiyor musunuz? Bu dosya tüm gizli anahtarlarınızı barındıracak, lütfen <b>iyi saklayınız!</b>!    </string>
     <string name="backup_receiver_title_backup_failed">Yedekleme başarısız</string>
     <string name="backup_receiver_title_backup_success">Yedekleme başarılı</string>
-    <string name="backup_receiver_plain_disabled">Düz metin biçimindeki yedeklemelere şimdilik izin verilmiyor.
-Lütfen ayarlar kısmından bu özelliği aktifleştirin</string>
     <string name="backup_receiver_encrypted_disabled">Şifrelenmiş biçimdeki yedeklemelere şimdilik izin verilmiyor.
 Lütfen ayarlar kısmından bu özelliği aktifleştirin</string>
     <string name="backup_receiver_read_permission_failed">Dosya okuma izni alınamadı. Yedek oluşturmadan önce

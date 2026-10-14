@@ -183,7 +183,6 @@
         <item>タグを切り替える (一度に 1 つのタグしか選択できない)</item>
     </string-array>
     <string-array name="settings_entries_backup_broadcasts">
-        <item>非暗号化バックアップ</item>
         <item>暗号化バックアップ</item>
     </string-array>
     <!-- Special -->

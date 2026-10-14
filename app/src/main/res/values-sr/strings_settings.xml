@@ -196,7 +196,6 @@
         <item>Пребацивање између ознака (дозвољава одабир само једне ознаке)</item>
     </string-array>
     <string-array name="settings_entries_backup_broadcasts">
-        <item>Резервне копије обичног текста</item>
         <item>Шифроване резервне копије</item>
     </string-array>
     <!-- Special -->

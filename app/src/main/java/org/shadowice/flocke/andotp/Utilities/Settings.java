@@ -481,10 +481,6 @@ public class Settings {
         return settings.getStringSet(getResString(R.string.settings_key_backup_broadcasts), Collections.emptySet());
     }
 
-    public boolean isPlainTextBackupBroadcastEnabled() {
-        return getBackupBroadcasts().contains("plain");
-    }
-
     public boolean isEncryptedBackupBroadcastEnabled() {
         return getBackupBroadcasts().contains("encrypted");
     }

@@ -18,8 +18,6 @@
     </string>
     <string name="backup_receiver_title_backup_failed">Неуспешна израда резервне копије</string>
     <string name="backup_receiver_title_backup_success">Успешна израда резервне копије</string>
-    <string name="backup_receiver_plain_disabled">Резервне копије обичног текста тренутно нису дозвољене,
-        идите у Подешавања да бисте их омогућили</string>
     <string name="backup_receiver_encrypted_disabled">Шифроване резервне копије тренутно нису дозвољене,
         идите у Подешавања да бисте их омогућили</string>
     <string name="backup_receiver_read_permission_failed">Дозвола за читање није дата, молим вас

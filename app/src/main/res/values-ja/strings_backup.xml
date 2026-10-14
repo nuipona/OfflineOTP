@@ -10,7 +10,6 @@
     <string name="backup_dialog_msg_export_warning">データベースを暗号化されていない JSON ファイルとしてエクスポートしますか？ このファイルには、すべての秘密鍵が含まれています、 <b>安全に保管してください</b> ！</string>
     <string name="backup_receiver_title_backup_failed">バックアップに失敗しました</string>
     <string name="backup_receiver_title_backup_success">バックアップに成功しました</string>
-    <string name="backup_receiver_plain_disabled">非暗号化バックアップは現在許可されていません、それらを有効にする設定に移動してください</string>
     <string name="backup_receiver_encrypted_disabled">暗号化バックアップは現在許可されていません、それらを有効にする設定に移動してください</string>
     <string name="backup_receiver_read_permission_failed">読み込み権限が付与されていないため、バックアップを実行する前に許可してください</string>
     <string name="backup_receiver_write_permission_failed">書き込み権限が付与されていないため、バックアップを実行する前に許可してください</string>

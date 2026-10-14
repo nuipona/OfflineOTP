@@ -221,7 +221,6 @@ e un contrasinal para activar esta opción</string>
         <item>Cambiar entre etiquetas (só permite unha etiqueta seleccionada cada vez)</item>
     </string-array>
     <string-array name="settings_entries_backup_broadcasts">
-        <item>Copias en texto-plano</item>
         <item>Copias cifradas</item>
     </string-array>
     <!-- Special -->

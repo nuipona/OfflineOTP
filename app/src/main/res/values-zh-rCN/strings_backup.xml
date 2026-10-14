@@ -10,7 +10,6 @@
     <string name="backup_dialog_msg_export_warning">是否确实要将数据库导出为纯文本 JSON 文件？此文件包含您的所有密钥，请注意<b>保持安全</b>！</string>
     <string name="backup_receiver_title_backup_failed">备份失败</string>
     <string name="backup_receiver_title_backup_success">备份成功</string>
-    <string name="backup_receiver_plain_disabled">目前不允许进行纯文本备份，请转到“设置”以启用它们</string>
     <string name="backup_receiver_encrypted_disabled">目前不允许加密备份，请转到“设置”以启用它们</string>
     <string name="backup_receiver_read_permission_failed">没有读取权限，请在执行备份前授予。</string>
     <string name="backup_receiver_write_permission_failed">没有写入权限，请在执行备份前授予。</string>

@@ -13,8 +13,6 @@
     <string name="backup_dialog_msg_export_warning">Вы действительно хотите экспортировать базу данных как текстовый JSON-файл? Этот файл содержит все ваши секретные ключи, пожалуйста, <b>надёжно сохраните его</b>!    </string>
     <string name="backup_receiver_title_backup_failed">Не удалось выполнить резервное копирование</string>
     <string name="backup_receiver_title_backup_success">Резервная копия создана</string>
-    <string name="backup_receiver_plain_disabled">Текстовые резервные копии не разрешены,
-включите возможность их создания в «Настройках»</string>
     <string name="backup_receiver_encrypted_disabled">Зашифрованные резервные копии не разрешены,
 включите возможность их создания в «Настройках»</string>
     <string name="backup_receiver_read_permission_failed">Нет разрешения на чтение,

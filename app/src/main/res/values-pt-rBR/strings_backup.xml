@@ -10,7 +10,6 @@
     <string name="backup_dialog_msg_export_warning">Você tem certeza de que deseja exportar o banco de dados como um arquivo JSON desprotegido? Este arquivo contém todas suas senhas, portanto <b>mantenha-o seguro</b>!    </string>
     <string name="backup_receiver_title_backup_failed">Erro ao fazer backup</string>
     <string name="backup_receiver_title_backup_success">Backup realizado com sucesso</string>
-    <string name="backup_receiver_plain_disabled">Backups desprotegidos não são permitidos,         vá até as Configurações para habilitá-los</string>
     <string name="backup_receiver_encrypted_disabled">Backups criptografados não são permitidos,         vá até as Configurações para habilitá-los</string>
     <string name="backup_receiver_read_permission_failed">A permissão de leitura não foi concedida. Por favor, conceda-a        antes de iniciar um backup</string>
     <string name="backup_receiver_write_permission_failed">A permissão de escrita não foi concedida. Por favor, conceda-a        antes de iniciar um backup</string>

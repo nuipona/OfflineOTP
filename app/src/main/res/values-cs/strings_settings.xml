@@ -225,7 +225,6 @@
         <item>Přepínání mezi štítky (v jednu chvíli lze mít vybraný pouze jeden štítek)</item>
     </string-array>
     <string-array name="settings_entries_backup_broadcasts">
-        <item>Nechráněné zálohy</item>
         <item>Šifrované zálohy</item>
     </string-array>
     <!-- Special -->
