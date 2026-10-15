@@ -110,8 +110,8 @@ class UiDecompositionSourceTest(unittest.TestCase):
             self.assertNotIn(forbidden, target)
 
     def test_converted_entry_model_and_document_boundary_keep_their_shapes(self):
-        """Entry is executed by Gradle/instrumentation only: its thumbnail members stay Java, so the
-        Java-visible shapes and the preserved semantics are pinned here at source level."""
+        """Entry is executed by Gradle/instrumentation only; these additional Java-visible shapes
+        and preserved semantics are pinned here at source level, not verified by Android execution."""
         entry = (KOTLIN / "Database/Entry.kt").read_text()
         codec = (KOTLIN / "Database/EntryJson.kt").read_text()
         contract = (KOTLIN / "Database/EntryJsonResult.kt").read_text()

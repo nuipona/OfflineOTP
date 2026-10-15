@@ -15,6 +15,8 @@ open class View {
         fun onClick(v: View)
     }
 
+    var layoutParams: ViewGroup.LayoutParams? = null
+    var contentDescription: CharSequence? = null
     var alpha: Float = 1.0f
     var translationX: Float = 0.0f
     /** The platform getter is final; the stand-in is writable so checks can size a fake view. */
@@ -36,3 +38,19 @@ class KeyEvent(private val eventAction: Int, private val eventKeyCode: Int) {
         const val KEYCODE_NUMPAD_ENTER = 160
     }
 }
+
+/** Inert layout stand-ins: no Android measurement or inflation happens here. */
+open class ViewGroup : View() {
+    open class LayoutParams(val width: Int, val height: Int) {
+        companion object { const val WRAP_CONTENT = -2 }
+    }
+}
+
+class LayoutInflater private constructor() {
+    fun inflate(resource: Int, parent: ViewGroup, attachToRoot: Boolean): View = android.widget.CheckedTextView()
+    companion object {
+        @JvmStatic fun from(context: android.content.Context): LayoutInflater = LayoutInflater()
+    }
+}
+
+object Gravity { const val CENTER = 17 }

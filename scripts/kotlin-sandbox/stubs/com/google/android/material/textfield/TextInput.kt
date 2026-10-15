@@ -4,7 +4,16 @@ package com.google.android.material.textfield
 import android.view.View
 import android.widget.EditText
 
-open class TextInputEditText : EditText()
+open class TextInputEditText : EditText {
+    constructor() : super()
+    constructor(context: android.content.Context) : super()
+    constructor(context: android.content.Context, attrs: android.util.AttributeSet?) : super()
+    constructor(context: android.content.Context, attrs: android.util.AttributeSet?, defStyleAttr: Int) : super()
+
+    var autofilledValue: android.view.autofill.AutofillValue? = null
+        private set
+    open fun autofill(value: android.view.autofill.AutofillValue?) { autofilledValue = value }
+}
 
 /**
  * The end-icon listener is recorded so the checks can drive the show/hide toggle exactly like the

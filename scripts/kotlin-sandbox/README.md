@@ -46,15 +46,16 @@ manifest.
 | `Utilities/VaultSession.kt` | Compiled with the runner and driven live (generation advances, change listeners, mutation lock); the static facade shapes are asserted. |
 | `Database/EntryJsonResult.kt` | The closed parse-error set and the owned one-use seed: `copySecret()` returns copies, `close()` wipes and is idempotent, redacted `toString()`, no generated `data class` members. |
 | `Database/EntryJson.kt` | The stored document format, executed against the functional `org.json`/`Base32`/`Hex` stand-ins: legacy field defaults, the malformed-field matrix with its closed errors, the serialized field order, and the Base32/mOTP-hex secret rules. |
-| `Database/Entry.kt` | Compiled and shape-checked only: it is non-final, has both legacy adapters, the nested `OTPType`, `COLOR_RED` and `validateSecret`; constructing it or reflecting its fields loads the Java `EntryThumbnail`, which has no class file here, so its preserved behaviour is pinned by the Python source guards instead. |
-| `Database/EntryList.kt` | Compiled and shape-checked only: its sorting/filtering API takes `Constants` enums and its entries are `Entry` objects, and neither type has a class file in this sandbox, so its behaviour stays covered by the Python source guards and `ApplicationTest`. |
+| `Database/Entry.kt` | Compiled and shape-checked only: it is non-final, has both legacy adapters, the nested `OTPType`, `COLOR_RED` and `validateSecret`; the thumbnail getter is reflected too now that `EntryThumbnail` is Kotlin; entry execution remains outside this sandbox check. |
+| `Utilities/EntryThumbnail.kt`, `Utilities/LetterBitmap.kt` | Lookup behavior and JVM signatures only; inert graphics stand-ins do not exercise rendering. |
+| `Database/EntryList.kt` | Compiled and shape-checked only: its sorting/filtering API takes `Constants` enums and its entries are `Entry` objects, and the `Constants` enums have no class file in this sandbox, so its behaviour stays covered by the Python source guards and `ApplicationTest`. |
 
 The task subclasses are compiled **against the real Java declarations** they call: `run.sh` passes
 `Settings.java`, `EncryptionHelper.java`, `BackupHelper.java`, `StorageAccessHelper.java`,
-`DatabaseHelper.java`, `KeyStoreHelper.java`, `FileHelper.java`, `EntryThumbnail.java` and
-`LetterBitmap.java` to `kotlinc` for resolution (the same mechanism already used for
+`DatabaseHelper.java`, `KeyStoreHelper.java` and `FileHelper.java` to `kotlinc` for resolution (the same mechanism already used for
 `Constants.java`). `Entry.java` is no longer among them: it is Kotlin now, and the graphical
-`EntryThumbnail`/`LetterBitmap` stay Java because their constants are Android resource ids. No class files are produced for them, so their bodies cannot be *executed*
+`EntryThumbnail.kt`/`LetterBitmap.kt` are now compiled Kotlin, using inert graphics stand-ins.
+No class files are produced for the remaining Java resolution sources, so their bodies cannot be *executed*
 here, and reflection can only see members whose signatures avoid those Java-only types; the
 remaining shapes are enforced by the Python source guards in `scripts/tests/`.
 
@@ -81,7 +82,8 @@ Still **not** covered, and therefore still dependent on the Gradle/device gates:
 
 - `View/EntryActionDialogs.kt`, `View/EntryActionTarget.kt`, `View/EntryListPresentation.kt`:
   Android views/dialogs, or APIs that take the `Entry`/`EntryList` model types.
-- Every activity, fragment, adapter, preference, receiver and worker (all still Java).
+- Every activity, fragment, credential preference, receiver and worker (all still Java), and the
+  entry-card adapter/view holder. `NumberPickerPreference` is covered below. The two small adapters below are the exceptions.
 - **Execution** of the task subclass bodies (and of `EntryPersistence`/`VaultRestoreOperation`):
   the Java resolution sources produce no class files, so `Settings`/`DatabaseHelper`/
   `EncryptionHelper` calls inside them cannot run on the desktop JVM here; only their compile-time
@@ -132,7 +134,7 @@ The entry checks are the reason the three replicas above exist: they parse the s
 format, reserialize it and compare the exact string, walk the malformed-field matrix (including the
 `MISSING_SECRET` case that the URI parser reports as its own error) and exercise the seed's
 one-use/redacted ownership and the secret rules. `Entry` itself is **not** instantiated here, so the
-constructors, adapters, enum, constants and `validateSecret` are reflected, and `EntryList` is
+constructors, adapters, enum, constants, thumbnail getter and `validateSecret` are reflected, and `EntryList` is
 compiled but not driven — both stay pinned by the Python source guards and the instrumentation tests.
 
 For the runner checks the `Handler` stand-in queues `post` calls into a process-wide fake main
@@ -178,5 +180,67 @@ curl -sS -o /tmp/kt.tgz https://registry.npmjs.org/kotlin-compiler/-/kotlin-comp
 tar xzf /tmp/kt.tgz -C /tmp && chmod +x /tmp/package/bin/kotlinc*
 ```
 
-Verified with Kotlin `2.4.21` and Temurin `25.0.2` on 2026-10-15 (40 checks). Pin your own compiler
+Verified with Kotlin `2.4.21` and Temurin `25.0.2` on 2026-10-15 (50 checks). Pin your own compiler
 when recording results; the check is only as meaningful as the versions you run it with.
+
+## Thumbnail conversion follow-up
+
+`Utilities/EntryThumbnail.kt` and `Utilities/LetterBitmap.kt` are compiled now, rather than passed as
+Java resolution sources. Checks exercise every enum name with case-insensitive lookup, rejection of
+unknown/substring matches, declaration-order fuzzy lookup, and reflection of the static Java APIs,
+getters and constructors. The source guard fingerprints all pre-conversion enum/resource mappings.
+
+The graphics additions (`Canvas`, `TextPaint`, `Color`, font constants, `Resources.obtainTypedArray`/
+`getValue`, and instantiable `TypedValue`) are **inert** compile-only stand-ins. No pixel, glyph,
+resource, typed-array recycling or vector fallback behavior is verified on the desktop. The checked-in
+Java `KotlinThumbnailInteropTest` exercises real-platform drawing and Java call sites on a device;
+it still requires the Android SDK/emulator gates. `AssetType` is intentionally public now to preserve
+its formerly public getter without Kotlin exposed-private-type errors; `LetterBitmap` is internal in
+Kotlin but public in bytecode (no package-private Kotlin visibility).
+
+## Small UI adapters and autofill follow-up
+
+- `View/TagsAdapter.kt` compiles and executes against minimal `ArrayAdapter`/`CheckedTextView` fakes:
+  sorted names, ordered active tags, unknown toggles and notification forwarding, borrowed backing
+  maps, copied snapshots, replacement versus merge, recycled-row rebinding, empty-all-active behavior
+  and boxed-null states. `createTagsMap` is type-checked against real `Entry`/`Settings` but not
+  executed: Java `Settings` has no class file here. The constructor's inherited `ArrayAdapter` item
+  order is deliberately not changed; only rendered rows/getTags are initially sorted, as before.
+- `View/ThumbnailSelectionAdapter.kt` is compiled and its JVM constructors/filter/Object-returning
+  `getItem`/item IDs are reflected. Its instance methods are not executed here because constructing
+  real `Settings` needs the Java/Android runtime. Filtering and recycling have device tests instead.
+- `View/AutoFillable/AutoFillableTextInputEditText.kt` is compiled and driven with text/non-text values,
+  a cleared listener, and a recording fake superclass to pin delegate-before-notify order. Its three
+  constructors and nested Java SAM listener are reflected. Passing null only verifies the subclass
+  guard with this fake; it does not claim the real superclass tolerates null.
+
+The adapter, layout inflater, checked text/image/grid views, `AttributeSet`, `AutofillValue`, and Material
+constructor/autofill stand-ins are approximations only. No platform adapter observers, actual XML,
+Material styling, autofill service, main-thread layout or real text insertion is exercised here.
+`KotlinSmallAdaptersInteropTest` provides Java-side and real-platform checks for those boundaries,
+including locale-sensitive picker filters, ordinals/index fallback and the remembered-tag factory;
+it has not been executed in this environment.
+
+## Number preference and hideable-dialog follow-up
+
+- `Preferences/NumberPickerPreference.kt` compiles and executes with recording fake `DialogPreference`,
+  `NumberPicker` and `FrameLayout` surfaces. Checks cover defaults, explicit bounds/wrapping, typed-array
+  recycling, layout parameters, binding, summary/persistence forwarding, cancel/veto/accept paths,
+  focus-clear-before-listener order, default parsing, restored value/fallback, and protected/open Java
+  hook/constructor/static-constant shapes. No real PreferenceManager persistence is exercised.
+- `Dialogs/HideableDialog.kt` is compiled against real Java `Settings`, and its constructor, static
+  `ShowHidableDialog` spelling, listener interfaces and extendability are reflected. Its body is
+  **not executed**: `Settings` has no sandbox class file and the compile-only `AppCompatDialog` has no
+  content inflation/window. Source guards pin immediate checkbox persistence and the hide flag guard.
+
+The R generator reads `declare-styleable` in values XML to emit **arrays** and distinct deterministic
+attribute slots for `NumberPickerPreference`. Those stand-in indexes are not aapt's resource IDs or
+ordering, and the fake typed arrays use explicitly supplied values, not XML/theme/reference resolution.
+`Context.obtainStyledAttributes` is open only for those fakes. `DialogPreference`/picker state and
+clearFocus are recorders, not platform lifecycle, range enforcement, text-edit commit, focus or UI.
+
+The Java `KotlinNumberPickerPreferenceInteropTest` adds real application-XML/widget/listener checks
+with recorded number persistence. `KotlinHideableDialogInteropTest` covers real notice layout listeners,
+settings writes and the already-hidden helper branch without showing a window; unsuppressed showing,
+window/lifecycle behavior and real preference disk I/O remain device/manual acceptance work. Neither
+instrumentation class has been compiled or run here; only the desktop checks are executed.

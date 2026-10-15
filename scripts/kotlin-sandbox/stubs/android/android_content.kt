@@ -8,6 +8,8 @@ import android.content.res.Resources
 import android.net.Uri
 
 open class Context {
+    /** Open only to let the preference check supply explicit fake attribute values. */
+    open fun obtainStyledAttributes(attrs: android.util.AttributeSet?, styleable: IntArray): android.content.res.TypedArray = android.content.res.TypedArray()
     val theme: Resources.Theme get() = Resources.Theme()
     val resources: Resources get() = Resources()
     fun getString(resId: Int): String = "stub"

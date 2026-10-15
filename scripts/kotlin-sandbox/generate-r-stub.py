@@ -15,6 +15,7 @@ Usage: python3 scripts/kotlin-sandbox/generate-r-stub.py [--check]
 from pathlib import Path
 import re
 import sys
+import xml.etree.ElementTree as ET
 from collections import defaultdict
 
 SANDBOX = Path(__file__).resolve().parent
@@ -51,7 +52,24 @@ def collect():
     return groups
 
 
+def styleable_declarations():
+    # Styleable arrays are not scalar resource ids. Give each local attr a distinct, stable fake
+    # slot so the picker checks can supply values by name. This does not emulate aapt ordering,
+    # XML/reference resolution, themes, or real resource ids.
+    declarations = {}
+    for file in sorted((ROOT / "app/src/main/res/values").glob("*.xml")):
+        for node in ET.parse(file).getroot().findall("declare-styleable"):
+            declarations[node.attrib["name"]] = sorted(
+                attr.attrib["name"].replace(":", "_") for attr in node.findall("attr"))
+    return declarations
+
+
 def render(groups):
+    declarations = styleable_declarations()
+    styleable_indexes = {
+        f"{style}_{attr}": index
+        for style, attrs in declarations.items() for index, attr in enumerate(attrs)
+    }
     lines = [
         "// Sandbox-only stand-in for the generated resource class.",
         "// Regenerate with scripts/kotlin-sandbox/generate-r-stub.py after changing run.sh's",
@@ -63,7 +81,16 @@ def render(groups):
     for group in sorted(groups):
         lines.append(f"    object {group} {{")
         for name in sorted(groups[group]):
-            lines.append(f"        const val {name} = 0")
+            if group == "styleable":
+                if name in declarations:
+                    slots = ", ".join(str(i) for i in range(len(declarations[name])))
+                    lines.append(f"        @JvmField val {name} = intArrayOf({slots})")
+                elif name in styleable_indexes:
+                    lines.append(f"        const val {name} = {styleable_indexes[name]}")
+                else:
+                    raise SystemExit(f"unknown styleable reference: {name}")
+            else:
+                lines.append(f"        const val {name} = 0")
         lines.append("    }")
     lines.append("}")
     lines.append("")
