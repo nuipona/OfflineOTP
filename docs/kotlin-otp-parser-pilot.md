@@ -54,7 +54,7 @@ Intentional stricter rejections:
 
 Query `+` means space consistently (including repeated tags); `%2B` means a literal plus. Path `+` remains literal. This removes differences between Android query helper overloads. Generated andOTP URIs percent-encode values, so their literal plus signs remain intact. Existing malformed mOTP URIs or permissively encoded external labels may now fail; the parser does not silently rewrite them.
 
-Backup framing, database schema, KDF settings and token algorithms are **not** changed by this pilot. Existing JSON parsing is not converted to Kotlin.
+Backup framing, database schema, KDF settings and token algorithms are **not** changed by this pilot. The JSON/document path was not converted by this pilot either; it became Kotlin later, in the entry batch of the [conversion record](kotlin-extracted-helpers.md) (`EntryJson`/`EntryJsonResult`, with `Entry` reduced to an adapter), where the malformed-input and canonical-secret rules above were applied to the document path as well.
 
 ## Build changes and provenance
 

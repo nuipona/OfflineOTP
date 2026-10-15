@@ -40,16 +40,21 @@ manifest.
 | `Tasks/EncryptedBackupTask.kt` | Both Java constructors (generic erasure makes them reflectable), the `Mode` enum and the class-level extendability asserted; the snapshot/canWrite policy stays source-guarded. |
 | `Tasks/EncryptedRestoreTask.kt` | Constructor and protected-member shapes asserted against the real `EncryptedBackupHeader`/`EncryptionHelper` declarations. |
 | `Tasks/ChangeEncryptionTask.kt`, `Tasks/ChangeCredentialsTask.kt`, `Tasks/FinishIntroTask.kt` | Class-level shapes and (for the intro result DTO, whose fields are JDK types) both constructors and public final fields asserted; the credential/encryption-change members reference Java-only signature types and are covered by the Python source guards. |
-| `Utilities/OtpUriParser.kt`, `Utilities/VaultContracts.kt` | Now compilable here: the stub set gained `Base32`/JSON stand-ins and the real `Entry.java` is a resolution source. |
+| `Utilities/OtpUriParser.kt`, `Utilities/VaultContracts.kt` | Now compilable here: the stub set gained functional `Base32`/`org.json` stand-ins and the converted `Entry`/`EntryJson` are compiled here too, so the parser's secret rules are executed through the entry batch. |
 | `Utilities/EntryPersistence.kt` | Type-checked against the real `DatabaseHelper`/`BackupHelper` declarations, including its Kotlin construction of the converted `EncryptedBackupTask`; not executed here. |
 | `Utilities/VaultRestoreOperation.kt` | Type-checked against the real `DatabaseHelper`/`Settings` declarations; its merge/destroy policy stays covered by the Python source guards and the repository's tests. |
 | `Utilities/VaultSession.kt` | Compiled with the runner and driven live (generation advances, change listeners, mutation lock); the static facade shapes are asserted. |
+| `Database/EntryJsonResult.kt` | The closed parse-error set and the owned one-use seed: `copySecret()` returns copies, `close()` wipes and is idempotent, redacted `toString()`, no generated `data class` members. |
+| `Database/EntryJson.kt` | The stored document format, executed against the functional `org.json`/`Base32`/`Hex` stand-ins: legacy field defaults, the malformed-field matrix with its closed errors, the serialized field order, and the Base32/mOTP-hex secret rules. |
+| `Database/Entry.kt` | Compiled and shape-checked only: it is non-final, has both legacy adapters, the nested `OTPType`, `COLOR_RED` and `validateSecret`; constructing it or reflecting its fields loads the Java `EntryThumbnail`, which has no class file here, so its preserved behaviour is pinned by the Python source guards instead. |
+| `Database/EntryList.kt` | Compiled and shape-checked only: its sorting/filtering API takes `Constants` enums and its entries are `Entry` objects, and neither type has a class file in this sandbox, so its behaviour stays covered by the Python source guards and `ApplicationTest`. |
 
 The task subclasses are compiled **against the real Java declarations** they call: `run.sh` passes
 `Settings.java`, `EncryptionHelper.java`, `BackupHelper.java`, `StorageAccessHelper.java`,
-`DatabaseHelper.java`, `KeyStoreHelper.java`, `FileHelper.java`, `EntryThumbnail.java`,
-`LetterBitmap.java` and `Entry.java` to `kotlinc` for resolution (the same mechanism already used
-for `Constants.java`). No class files are produced for them, so their bodies cannot be *executed*
+`DatabaseHelper.java`, `KeyStoreHelper.java`, `FileHelper.java`, `EntryThumbnail.java` and
+`LetterBitmap.java` to `kotlinc` for resolution (the same mechanism already used for
+`Constants.java`). `Entry.java` is no longer among them: it is Kotlin now, and the graphical
+`EntryThumbnail`/`LetterBitmap` stay Java because their constants are Android resource ids. No class files are produced for them, so their bodies cannot be *executed*
 here, and reflection can only see members whose signatures avoid those Java-only types; the
 remaining shapes are enforced by the Python source guards in `scripts/tests/`.
 
@@ -74,8 +79,8 @@ transformation actually in use.
 
 Still **not** covered, and therefore still dependent on the Gradle/device gates:
 
-- `Database/EntryList.kt`, `View/EntryActionDialogs.kt`, `View/EntryActionTarget.kt`,
-  `View/EntryListPresentation.kt`: Android views/dialogs or the `Entry` model internals.
+- `View/EntryActionDialogs.kt`, `View/EntryActionTarget.kt`, `View/EntryListPresentation.kt`:
+  Android views/dialogs, or APIs that take the `Entry`/`EntryList` model types.
 - Every activity, fragment, adapter, preference, receiver and worker (all still Java).
 - **Execution** of the task subclass bodies (and of `EntryPersistence`/`VaultRestoreOperation`):
   the Java resolution sources produce no class files, so `Settings`/`DatabaseHelper`/
@@ -96,8 +101,24 @@ what Java callers expect.
 
 Does **not** prove: anything about Android runtime behaviour (the stubs are approximations, not the
 platform), resource/manifest wiring, `Looper`/`Handler` timing on a real main thread, `KeyEvent`
-delivery, `commons-codec` behaviour (the `Hex` stub is a stand-in), Java-side compilation of the
-callers (no `javac` here), lint, packaging, signing or reproducibility.
+delivery, the platform's `org.json`/`commons-codec`/`android.net.Uri` behaviour beyond the replicated
+subsets described below, Java-side compilation of the callers (no `javac` here), lint, packaging,
+signing or reproducibility.
+
+The entry batch made three more stand-ins functional **replicas** rather than inert types, so the
+new checks are only as good as their fidelity. `org.json.JSONObject`/`JSONArray` implement the
+constructors (from text and from parsed values), `put`/`get`/`getString`/`getLong`/`getInt`/
+`getJSONObject`/`getJSONArray`/`has`/`keys`/`length` and the `opt*` fallbacks the entry code uses;
+they keep insertion order for `keys()` and for `toString()`, which emits no whitespace (so a
+reserialized document compares byte-for-byte with the stored fixtures), treat `put(name, null)` as a
+removal and integral literals as `Long`, and throw `JSONException` for a missing `get`. They do
+**not** implement `JSONTokener`, `remove`, `isNull`, `optJSONObject`, duplicate-key rejection or
+indenting, and duplicate keys keep the last value. `commons-codec` `Base32` implements the RFC 4648
+standard padded uppercase alphabet (`decode`, `encode`, `encodeAsString`; other characters throw) and
+`Hex` only the lowercase `encodeHex(byte[])`/`decodeHex(String|CharArray)` pair the model calls.
+`android.net.Uri` is a minimal functional parser: a `Builder` with
+`scheme`/`authority`/`appendPath`/`appendQueryParameter`/`clearQuery`/`build`, decoded
+`getQueryParameter`/`getQueryParameters`, and `parse`/`fromFile` that only echo their input.
 
 Two stubs are *replications* rather than inert types and are called out for that reason:
 `TypedValue.applyDimension` reimplements the documented AOSP density formula (so the density-dependent
@@ -106,6 +127,13 @@ expectations for `DimensionConverter` are only as good as that formula), and `Vi
 overridden that way, and no platform timing is exercised). Kotlin objects also add an
 `INSTANCE` field and static forwarders, and a private constructor produces one synthetic
 `public` bridge — both are inherent to Kotlin, not tested here.
+
+The entry checks are the reason the three replicas above exist: they parse the stored document
+format, reserialize it and compare the exact string, walk the malformed-field matrix (including the
+`MISSING_SECRET` case that the URI parser reports as its own error) and exercise the seed's
+one-use/redacted ownership and the secret rules. `Entry` itself is **not** instantiated here, so the
+constructors, adapters, enum, constants and `validateSecret` are reflected, and `EntryList` is
+compiled but not driven — both stay pinned by the Python source guards and the instrumentation tests.
 
 For the runner checks the `Handler` stand-in queues `post` calls into a process-wide fake main
 loop that the checks drain deterministically (the worker threads are real, so delivery order is
@@ -150,5 +178,5 @@ curl -sS -o /tmp/kt.tgz https://registry.npmjs.org/kotlin-compiler/-/kotlin-comp
 tar xzf /tmp/kt.tgz -C /tmp && chmod +x /tmp/package/bin/kotlinc*
 ```
 
-Verified with Kotlin `2.4.21` and Temurin `25.0.2` on 2026-10-15 (35 checks). Pin your own compiler
+Verified with Kotlin `2.4.21` and Temurin `25.0.2` on 2026-10-15 (40 checks). Pin your own compiler
 when recording results; the check is only as meaningful as the versions you run it with.

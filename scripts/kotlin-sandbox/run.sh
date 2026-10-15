@@ -43,6 +43,10 @@ fi
 # on the full Android/AndroidX graph (dialogs, adapters, preferences, activities) are deliberately
 # absent: see README.md for the list and the reason.
 APP_SOURCES=(
+    "$KOTLIN_APP/Database/EntryJsonResult.kt"
+    "$KOTLIN_APP/Database/EntryJson.kt"
+    "$KOTLIN_APP/Database/Entry.kt"
+    "$KOTLIN_APP/Database/EntryList.kt"
     "$KOTLIN_APP/Utilities/InputPolicy.kt"
     "$KOTLIN_APP/Utilities/OtpParseResult.kt"
     "$KOTLIN_APP/Utilities/OtpUriParser.kt"
@@ -110,7 +114,6 @@ JAVA_SOURCES=(
     "$ROOT/app/src/main/java/org/shadowice/flocke/andotp/Utilities/FileHelper.java"
     "$ROOT/app/src/main/java/org/shadowice/flocke/andotp/Utilities/EntryThumbnail.java"
     "$ROOT/app/src/main/java/org/shadowice/flocke/andotp/Utilities/LetterBitmap.java"
-    "$ROOT/app/src/main/java/org/shadowice/flocke/andotp/Database/Entry.java"
 )
 
 rm -rf "$OUT"

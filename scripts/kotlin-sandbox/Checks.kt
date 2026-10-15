@@ -22,6 +22,11 @@ import org.shadowice.flocke.andotp.Tasks.TaskOutcome
 import org.shadowice.flocke.andotp.Tasks.TaskStart
 import org.shadowice.flocke.andotp.Tasks.TaskState
 import org.shadowice.flocke.andotp.Tasks.UiBasedBackgroundTask
+import org.shadowice.flocke.andotp.Database.Entry
+import org.shadowice.flocke.andotp.Database.EntryJson
+import org.shadowice.flocke.andotp.Database.EntryJsonError
+import org.shadowice.flocke.andotp.Database.EntryJsonResult
+import org.shadowice.flocke.andotp.Database.ValidatedEntry
 import org.shadowice.flocke.andotp.Utilities.BoundedInputReader
 import org.shadowice.flocke.andotp.Utilities.ConfirmedPasswordTransformationHelper
 import org.shadowice.flocke.andotp.Utilities.DimensionConverter
@@ -73,6 +78,8 @@ import androidx.recyclerview.widget.RecyclerView
 import com.google.android.material.textfield.TextInputEditText
 import com.google.android.material.textfield.TextInputLayout
 
+import org.json.JSONObject
+
 import java.io.ByteArrayInputStream
 import java.io.IOException
 import java.io.InputStream
@@ -115,6 +122,33 @@ private fun expectThrows(type: Class<out Throwable>, body: () -> Unit) {
         throw AssertionError("Expected ${type.simpleName}, got ${t.javaClass.name}: ${t.message}")
     }
     throw AssertionError("Expected ${type.simpleName}, nothing was thrown")
+}
+
+// --- entry document helpers (the stored JSON format) -------------------------------------------
+
+// The seed "1234567890": canonical, unpadded Base32; every fixture below uses it.
+private const val ENTRY_SEED = "GEZDGNBVGY3TQOJQ"
+
+/** The document the previous Java serializer produced for a TOTP entry, in field order. */
+private const val STORED_ENTRY_JSON =
+    "{\"secret\":\"IRQXGICTPFZXIZLNEBUXG5BAONUWG2DFOI======\",\"issuer\":\"\"," +
+            "\"label\":\"5 von 5 Sterne\",\"digits\":6,\"type\":\"TOTP\",\"algorithm\":\"SHA1\"," +
+            "\"thumbnail\":\"Default\",\"last_used\":0,\"used_frequency\":0,\"period\":30," +
+            "\"tags\":[\"test1\",\"test2\"]}"
+
+private fun entryDocument(secret: String = ENTRY_SEED, label: String = "synthetic"): JSONObject =
+    JSONObject().put("secret", secret).put("label", label)
+
+private fun entryValue(json: JSONObject): ValidatedEntry {
+    val result = EntryJson.parse(json)
+    expect(result is EntryJsonResult.Success, { "expected a parsed entry, got ${result}" })
+    return (result as EntryJsonResult.Success).value
+}
+
+private fun entryError(json: JSONObject): EntryJsonError {
+    val result = EntryJson.parse(json)
+    expect(result is EntryJsonResult.Failure, { "expected a rejected entry, got Success" })
+    return (result as EntryJsonResult.Failure).error
 }
 
 private fun ascii(text: String): ByteArray = text.toByteArray(StandardCharsets.US_ASCII)
@@ -517,6 +551,259 @@ fun main() {
         InputPolicy.tokenParameters(86400, 9, Long.MAX_VALUE - 1)
 
         expect(BoundedInputReader.MAX_DOCUMENT_BYTES == 16 * 1024 * 1024, { "document byte limit" })
+    }
+
+    check("entry documents keep the stored format, field order and defaults") {
+        val parsed = entryValue(JSONObject(STORED_ENTRY_JSON))
+        try {
+            expect(parsed.kind == OtpKind.TOTP, { "kind" })
+            expect(parsed.label == "5 von 5 Sterne", { "label" })
+            expect(parsed.issuer.isEmpty(), { "issuer" })
+            expect(parsed.period == 30 && parsed.digits == 6 && parsed.counter == 0L, { "OTP parameters" })
+            expect(parsed.algorithm == OtpHashAlgorithm.SHA1, { "algorithm" })
+            expect(parsed.thumbnailName == "Default", { "thumbnail" })
+            expect(parsed.tags == listOf("test1", "test2"), { "tags" })
+            expect(parsed.lastUsed == 0L && parsed.usedFrequency == 0L, { "usage metadata" })
+            expect(parsed.copySecret().contentEquals("Das System ist sicher".toByteArray(StandardCharsets.UTF_8)),
+                    { "seed" })
+
+            // The stored format is the Java serializer's: same names, same order, same values.
+            val written = EntryJson.serialize(parsed.kind, parsed.copySecret(), parsed.issuer, parsed.label,
+                    parsed.digits, parsed.period, parsed.counter, parsed.algorithm, parsed.thumbnailName!!,
+                    parsed.lastUsed, parsed.usedFrequency, parsed.tags)
+            expect(written.toString() == STORED_ENTRY_JSON, { "stored form changed: $written" })
+            expect(written.keys().asSequence().toList() == listOf("secret", "issuer", "label", "digits", "type",
+                    "algorithm", "thumbnail", "last_used", "used_frequency", "period", "tags"),
+                    { "field order changed: ${written.keys().asSequence().toList()}" })
+        } finally {
+            parsed.close()
+        }
+
+        // A legacy document that predates most fields keeps the documented defaults.
+        val legacy = entryValue(JSONObject().put("secret", ENTRY_SEED).put("label", "legacy"))
+        try {
+            expect(legacy.kind == OtpKind.TOTP && legacy.period == 30 && legacy.digits == 6, { "legacy defaults" })
+            expect(legacy.counter == 0L && legacy.algorithm == OtpHashAlgorithm.SHA1, { "legacy parameters" })
+            expect(legacy.issuer.isEmpty() && legacy.tags.isEmpty(), { "legacy text" })
+            expect(legacy.thumbnailName == null && legacy.lastUsed == 0L && legacy.usedFrequency == 0L,
+                    { "legacy metadata" })
+        } finally {
+            legacy.close()
+        }
+
+        // Steam keeps its own digit default, and a document may carry numbers as strings.
+        val steam = entryValue(entryDocument().put("type", "STEAM"))
+        try {
+            expect(steam.kind == OtpKind.STEAM && steam.digits == 5, { "Steam digit default" })
+        } finally {
+            steam.close()
+        }
+        val strings = entryValue(entryDocument().put("period", "0030").put("digits", "8"))
+        try {
+            expect(strings.period == 30 && strings.digits == 8, { "numeric strings" })
+        } finally {
+            strings.close()
+        }
+
+        // HOTP writes its counter and no period; TOTP writes its period and no counter.
+        val hotp = EntryJson.serialize(OtpKind.HOTP, ascii("12345678901234567890"), "", "hotp", 8, 30, 42L,
+                OtpHashAlgorithm.SHA256, "GitHub", 5L, 7L, listOf("work"))
+        expect(hotp.getString("type") == "HOTP" && hotp.getString("algorithm") == "SHA256", { "HOTP fields" })
+        expect(hotp.getLong("counter") == 42L && !hotp.has("period"), { "HOTP counter/period" })
+        expect(hotp.getLong("last_used") == 5L && hotp.getLong("used_frequency") == 7L, { "usage metadata" })
+        expect(hotp.getJSONArray("tags").getString(0) == "work", { "tags array" })
+        val totp = EntryJson.serialize(OtpKind.TOTP, ascii("12345678901234567890"), "ACME", "totp", 6, 60, 0L,
+                OtpHashAlgorithm.SHA1, "Default", 0L, 0L, emptyList())
+        expect(totp.getInt("period") == 60 && !totp.has("counter"), { "TOTP period/counter" })
+        expect(totp.getString("issuer") == "ACME" && totp.getJSONArray("tags").length() == 0, { "TOTP fields" })
+    }
+
+    check("entry documents reject malformed fields with a closed error set") {
+        expect(EntryJsonError.values().map { it.name } == listOf("INVALID_TEXT", "TEXT_TOO_LONG",
+                "MISSING_SECRET", "INVALID_SECRET", "INVALID_NUMBER", "MISSING_COUNTER",
+                "INVALID_PARAMETERS", "UNSUPPORTED_TYPE", "INVALID_ALGORITHM", "INVALID_TAGS", "TOO_MANY_TAGS"),
+                { "the error set is no longer closed: ${EntryJsonError.values().map { it.name }}" })
+
+        // Same cases the device test EntryInputSecurityTest asserts an exception for.
+        expect(entryError(entryDocument().put("period", 0)) == EntryJsonError.INVALID_PARAMETERS, { "period 0" })
+        expect(entryError(entryDocument().put("period", -1)) == EntryJsonError.INVALID_PARAMETERS, { "period -1" })
+        expect(entryError(entryDocument().put("period", 86401)) == EntryJsonError.INVALID_PARAMETERS, { "period max" })
+        expect(entryError(entryDocument().put("period", 4294967326L)) == EntryJsonError.INVALID_NUMBER,
+                { "period beyond an int" })
+        expect(entryError(entryDocument().put("period", 1.5)) == EntryJsonError.INVALID_NUMBER, { "period 1.5" })
+        expect(entryError(entryDocument().put("period", "1.5")) == EntryJsonError.INVALID_NUMBER,
+                { "period \"1.5\"" })
+        expect(entryError(entryDocument().put("period", "9223372036854775808")) == EntryJsonError.INVALID_NUMBER,
+                { "period overflow" })
+        expect(entryError(entryDocument().put("digits", 10)) == EntryJsonError.INVALID_PARAMETERS, { "digits 10" })
+        expect(entryError(entryDocument().put("digits", 0)) == EntryJsonError.INVALID_PARAMETERS, { "digits 0" })
+        expect(entryError(entryDocument().put("type", "STEAM").put("digits", 6)) == EntryJsonError.INVALID_PARAMETERS,
+                { "Steam digits" })
+
+        // Counter-based entries require a usable counter.
+        expect(entryError(entryDocument().put("type", "HOTP")) == EntryJsonError.MISSING_COUNTER,
+                { "missing HOTP counter" })
+        expect(entryError(entryDocument().put("type", "HOTP").put("counter", Long.MAX_VALUE)) ==
+                EntryJsonError.INVALID_PARAMETERS, { "HOTP counter ceiling" })
+        expect(entryError(entryDocument().put("type", "HOTP").put("counter", -1)) == EntryJsonError.INVALID_PARAMETERS,
+                { "negative HOTP counter" })
+        val counter = entryValue(entryDocument().put("type", "HOTP").put("counter", 42L))
+        try {
+            expect(counter.kind == OtpKind.HOTP && counter.counter == 42L, { "HOTP counter" })
+        } finally {
+            counter.close()
+        }
+
+        // Text fields: missing, JSON null and non-string values all reject, names stay case-sensitive.
+        expect(entryError(JSONObject().put("label", "no secret")) == EntryJsonError.MISSING_SECRET,
+                { "missing secret" })
+        expect(entryError(entryDocument().put("secret", JSONObject.NULL)) == EntryJsonError.INVALID_TEXT,
+                { "null secret" })
+        expect(entryError(entryDocument().put("secret", 5)) == EntryJsonError.INVALID_TEXT, { "numeric secret" })
+        expect(entryError(JSONObject().put("secret", ENTRY_SEED)) == EntryJsonError.INVALID_TEXT, { "missing label" })
+        expect(entryError(entryDocument().put("label", 5)) == EntryJsonError.INVALID_TEXT, { "numeric label" })
+        expect(entryError(entryDocument().put("type", "totp")) == EntryJsonError.UNSUPPORTED_TYPE,
+                { "lowercase type" })
+        expect(entryError(entryDocument().put("type", 7)) == EntryJsonError.INVALID_TEXT, { "numeric type" })
+        expect(entryError(entryDocument().put("algorithm", "sha1")) == EntryJsonError.INVALID_ALGORITHM,
+                { "lowercase algorithm" })
+        expect(entryError(entryDocument().put("algorithm", 5)) == EntryJsonError.INVALID_TEXT, { "numeric algorithm" })
+        expect(entryError(entryDocument().put("label", "x".repeat(InputPolicy.MAX_TEXT_CHARS + 1))) ==
+                EntryJsonError.TEXT_TOO_LONG, { "oversized label" })
+
+        // Seeds must be canonical Base32 and stay within the seed bounds.
+        expect(entryError(entryDocument(secret = "")) == EntryJsonError.INVALID_SECRET, { "empty seed" })
+        expect(entryError(entryDocument(secret = "!!!")) == EntryJsonError.INVALID_SECRET, { "non-Base32 seed" })
+        expect(entryError(entryDocument(secret = "$ENTRY_SEED=")) == EntryJsonError.INVALID_SECRET,
+                { "non-canonical seed" })
+        expect(entryError(entryDocument(secret = "A".repeat(InputPolicy.MAX_SECRET_BYTES * 2 + 1))) ==
+                EntryJsonError.INVALID_SECRET, { "oversized seed" })
+
+        // Tags: count, element type and length are all bounded.
+        val tooManyTags = org.json.JSONArray()
+        for (index in 0..InputPolicy.MAX_TAGS) tooManyTags.put("tag")
+        expect(entryError(entryDocument().put("tags", tooManyTags)) == EntryJsonError.TOO_MANY_TAGS, { "tag count" })
+        expect(entryError(entryDocument().put("tags", org.json.JSONArray().put(42))) == EntryJsonError.INVALID_TAGS,
+                { "numeric tag" })
+        expect(entryError(entryDocument().put("tags", "not an array")) == EntryJsonError.INVALID_TAGS,
+                { "tags not an array" })
+        expect(entryError(entryDocument().put("tags", org.json.JSONArray().put("x".repeat(InputPolicy.MAX_TAG_CHARS + 1)))) ==
+                EntryJsonError.TEXT_TOO_LONG, { "oversized tag" })
+
+        // Seeds are accepted in either letter case and without padding.
+        val lower = entryValue(entryDocument(secret = ENTRY_SEED.lowercase()))
+        try {
+            expect(lower.copySecret().contentEquals(ascii("1234567890")), { "lowercase seed" })
+        } finally {
+            lower.close()
+        }
+
+        // Display metadata is best-effort: an unknown/oversized/absent name is not a rejection.
+        val unknownThumbnail = entryValue(entryDocument().put("thumbnail", "NotAThumbnail"))
+        try {
+            expect(unknownThumbnail.thumbnailName == "NotAThumbnail", { "unknown thumbnail name carried" })
+        } finally {
+            unknownThumbnail.close()
+        }
+        val oversizedThumbnail = entryValue(entryDocument().put("thumbnail", "x".repeat(InputPolicy.MAX_TEXT_CHARS + 1)))
+        try {
+            expect(oversizedThumbnail.thumbnailName == null, { "oversized thumbnail name dropped" })
+        } finally {
+            oversizedThumbnail.close()
+        }
+        val unreadableUsage = entryValue(entryDocument().put("last_used", "x").put("used_frequency", 1.5))
+        try {
+            expect(unreadableUsage.lastUsed == 0L && unreadableUsage.usedFrequency == 1L,
+                    { "usage fallbacks: ${unreadableUsage.lastUsed}/${unreadableUsage.usedFrequency}" })
+        } finally {
+            unreadableUsage.close()
+        }
+    }
+
+    check("entry document values are one-use, redacted and wipe their seed") {
+        val value = entryValue(entryDocument(label = "redact-me"))
+        val seedField = ValidatedEntry::class.java.getDeclaredField("seed")
+        seedField.isAccessible = true
+        val seed = seedField.get(value) as ByteArray
+        expect(seed.contentEquals(ascii("1234567890")), { "stored seed" })
+
+        val copy = value.copySecret()
+        copy.fill(0)
+        expect(value.copySecret().contentEquals(ascii("1234567890")),
+                { "a returned copy must not be the stored seed" })
+        expect(!value.toString().contains("redact-me") && !value.toString().contains("GEZD"),
+                { "value diagnostics leaked: $value" })
+        value.close()
+        expect(seed.all { it == 0.toByte() }, { "close() did not wipe the stored seed" })
+        value.close()
+        expectThrows(IllegalStateException::class.java) { value.copySecret() }
+
+        val success = EntryJsonResult.Success(entryValue(entryDocument()))
+        expect(!success.toString().contains("GEZD") && !success.toString().contains("synthetic"),
+                { "success diagnostics leaked: $success" })
+        (success.value).close()
+
+        val failure = EntryJson.parse(entryDocument(secret = "not-a-seed"))
+        expect(failure is EntryJsonResult.Failure, { "invalid seed accepted" })
+        expect(failure.toString() == "Failure(error=INVALID_SECRET)", { "failure diagnostics: $failure" })
+    }
+
+    check("entry secret checks keep the Base32 and mOTP hex rules") {
+        expect(Entry.validateSecret(ENTRY_SEED, Entry.OTPType.TOTP), { "canonical Base32" })
+        expect(Entry.validateSecret(ENTRY_SEED.lowercase(), Entry.OTPType.TOTP), { "lowercase Base32" })
+        expect(Entry.validateSecret("IRQXGICTPFZXIZLNEBUXG5BAONUWG2DFOI======", Entry.OTPType.TOTP),
+                { "padded Base32" })
+        expect(!Entry.validateSecret("$ENTRY_SEED=", Entry.OTPType.TOTP), { "non-canonical Base32" })
+        expect(!Entry.validateSecret("", Entry.OTPType.TOTP), { "empty Base32" })
+        expect(!Entry.validateSecret(null, Entry.OTPType.TOTP), { "null Base32" })
+        expect(!Entry.validateSecret("!!!", Entry.OTPType.TOTP), { "invalid Base32" })
+        expect(!Entry.validateSecret("A".repeat(InputPolicy.MAX_SECRET_BYTES * 2 + 1), Entry.OTPType.TOTP),
+                { "oversized Base32" })
+        expect(!Entry.validateSecret("GEZDGNBVGY3TQOJQ", Entry.OTPType.MOTP), { "Base32 is not mOTP hex" })
+        expect(Entry.validateSecret("0123456789abcdef", Entry.OTPType.MOTP), { "mOTP hex" })
+        expect(Entry.validateSecret("0123456789ABCDEF", Entry.OTPType.MOTP), { "uppercase mOTP hex" })
+        expect(!Entry.validateSecret("012", Entry.OTPType.MOTP), { "odd mOTP hex" })
+        // The historical check accepted an empty mOTP secret; commons-codec decodes it to nothing.
+        expect(Entry.validateSecret("", Entry.OTPType.MOTP), { "empty mOTP hex" })
+
+        expect(EntryJson.decodeBase32Secret(ENTRY_SEED)!!.contentEquals(ascii("1234567890")),
+                { "decodeBase32Secret" })
+        expect(EntryJson.decodeBase32Secret(null) == null, { "null seed" })
+        expect(EntryJson.decodeBase32Secret("$ENTRY_SEED=") == null, { "non-canonical seed" })
+    }
+
+    check("the converted entry class keeps its Java-visible shapes") {
+        val entry = Entry::class.java
+        expect(Modifier.isPublic(entry.modifiers), { "Entry is not public" })
+        expect(!Modifier.isFinal(entry.modifiers), { "Entry must stay extendable like the Java class" })
+        expect(Entry.OTPType.values().map { it.name } == listOf("TOTP", "HOTP", "MOTP", "STEAM"),
+                { "OTPType constants changed" })
+        expect(Entry.COLOR_RED == 1, { "COLOR_RED" })
+
+        fun constructorOf(vararg parameters: Class<*>): java.lang.reflect.Constructor<*> =
+            entry.declaredConstructors.firstOrNull { it.parameterTypes.contentEquals(parameters) }
+                ?: throw AssertionError("missing Entry constructor ${parameters.map { it.simpleName }}")
+
+        expect(entry.declaredConstructors.any { it.parameterTypes.isEmpty() }, { "missing Entry()" })
+        constructorOf(Entry.OTPType::class.java, String::class.java, Int::class.javaPrimitiveType!!,
+                Int::class.javaPrimitiveType!!, String::class.java, String::class.java,
+                TokenCalculator.HashAlgorithm::class.java, java.util.List::class.java)
+        constructorOf(Entry.OTPType::class.java, String::class.java, LONG_TYPE, Int::class.javaPrimitiveType!!,
+                String::class.java, String::class.java, TokenCalculator.HashAlgorithm::class.java,
+                java.util.List::class.java)
+        constructorOf(Entry.OTPType::class.java, String::class.java, String::class.java, String::class.java,
+                java.util.List::class.java)
+
+        // The legacy adapters keep declaring the checked exception their Java callers catch.
+        for (parameters in listOf(arrayOf<Class<*>>(String::class.java), arrayOf<Class<*>>(JSONObject::class.java))) {
+            val constructor = constructorOf(*parameters)
+            expect(constructor.exceptionTypes.contains(Exception::class.java),
+                    { "Entry(${parameters.first().simpleName}) no longer declares throws Exception" })
+        }
+
+        // Entry's constructors, enum and constants are executable/reflectable here; its
+        // thumbnail-dependent members are pinned by the reflection source guards instead, because
+        // EntryThumbnail stays Java and therefore has no class file in this sandbox (see README).
     }
 
     check("bounded document reads reject oversize input and keep the caller's stream") {
