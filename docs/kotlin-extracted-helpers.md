@@ -41,6 +41,15 @@ Fourth batch (drag & drop boundary, dialog/keyboard helpers, task result DTO):
 - `Tasks/BackupTaskResult.kt`: the result DTO of the backup/restore tasks, read field-by-field by
   `BackupActivity` and the task subclasses.
 
+Fifth batch (task runner):
+
+- `Tasks/UiBasedBackgroundTask.kt`: the scheduling adapter over the Kotlin task contracts, used by
+  every backup/restore/authentication/credentials task and the retained task fragment. The state
+  machine, outcome types and session generation stay in `TaskContracts.kt`/`VaultSession.kt`; the
+  runner keeps only the executor/main-loop posting and the owned-result disposal hooks. Java task
+  subclasses (`AuthenticationTask`, `EncryptedBackupTask`, `FinishIntroTask`, ...) and
+  `BackgroundTaskActivity` compile unchanged against it.
+
 No activity, list adapter, fragment, preference, receiver, worker, dialog renderer, persistence
 implementation or task runner is converted. No coroutine, Compose, new dependency, SDK/bytecode
 target, storage format or crypto change is included.
@@ -183,6 +192,27 @@ would broadcast it. All fields stay public with the same names and mutability (`
 so the Java readers are unchanged. Both constructors, the nested `ResultType` enum constants and
 the static `success`/`failure` factories survive with identical Java signatures.
 
+### Task runner
+
+`UiBasedBackgroundTask` keeps its exact Java surface: a non-final generic abstract class with the
+same single constructor (`failedResult`), `protected final taskGeneration()`, `getState()`, the
+`setCallback` legacy adapter and `setOutcomeCallback`, `execute()`, `isCanceled()`, `cancel()`,
+`disposeOutcome(...)`, the protected `doInBackground` (still `throws Exception` in bytecode),
+`onCancellation()`/`discardResult(...)` override hooks, `wasCanceled()`, and the nested
+`OutcomeCallback`/`UiCallback` functional interfaces (now `fun interface`, so Java lambdas keep
+working). The semantics are unchanged: delivery is posted to the main loop and captured by task,
+not by result or Activity; delivery claims are one-shot; explicit cancellation and session
+revocation dispose owned values even while callbacks are detached; the legacy adapter maps Failure
+to the supplied fallback and suppresses Cancelled; `execute()` still throws
+`IllegalStateException("Task already submitted")` and still accepts a CANCELED start exactly once.
+The androidx threading annotations are dropped as separate symbols: `execute`/`cancel`/
+`isCanceled` remain any-thread callable and the delivery remains a main-loop post, which the
+Kotlin nullability/types plus the retained comments express.
+
+`Utilities/VaultSession.kt` (already Kotlin) joined the sandbox compile set with this batch: it is
+Android-free, so the runner checks drive the real session facade — generation advance, change
+listeners and the shared mutation lock — instead of a copy.
+
 `LetterBitmap` was considered for this batch and deliberately stays Java: it is a
 package-private class, and Kotlin has no package-private visibility, so converting it would widen
 the Java-visible API — the same policy as `Constants` and `FileHelper`.
@@ -203,7 +233,7 @@ and the existing architecture guard reads the moved `HandlerTimerScheduler.kt`.
 `scripts/kotlin-sandbox/` compiles the converted platform-free/low-platform sources against
 hand-written platform stubs and runs `Checks.kt` on a desktop JVM; `bootstrap-toolchain.sh` fetches
 a JDK and the Kotlin compiler from package mirrors when the machine has neither. Executed on
-2026-10-15 with **Kotlin 2.4.21 and Temurin 25.0.2** (`-jvm-target 1.8`), it reports 27 passing
+2026-10-15 with **Kotlin 2.4.21 and Temurin 25.0.2** (`-jvm-target 1.8`), it reports 34 passing
 checks:
 
 - RFC 6238 TOTP vectors (SHA-1/256/512, six timestamps, eight digits) and RFC 4226 HOTP vectors.
@@ -225,6 +255,13 @@ checks:
 - `ConfirmedPasswordTransformationHelper` toggle sequence: masked start, both fields
   unmasked/re-masked together, the cursor restored, the layout refreshed.
 - `BackupTaskResult` factories, field defaults, writable PGP fields and a payload-free `toString`.
+- The background runner on real executor threads with a queued fake main loop: single owned-value
+  delivery and one-shot execution, null/exception mapping to typed failures with the legacy
+  fallback, pre-start cancellation and idempotent cleanup, explicit cancellation disposing late
+  results without legacy callbacks, session-revocation cancellation disposing in-flight values,
+  and a stale captured generation being cancelled before work begins.
+- `VaultSession` facade shapes (mutation lock field, static generation/listener forwarders) read
+  live by the runner.
 - The converted sources are compiled with the real `Utilities/Constants.java` on the resolution
   path, so `SecretKeyWrapper` is checked against the actual package-private constant rather than a copy.
 - Reflection assertions on the Java-visible shapes (static forwarders, constant fields, checked exceptions, synchronized methods, enum constants, private constructor, non-final class where the Java was extendable, abstract callbacks, and the deliberate `object` delta for static-only utilities).

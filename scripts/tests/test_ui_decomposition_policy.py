@@ -87,7 +87,7 @@ class UiDecompositionSourceTest(unittest.TestCase):
                      "View/ItemTouchHelper/ItemTouchHelperViewHolder",
                      "View/ItemTouchHelper/SimpleItemTouchHelperCallback",
                      "Utilities/UIHelper", "Utilities/ConfirmedPasswordTransformationHelper",
-                     "Tasks/BackupTaskResult"):
+                     "Tasks/BackupTaskResult", "Tasks/UiBasedBackgroundTask"):
             self.assertTrue((KOTLIN / (stem + ".kt")).is_file())
             self.assertFalse((JAVA / (stem + ".java")).exists())
         timer = (KOTLIN / "Utilities/ScreenTimerController.kt").read_text()
@@ -243,3 +243,24 @@ class UiDecompositionSourceTest(unittest.TestCase):
         self.assertIn("enum class ResultType", result)
         self.assertIn("@JvmStatic", result)
         self.assertIn("R.string.backup_toast_export_success", result)
+
+    def test_converted_task_runner_keeps_the_java_surface_and_scheduling_contract(self):
+        source = (KOTLIN / "Tasks/UiBasedBackgroundTask.kt").read_text()
+        # Non-final generic abstract class with the same single failedResult constructor.
+        self.assertIn("abstract class UiBasedBackgroundTask<Result>(private val failedResult: Result)", source)
+        self.assertIn("protected final fun taskGeneration(): Long", source)
+        self.assertIn("@Throws(Exception::class)\n    protected abstract fun doInBackground(): Result", source)
+        self.assertIn("protected open fun onCancellation()", source)
+        self.assertIn("protected open fun discardResult(result: Result)", source)
+        # The delivery/cancellation contract and its legacy adapter keep their shapes.
+        self.assertIn("fun setCallback(callback: UiCallback<Result>?)", source)
+        self.assertIn("fun setOutcomeCallback(callback: OutcomeCallback<Result>?)", source)
+        self.assertIn('throw IllegalStateException("Task already submitted")', source)
+        self.assertIn("synchronized(VaultSession.MutationLock)", source)
+        self.assertIn("VaultSession.addChangeListener(sessionChanged)", source)
+        self.assertIn("VaultSession.removeChangeListener(sessionChanged)", source)
+        self.assertIn("fun interface OutcomeCallback<Result>", source)
+        self.assertIn("fun interface UiCallback<Result>", source)
+        self.assertIn("mainThreadHandler.post { deliverPending() }", source)
+        for forbidden in ("data class", "Parcelable", "Serializable"):
+            self.assertNotIn(forbidden, source)

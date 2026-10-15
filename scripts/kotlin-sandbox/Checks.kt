@@ -12,6 +12,7 @@ import org.shadowice.flocke.andotp.Tasks.TaskFailure
 import org.shadowice.flocke.andotp.Tasks.TaskOutcome
 import org.shadowice.flocke.andotp.Tasks.TaskStart
 import org.shadowice.flocke.andotp.Tasks.TaskState
+import org.shadowice.flocke.andotp.Tasks.UiBasedBackgroundTask
 import org.shadowice.flocke.andotp.Utilities.BoundedInputReader
 import org.shadowice.flocke.andotp.Utilities.ConfirmedPasswordTransformationHelper
 import org.shadowice.flocke.andotp.Utilities.DimensionConverter
@@ -32,6 +33,7 @@ import org.shadowice.flocke.andotp.Utilities.SessionLockReason
 import org.shadowice.flocke.andotp.Utilities.SessionRejection
 import org.shadowice.flocke.andotp.Utilities.SessionState
 import org.shadowice.flocke.andotp.Utilities.ValidatedOtp
+import org.shadowice.flocke.andotp.Utilities.VaultSession
 import org.shadowice.flocke.andotp.Utilities.ScreenTimerController
 import org.shadowice.flocke.andotp.Utilities.TokenCalculator
 import org.shadowice.flocke.andotp.Utilities.Tools
@@ -48,6 +50,7 @@ import android.content.DialogInterface
 import android.content.Intent
 import android.graphics.Canvas
 import android.net.Uri
+import android.os.Handler
 import android.os.IBinder
 import android.text.method.PasswordTransformationMethod
 import android.text.method.TransformationMethod
@@ -72,6 +75,9 @@ import java.security.GeneralSecurityException
 import java.security.KeyPairGenerator
 import java.security.MessageDigest
 import java.util.Arrays
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicInteger
 import javax.crypto.Cipher
 import javax.crypto.Mac
 import javax.crypto.spec.SecretKeySpec
@@ -322,6 +328,63 @@ private class FakePasswordInput : TextInputEditText() {
     override fun setSelection(index: Int) {
         selections.add(index)
     }
+}
+
+// --- fakes for the background runner checks ----------------------------------------------------
+
+/** Waits until the worker thread has queued its delivery on the fake main loop. */
+private fun awaitQueuedDelivery() {
+    val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5)
+    while (Handler.posted.isEmpty() && System.nanoTime() < deadline) Thread.sleep(10)
+    expect(!Handler.posted.isEmpty(), { "the runner never queued a delivery" })
+}
+
+/** Synchronously runs what the runner posted until the fake main queue stays empty. */
+private fun drainMainThreadDeliveries() {
+    var rounds = 0
+    while (rounds++ < 50) {
+        var ran = false
+        while (true) {
+            val runnable = Handler.posted.poll() ?: break
+            ran = true
+            runnable.run()
+        }
+        if (!ran) break
+    }
+}
+
+private class BlockingRunnerTask(fallback: String) : UiBasedBackgroundTask<String>(fallback) {
+    val started = CountDownLatch(1)
+    val release = CountDownLatch(1)
+    val discarded = AtomicInteger(0)
+    val discardedOnce = CountDownLatch(1)
+    val cleanupRuns = AtomicInteger(0)
+
+    override fun doInBackground(): String {
+        started.countDown()
+        try {
+            release.await(5, TimeUnit.SECONDS)
+        } catch (interrupted: InterruptedException) {
+            // Unwind after the interrupt; the late value must still be disposed, like on device.
+        }
+        return "late-value"
+    }
+
+    override fun discardResult(result: String) {
+        if (discarded.incrementAndGet() == 1) discardedOnce.countDown()
+    }
+
+    override fun onCancellation() {
+        cleanupRuns.incrementAndGet()
+    }
+}
+
+private class FailingRunnerTask(fallback: String, private val failure: IllegalStateException) : UiBasedBackgroundTask<String>(fallback) {
+    override fun doInBackground(): String = throw failure
+}
+
+private class NullRunnerTask(fallback: String?) : UiBasedBackgroundTask<String?>(fallback) {
+    override fun doInBackground(): String? = null
 }
 
 fun main() {
@@ -1015,6 +1078,125 @@ fun main() {
         expect(BackupTaskResult.ResultType.valueOf("NONE") == BackupTaskResult.ResultType.NONE, { "valueOf broke" })
     }
 
+    check("background runner delivers one owned value through the fake main loop") {
+        Handler.posted.clear()
+        val task = BlockingRunnerTask("fallback")
+        val delivered = ArrayList<TaskOutcome<String>>()
+        task.setOutcomeCallback { delivered.add(it) }
+        task.setOutcomeCallback(null) // rebinding before start must be a no-op, not a delivery leak
+        task.setOutcomeCallback { delivered.add(it) }
+        task.execute()
+        expect(task.started.await(5, TimeUnit.SECONDS), { "background work never started" })
+        task.release.countDown()
+        awaitQueuedDelivery()
+        drainMainThreadDeliveries()
+        expect(delivered.size == 1, { "delivered ${delivered.size} outcomes" })
+        val value = delivered[0] as? TaskOutcome.Value<*> ?: throw AssertionError("not a value: ${delivered[0]}")
+        expect(value.value == "late-value", { "wrong payload ${value.value}" })
+        expect(task.getState() is TaskState.Delivered, { "state ${task.getState()}" })
+
+        // A binding after the delivery was consumed is ignored instead of replaying it.
+        val late = ArrayList<TaskOutcome<String>>()
+        task.setOutcomeCallback { late.add(it) }
+        drainMainThreadDeliveries()
+        expect(late.isEmpty(), { "a consumed delivery was replayed" })
+        expectThrows(IllegalStateException::class.java) { task.execute() }
+    }
+
+    check("null and thrown results become failures and legacy clients get the fallback") {
+        Handler.posted.clear()
+        val nullTask = NullRunnerTask("fallback")
+        val outcomes = ArrayList<TaskOutcome<String?>>()
+        nullTask.setOutcomeCallback { outcomes.add(it) }
+        nullTask.execute()
+        awaitQueuedDelivery()
+        drainMainThreadDeliveries()
+        expect(outcomes.size == 1 && outcomes[0] is TaskOutcome.Failure, { "a null result was not a typed failure" })
+        expect((outcomes[0] as TaskOutcome.Failure<*>).error == TaskFailure.NULL_RESULT, { "wrong failure code" })
+
+        val legacyNull = NullRunnerTask("fallback")
+        var legacyResult: String? = "unset"
+        legacyNull.setCallback { legacyResult = it }
+        legacyNull.execute()
+        awaitQueuedDelivery()
+        drainMainThreadDeliveries()
+        expect(legacyResult == "fallback", { "legacy callback received $legacyResult" })
+
+        val failing = FailingRunnerTask("legacy-fallback", IllegalStateException("synthetic-provider-failure"))
+        val typed = ArrayList<TaskOutcome<String>>()
+        failing.setOutcomeCallback { typed.add(it) }
+        failing.execute()
+        awaitQueuedDelivery()
+        drainMainThreadDeliveries()
+        expect(typed.size == 1 && typed[0] is TaskOutcome.Failure, { "a thrown result was not a typed failure" })
+        expect((typed[0] as TaskOutcome.Failure<*>).error == TaskFailure.UNEXPECTED_EXCEPTION,
+                { "wrong failure kind ${typed[0]}" })
+        expect(failing.getState() is TaskState.Delivered, { "failure was not delivered" })
+    }
+
+    check("cancellation is one-shot, cleans up once and disposes the fallback") {
+        val task = BlockingRunnerTask("fallback")
+        val delivered = ArrayList<TaskOutcome<String>>()
+        task.setOutcomeCallback { delivered.add(it) }
+        task.cancel()
+        expect(task.cleanupRuns.get() == 1, { "cancel() did not run owned-input cleanup" })
+        task.release.countDown() // the worker never started; this is harmless
+        drainMainThreadDeliveries()
+        expect(delivered.size == 1 && delivered[0] is TaskOutcome.Cancelled, { "cancel did not deliver cancellation" })
+        expect((delivered[0] as TaskOutcome.Cancelled<*>).reason == TaskCancellation.EXPLICIT, { "wrong reason" })
+
+        // A cancelled task can still be started once: the CANCELED path disposes the fallback,
+        // keeps the cleanup idempotent and does not deliver again (the callback was consumed).
+        task.execute()
+        expect(task.cleanupRuns.get() == 1, { "cleanup must stay idempotent" })
+        expect(task.discarded.get() == 1, { "the cancelled start did not dispose the fallback" })
+        drainMainThreadDeliveries()
+        expect(delivered.size == 1, { "a cancelled start delivered again" })
+        expectThrows(IllegalStateException::class.java) { task.execute() }
+    }
+
+    check("explicit cancellation disposes the late result and never calls the legacy callback") {
+        val task = BlockingRunnerTask("fallback")
+        val legacy = AtomicInteger(0)
+        task.setCallback { legacy.incrementAndGet() }
+        task.execute()
+        expect(task.started.await(5, TimeUnit.SECONDS), { "work never started" })
+        task.cancel()
+        task.release.countDown()
+        expect(task.discardedOnce.await(5, TimeUnit.SECONDS), { "the late value was never disposed" })
+        drainMainThreadDeliveries()
+        expect(legacy.get() == 0, { "a cancelled task delivered a legacy result" })
+        expect(task.discarded.get() == 1, { "unexpected disposal count ${task.discarded.get()}" })
+    }
+
+    check("session revocation cancels in-flight work and disposes its result") {
+        val task = BlockingRunnerTask("fallback")
+        val delivered = ArrayList<TaskOutcome<String>>()
+        task.setOutcomeCallback { delivered.add(it) }
+        task.execute()
+        expect(task.started.await(5, TimeUnit.SECONDS), { "work never started" })
+        VaultSession.lock() // advances the generation; the captured one is stale now
+        task.release.countDown()
+        expect(task.discardedOnce.await(5, TimeUnit.SECONDS), { "the produced value was never disposed" })
+        drainMainThreadDeliveries()
+        expect(delivered.size == 1 && delivered[0] is TaskOutcome.Cancelled, { "revocation did not deliver cancellation" })
+        expect((delivered[0] as TaskOutcome.Cancelled<*>).reason == TaskCancellation.SESSION_REVOKED, { "wrong reason" })
+        expect(task.cleanupRuns.get() == 1, { "revocation cleanup ran ${task.cleanupRuns.get()} times" })
+    }
+
+    check("a task captured before revocation is cancelled before its work begins") {
+        val task = BlockingRunnerTask("fallback")
+        VaultSession.lock() // stale generation before start
+        val delivered = ArrayList<TaskOutcome<String>>()
+        task.setOutcomeCallback { delivered.add(it) }
+        task.execute()
+        drainMainThreadDeliveries()
+        expect(task.cleanupRuns.get() == 1, { "cancelled start did not run cleanup" })
+        expect(delivered.size == 1 && delivered[0] is TaskOutcome.Cancelled, { "stale start was not cancelled" })
+        expect((delivered[0] as TaskOutcome.Cancelled<*>).reason == TaskCancellation.SESSION_REVOKED, { "wrong reason" })
+        expect(task.discarded.get() == 1, { "the fallback was not disposed on the cancelled start" })
+    }
+
     check("converted classes keep the Java-visible API shapes") {
         expectPublicFieldValue(BoundedInputReader::class.java, "MAX_DOCUMENT_BYTES", 16 * 1024 * 1024, INT_TYPE, true)
         expectMethod(BoundedInputReader::class.java, "static byte[] read(InputStream,int)")
@@ -1202,6 +1384,53 @@ fun main() {
         expect(result.declaredConstructors.any { !it.isSynthetic && it.parameterCount == 4 },
                 { "missing the four-argument constructor" })
         expect(BackupTaskResult.ResultType::class.java.isEnum, { "ResultType is not an enum" })
+    }
+
+    check("the background runner keeps its Java-visible API shapes") {
+        val runner = UiBasedBackgroundTask::class.java
+        expect(!Modifier.isFinal(runner.modifiers), { "the runner must stay extendable by task subclasses" })
+        val constructors = runner.declaredConstructors.filter { !it.isSynthetic }
+        expect(constructors.size == 1 &&
+                constructors[0].parameterTypes.contentEquals(arrayOf<Class<*>>(Object::class.java)),
+                { "the runner constructor changed: ${constructors.map { it.toGenericString() }}" })
+        expectMethod(runner, "void setCallback(UiCallback)")
+        expectMethod(runner, "void setOutcomeCallback(OutcomeCallback)")
+        expectMethod(runner, "TaskState getState()")
+        expectMethod(runner, "boolean isCanceled()")
+        expectMethod(runner, "void cancel()")
+        expectMethod(runner, "void execute()")
+        expectMethod(runner, "void disposeOutcome(TaskOutcome)")
+
+        val background = runner.declaredMethods.first { it.name == "doInBackground" }
+        expect(Modifier.isProtected(background.modifiers) && Modifier.isAbstract(background.modifiers),
+                { "doInBackground must stay protected and abstract" })
+        expect(background.exceptionTypes.contains(Exception::class.java), { "doInBackground lost its throws clause" })
+        for (overridable in listOf("onCancellation", "discardResult")) {
+            val method = runner.declaredMethods.first { it.name == overridable }
+            expect(Modifier.isProtected(method.modifiers) && !Modifier.isFinal(method.modifiers) &&
+                    !Modifier.isStatic(method.modifiers),
+                    { "$overridable must stay protected and overridable" })
+        }
+        for (helper in listOf("wasCanceled", "taskGeneration")) {
+            val method = runner.declaredMethods.first { it.name == helper }
+            expect(Modifier.isProtected(method.modifiers) && Modifier.isFinal(method.modifiers),
+                    { "$helper must stay protected final" })
+        }
+
+        val nested = runner.declaredClasses.filter { it.isInterface }.map { it.simpleName }.sorted()
+        expect(nested == listOf("OutcomeCallback", "UiCallback"), { "nested interfaces changed: $nested" })
+        val outcomeCallback = runner.declaredClasses.first { it.simpleName == "OutcomeCallback" }
+        expect(outcomeCallback.declaredMethods.single { !it.isSynthetic && Modifier.isAbstract(it.modifiers) }.name == "onOutcome",
+                { "OutcomeCallback abstract method changed" })
+        val uiCallback = runner.declaredClasses.first { it.simpleName == "UiCallback" }
+        expect(uiCallback.declaredMethods.single { !it.isSynthetic && Modifier.isAbstract(it.modifiers) }.name == "onResult",
+                { "UiCallback abstract method changed" })
+
+        // The runner reads the live session through the real VaultSession facade.
+        expectField(VaultSession::class.java, "MutationLock", Any::class.java, true)
+        expectMethod(VaultSession::class.java, "static long generation()")
+        expectMethod(VaultSession::class.java, "static void addChangeListener(Runnable)")
+        expectMethod(VaultSession::class.java, "static void removeChangeListener(Runnable)")
     }
 
     if (failures == 0) {

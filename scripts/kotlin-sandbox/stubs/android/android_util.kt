@@ -34,3 +34,9 @@ object TypedValue {
         else -> 0f
     }
 }
+
+/** Sink for the task runner's error path; the checks never read logged text. */
+object Log {
+    @JvmStatic
+    fun e(tag: String?, msg: String?): Int = 0
+}
