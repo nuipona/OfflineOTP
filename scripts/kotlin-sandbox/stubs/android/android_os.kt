@@ -54,3 +54,15 @@ class LocaleList {
     operator fun get(index: Int): Locale = Locale.ENGLISH
     val size: Int get() = 1
 }
+
+/** Field/constant-only stand-in for the version gate the Java sources branch on. */
+object Build {
+    object VERSION {
+        const val SDK_INT: Int = 28
+    }
+}
+
+/** Field/type-only stand-in for the descriptor the storage helper opens documents through. */
+class ParcelFileDescriptor private constructor() {
+    class AutoCloseOutputStream(pfd: ParcelFileDescriptor?) : java.io.FileOutputStream(java.io.FileDescriptor())
+}

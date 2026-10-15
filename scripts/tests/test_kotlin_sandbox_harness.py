@@ -50,6 +50,12 @@ class KotlinSandboxHarnessTest(unittest.TestCase):
         # the real declarations (including the package-private crypto constant) instead of a copy.
         self.assertIn("$ROOT/app/src/main/java/org/shadowice/flocke/andotp/Utilities/Constants.java", script)
         self.assertIn('"${JAVA_SOURCES[@]}"', script)
+        # The task subclasses resolve the real settings/database/crypto helpers, not stubs of them.
+        for resolved in ("Utilities/Settings.java", "Utilities/EncryptionHelper.java",
+                         "Utilities/DatabaseHelper.java", "Utilities/KeyStoreHelper.java",
+                         "Utilities/BackupHelper.java", "Utilities/StorageAccessHelper.java",
+                         "Database/Entry.java"):
+            self.assertIn(f"$ROOT/app/src/main/java/org/shadowice/flocke/andotp/{resolved}", script)
         # No production class may be shadowed by a stub of the same name.
         shadows = sorted(path.name for path in (SANDBOX / "stubs/org/shadowice").rglob("*.kt"))
         self.assertEqual(["R.kt"], shadows, f"unexpected production shadows: {shadows}")
@@ -58,6 +64,19 @@ class KotlinSandboxHarnessTest(unittest.TestCase):
         source = constants.read_text()
         self.assertIn('final static String ALGORITHM_ASYMMETRIC    = "RSA/ECB/PKCS1Padding";', source)
         self.assertIn("final static String PBKDF2_ALGORITHM", source)
+
+    def test_r_stub_matches_the_sources_the_sandbox_compiles(self):
+        # The generated-resource stand-in lists exactly the ids referenced by run.sh's source
+        # lists, so it cannot drift behind a new reference or grow unreviewed entries.
+        import subprocess
+        import sys
+        result = subprocess.run(
+            [sys.executable, str(SANDBOX / "generate-r-stub.py"), "--check"],
+            capture_output=True, text=True, cwd=ROOT)
+        self.assertEqual(0, result.returncode,
+                         f"R stub is stale: {result.stderr}\nregenerate with "
+                         f"python3 scripts/kotlin-sandbox/generate-r-stub.py")
+        self.assertIn("up to date", result.stdout)
 
     def test_bootstrap_script_pins_and_verifies_its_downloads(self):
         script = (SANDBOX / "bootstrap-toolchain.sh").read_text()

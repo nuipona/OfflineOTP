@@ -50,9 +50,27 @@ Fifth batch (task runner):
   subclasses (`AuthenticationTask`, `EncryptedBackupTask`, `FinishIntroTask`, ...) and
   `BackgroundTaskActivity` compile unchanged against it.
 
-No activity, list adapter, fragment, preference, receiver, worker, dialog renderer, persistence
-implementation or task runner is converted. No coroutine, Compose, new dependency, SDK/bytecode
-target, storage format or crypto change is included.
+Sixth batch (the task subclasses over that runner):
+
+- `Tasks/AuthenticationTask.kt`, `GenericBackupTask.kt`, `GenericRestoreTask.kt`,
+  `PGPBackupTask.kt`, `PGPRestoreTask.kt`, `EncryptedBackupTask.kt`, `EncryptedRestoreTask.kt`,
+  `ChangeEncryptionTask.kt`, `ChangeCredentialsTask.kt` and `FinishIntroTask.kt`: every
+  `UiBasedBackgroundTask` subclass, converted as one layer. Their owners stay Java:
+  `BackgroundTaskActivity`, `AuthenticateActivity`, `BackupActivity`, `SettingsActivity`,
+  `IntroScreenActivity`, `CredentialsPreference`, `EncryptedBackupWorker` and the instrumentation
+  tests keep compiling against the same constructors, enums and nested result DTOs. The runner fix
+  that this batch exposed is described under [task runner and `isCanceled()`](#task-runner-and-iscanceled).
+- `Utilities/OtpUriParser.kt`, `Utilities/VaultContracts.kt`, `Utilities/EntryPersistence.kt` and
+  `Utilities/VaultRestoreOperation.kt` joined the sandbox compile set unchanged: with the stub set
+  grown (`Base32`/JSON stand-ins, resolver/keystore/graphics surface) and `Entry.java` a resolution
+  source, they now type-check against the real declarations instead of being excluded.
+  `EntryPersistence`'s Kotlin construction of the converted `EncryptedBackupTask` is verified by
+  that compile; none of them is *executed* in the sandbox (their bodies call the Java-only
+  helpers, which produce no class files there).
+
+No activity, list adapter, fragment, preference, receiver, worker, dialog renderer or persistence
+implementation is converted (the task runner and its subclasses are). No coroutine, Compose, new
+dependency, SDK/bytecode target, storage format or crypto change is included.
 
 **Source conversion is implemented; Gradle and device acceptance is still pending.** What *has* been
 executed here is a partial sandbox compile/run check (`scripts/kotlin-sandbox/`), described under
@@ -217,6 +235,73 @@ listeners and the shared mutation lock — instead of a copy.
 package-private class, and Kotlin has no package-private visibility, so converting it would widen
 the Java-visible API — the same policy as `Constants` and `FileHelper`.
 
+### Task subclasses
+
+All ten `UiBasedBackgroundTask` subclasses are converted as one layer, because they share the same
+owner chain (the runner, the retained task fragment, the activities) and the same review questions.
+The Java-visible surface each caller relies on is preserved:
+
+- The constructors keep their exact parameter lists: `AuthenticationTask(Context, boolean, String,
+  String)`, `GenericBackupTask`/`GenericRestoreTask(Context, Uri)`, `PGPBackupTask(Context, String,
+  Uri)`, `PGPRestoreTask(Context, Uri, Intent)`, `EncryptedBackupTask(Context, ArrayList, String,
+  Uri)` plus the six-argument broadcast/auto form, `EncryptedRestoreTask(Context, Uri, String,
+  boolean)`, `ChangeEncryptionTask(Context, SecretKey, EncryptionType, byte[])`,
+  `ChangeCredentialsTask(Context, EncryptionType, SecretKey, AuthMethod, String)` and
+  `FinishIntroTask(Context, EncryptionType, AuthMethod, String, boolean)`.
+- `EncryptedBackupTask.Mode` stays a nested enum with `USER`, `AUTO_EDIT`, `BROADCAST`; the nested
+  `Result` DTOs of `ChangeEncryptionTask`, `ChangeCredentialsTask` and `FinishIntroTask` keep their
+  public final fields (`@JvmField`) and constructors, including `FinishIntroTask.Result`'s
+  two-argument form that defaults the generation to `VaultSession.generation()`.
+- Every Java class was non-final, so each conversion is an `open class` (or `abstract class` for the
+  two generic bases) rather than silently final — the same policy as `SecretKeyWrapper` and
+  `BackupTaskResult`. `doInBackground` stays `protected` (bytecode-protected), which is what the
+  same-package Java callers (`EncryptedBackupWorker`, the instrumentation tests) rely on: Java
+  permits same-package access to protected members, and Kotlin-compiled `protected` keeps that
+  bytecode modifier.
+- `GenericBackupTask.canWrite()` is `protected open`, because `EncryptedBackupTask` replaces the
+  write policy (password presence, configured location equality, broadcast opt-in, keystore-only
+  encryption) rather than only the base's session-key check.
+
+Semantic details the conversion keeps deliberately:
+
+- The session/key identity checks stay **reference** comparisons: `VaultSession.getKey() !==
+  oldEncryptionKey` in `ChangeCredentialsTask`, exactly the Java `!=` (a structural `!=` would
+  accept an equal-but-replaced key).
+- `PGPRestoreTask`'s Java multi-catch (`IOException | RuntimeException`) becomes two catch clauses
+  rather than one broadened `catch (Exception)`, so non-IO checked exceptions still escape to the
+  runner's failure mapping. `EncryptedRestoreTask`'s deliberately broad `catch (Exception)`
+  (decrypt/format failures are user-visible import failures) stays broad.
+- `AuthenticationTask.confirmAuthentication` keeps the four distinct catch clauses and wipes both
+  halves of the derived credentials plus the decoded verifier in `finally`; `upgradeAuthentication`
+  returns the key through the one-use `AuthenticationOutcome.verified(...)` factory and wipes the
+  original array afterwards, as the Java did.
+- Key material owned by `ChangeEncryptionTask` is cloned on construction and wiped in
+  `onCancellation()` and after `doInBackground()`; `EncryptedBackupTask` owns a serialized snapshot
+  (`stringToEntries(entriesToString(entries))`), destroys it on cancellation, on result disposal and
+  after the background work, and synchronizes on it for the export read.
+- Nullability follows the Java contracts: parameters the Java code explicitly null-checks
+  (`plainPassword`, `password`, `oldEncryptionKey`, `newKey`) stay nullable; parameters it
+  dereferenced without checks (`existingAuthCredentials`, the PGP payload/decrypt intent) become
+  required non-null parameters, so a null now fails fast at construction with a clear exception —
+  the same documented choice as `EditorActionHelper`'s boxed flag. No `!!` appears in any converted
+  task file.
+
+`EncryptedBackupWorker` deliberately stays Java: it is a WorkManager `Worker` (an Android-scheduled
+entry point, not a task subclass over the runner), and converting components — activities,
+receivers, workers — is a separate decision from the task layer.
+
+### Task runner and `isCanceled()`
+
+Converting `EncryptedBackupTask` exposed a latent defect in the fifth batch: the Java
+`UiBasedBackgroundTask.isCanceled()` was public and non-final (`EncryptedBackupTask` overrides it so
+a broadcast backup ignores session generation changes and stops only on explicit cancellation), but
+the Kotlin runner declared a plain `fun isCanceled()` — final by default. No Java or Kotlin subclass
+could override it: once any compiler saw both files, the `@Override` would have been rejected. It is
+now `open fun isCanceled()` with the same `public boolean isCanceled()` bytecode signature, and the
+sandbox check asserts the method stays overridable. This is exactly the kind of error the pending
+Gradle gate would have caught; the sandbox now compiles the subclass against the real runner and
+would fail again if the override were dropped or the base were re-finalized.
+
 ## Tests and acceptance
 
 Existing Java/Kotlin characterization tests remain in place and unchanged: the RFC vector tests in
@@ -226,14 +311,18 @@ Existing Java/Kotlin characterization tests remain in place and unchanged: the R
 reflection/source guards were added where a conversion could silently change a Java-visible shape:
 `scripts/tests/test_ui_decomposition_policy.py` now requires the converted stems, the
 `@JvmStatic`/`@JvmField`/`const`/`@Throws`/`@Synchronized` shapes and the editor-action short-circuit,
-and the existing architecture guard reads the moved `HandlerTimerScheduler.kt`.
+and the existing architecture guard reads the moved `HandlerTimerScheduler.kt`. With the task batch
+it also pins the task subclasses' constructors, `Mode`/`Result` DTOs, the reference-identity session
+checks, the wipe paths and the runner's `open isCanceled()`; the contract-migration guard now scans
+the Kotlin tree for legacy vault APIs as well, since the tasks moved there; and the sandbox harness
+test verifies the `R` stand-in still matches what `run.sh` compiles.
 
 ### Executed here: partial sandbox compile/run check
 
 `scripts/kotlin-sandbox/` compiles the converted platform-free/low-platform sources against
 hand-written platform stubs and runs `Checks.kt` on a desktop JVM; `bootstrap-toolchain.sh` fetches
 a JDK and the Kotlin compiler from package mirrors when the machine has neither. Executed on
-2026-10-15 with **Kotlin 2.4.21 and Temurin 25.0.2** (`-jvm-target 1.8`), it reports 34 passing
+2026-10-15 with **Kotlin 2.4.21 and Temurin 25.0.2** (`-jvm-target 1.8`), it reports 35 passing
 checks:
 
 - RFC 6238 TOTP vectors (SHA-1/256/512, six timestamps, eight digits) and RFC 4226 HOTP vectors.
@@ -262,9 +351,25 @@ checks:
   and a stale captured generation being cancelled before work begins.
 - `VaultSession` facade shapes (mutation lock field, static generation/listener forwarders) read
   live by the runner.
+- The ten converted task subclasses are **type-checked against the real Java declarations** they
+  call: `run.sh` passes `Settings.java`, `EncryptionHelper.java`, `BackupHelper.java`,
+  `StorageAccessHelper.java`, `DatabaseHelper.java`, `KeyStoreHelper.java`, `FileHelper.java`,
+  `EntryThumbnail.java`, `LetterBitmap.java` and `Entry.java` to `kotlinc` for resolution, so the
+  Kotlin calls are verified against the actual parameter/return types instead of stub copies. Their
+  bodies are not executed (the Java sources produce no class files on the desktop JVM), and
+  reflection covers the members whose signatures avoid those Java-only types: constructor parameter
+  lists (`EncryptedBackupTask`'s are visible because generic erasure drops the `Entry` element
+  type), the `Mode` enum, protected `doInBackground`/`discardResult` overrides, and
+  `FinishIntroTask.Result`'s two constructors and public final fields. `ChangeEncryptionTask`
+  implements the Java-only `EncryptionHelper.EncryptionChangeCallback`, so even loading its
+  `Class` object resolves that interface; its shapes are pinned by the Python source guards, and the
+  same guards cover the members the sandbox cannot reflect.
 - The converted sources are compiled with the real `Utilities/Constants.java` on the resolution
   path, so `SecretKeyWrapper` is checked against the actual package-private constant rather than a copy.
 - Reflection assertions on the Java-visible shapes (static forwarders, constant fields, checked exceptions, synchronized methods, enum constants, private constructor, non-final class where the Java was extendable, abstract callbacks, and the deliberate `object` delta for static-only utilities).
+- The runner's `isCanceled()` is asserted **overridable** — the regression that converting
+  `EncryptedBackupTask` exposed (see [task runner and `isCanceled()`](#task-runner-and-iscanceled))
+  cannot silently return.
 
 That check is explicitly **non-authoritative**: its stubs are approximations of the Android platform,
 so it says nothing about Android runtime behaviour, resources, manifest or packaging. See
@@ -292,6 +397,11 @@ tracked in the [decomposition plan](ui-decomposition-plan.md).
   instead of mirroring it.
 - `Utilities/LetterBitmap.java`: same package-private policy — the class itself is package-private,
   and a Kotlin conversion would have to publish it to at least `public`/`internal` bytecode.
+- `Tasks/EncryptedBackupWorker.java`: it is a WorkManager `Worker` — an Android-scheduled entry
+  point like the activities and receivers, not a task subclass over the runner. Component
+  conversion is a separate decision from the task layer (see the sixth batch).
 
 The drag & drop trio, `UIHelper`, `ConfirmedPasswordTransformationHelper` and `BackupTaskResult`
-are no longer in this list: they are converted (see the fourth batch above).
+are no longer in this list: they are converted (see the fourth batch above). The task subclasses
+and their runner are converted too (fifth and sixth batches); the *workers*, receivers and other
+components remain Java.

@@ -38,17 +38,31 @@ if [[ -z "$STDLIB" || ! -f "$STDLIB" ]]; then
 fi
 
 # Converted platform-free and low-platform utilities covered by this check. Every entry is
-# compiled and its Java-visible shapes are asserted in Checks.kt. Files that still depend on the
-# Android/AndroidX graph (settings, vault, task runners, dialogs, adapters, activities) are
-# deliberately absent: see README.md for the list and the reason.
+# compiled and its Java-visible shapes are asserted in Checks.kt. The task subclasses resolve the
+# real Java settings/database/crypto helpers through JAVA_SOURCES below. Files that still depend
+# on the full Android/AndroidX graph (dialogs, adapters, preferences, activities) are deliberately
+# absent: see README.md for the list and the reason.
 APP_SOURCES=(
     "$KOTLIN_APP/Utilities/InputPolicy.kt"
     "$KOTLIN_APP/Utilities/OtpParseResult.kt"
+    "$KOTLIN_APP/Utilities/OtpUriParser.kt"
     "$KOTLIN_APP/Utilities/SessionContracts.kt"
     "$KOTLIN_APP/Utilities/VaultSession.kt"
+    "$KOTLIN_APP/Utilities/VaultContracts.kt"
     "$KOTLIN_APP/Tasks/TaskContracts.kt"
     "$KOTLIN_APP/Tasks/AuthenticationOutcome.kt"
     "$KOTLIN_APP/Tasks/UiBasedBackgroundTask.kt"
+    "$KOTLIN_APP/Tasks/BackupTaskResult.kt"
+    "$KOTLIN_APP/Tasks/AuthenticationTask.kt"
+    "$KOTLIN_APP/Tasks/GenericBackupTask.kt"
+    "$KOTLIN_APP/Tasks/GenericRestoreTask.kt"
+    "$KOTLIN_APP/Tasks/PGPBackupTask.kt"
+    "$KOTLIN_APP/Tasks/PGPRestoreTask.kt"
+    "$KOTLIN_APP/Tasks/EncryptedBackupTask.kt"
+    "$KOTLIN_APP/Tasks/EncryptedRestoreTask.kt"
+    "$KOTLIN_APP/Tasks/ChangeEncryptionTask.kt"
+    "$KOTLIN_APP/Tasks/ChangeCredentialsTask.kt"
+    "$KOTLIN_APP/Tasks/FinishIntroTask.kt"
     "$KOTLIN_APP/Utilities/Tools.kt"
     "$KOTLIN_APP/Utilities/ScreenTimerController.kt"
     "$KOTLIN_APP/Utilities/TokenCalculator.kt"
@@ -65,20 +79,38 @@ APP_SOURCES=(
     "$KOTLIN_APP/View/ItemTouchHelper/SimpleItemTouchHelperCallback.kt"
     "$KOTLIN_APP/Utilities/UIHelper.kt"
     "$KOTLIN_APP/Utilities/ConfirmedPasswordTransformationHelper.kt"
-    "$KOTLIN_APP/Tasks/BackupTaskResult.kt"
+    "$KOTLIN_APP/Utilities/EntryPersistence.kt"
+    "$KOTLIN_APP/Utilities/VaultRestoreOperation.kt"
 )
 
 STUBS=("$SANDBOX"/stubs/android/*.kt
     "$SANDBOX"/stubs/androidx/recyclerview/widget/*.kt
+    "$SANDBOX"/stubs/androidx/documentfile/provider/*.kt
+    "$SANDBOX"/stubs/androidx/appcompat/app/*.kt
+    "$SANDBOX"/stubs/androidx/appcompat/content/res/*.kt
     "$SANDBOX"/stubs/com/google/android/material/textfield/*.kt
     "$SANDBOX/stubs/org/shadowice/flocke/andotp/R.kt"
-    "$SANDBOX/stubs/org/apache/commons/codec/binary/Hex.kt")
+    "$SANDBOX"/stubs/org/json/*.kt
+    "$SANDBOX"/stubs/org/apache/commons/codec/binary/*.kt
+    "$SANDBOX"/stubs/org/apache/commons/codec/digest/*.kt)
 
 # Real Java sources, used for resolution only: kotlinc reads them so the Kotlin code is checked
 # against the actual declarations, and no Java class file is produced or verified here. Listed
-# explicitly instead of by directory so that adding one is a deliberate choice.
+# explicitly instead of by directory so that adding one is a deliberate choice. The task
+# subclasses are compiled against the real Settings/DatabaseHelper/EncryptionHelper/KeyStore/
+# Entry declarations rather than stub copies of them.
 JAVA_SOURCES=(
     "$ROOT/app/src/main/java/org/shadowice/flocke/andotp/Utilities/Constants.java"
+    "$ROOT/app/src/main/java/org/shadowice/flocke/andotp/Utilities/Settings.java"
+    "$ROOT/app/src/main/java/org/shadowice/flocke/andotp/Utilities/EncryptionHelper.java"
+    "$ROOT/app/src/main/java/org/shadowice/flocke/andotp/Utilities/BackupHelper.java"
+    "$ROOT/app/src/main/java/org/shadowice/flocke/andotp/Utilities/StorageAccessHelper.java"
+    "$ROOT/app/src/main/java/org/shadowice/flocke/andotp/Utilities/DatabaseHelper.java"
+    "$ROOT/app/src/main/java/org/shadowice/flocke/andotp/Utilities/KeyStoreHelper.java"
+    "$ROOT/app/src/main/java/org/shadowice/flocke/andotp/Utilities/FileHelper.java"
+    "$ROOT/app/src/main/java/org/shadowice/flocke/andotp/Utilities/EntryThumbnail.java"
+    "$ROOT/app/src/main/java/org/shadowice/flocke/andotp/Utilities/LetterBitmap.java"
+    "$ROOT/app/src/main/java/org/shadowice/flocke/andotp/Database/Entry.java"
 )
 
 rm -rf "$OUT"
