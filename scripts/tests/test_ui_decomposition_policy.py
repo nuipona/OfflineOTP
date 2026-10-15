@@ -42,9 +42,11 @@ class UiDecompositionSourceTest(unittest.TestCase):
         self.assertNotIn("new CountDownTimer", source)
         self.assertNotIn("new Handler(", source)
         self.assertNotIn("handlerTask", source)
-        scheduler = (JAVA / "Utilities/HandlerTimerScheduler.java").read_text()
+        # The bridge is converted too, so the architecture guard reads the moved source.
+        scheduler = (KOTLIN / "Utilities/HandlerTimerScheduler.kt").read_text()
         self.assertIn("Looper.getMainLooper()", scheduler)
         self.assertIn("SystemClock.elapsedRealtime()", scheduler)
+        self.assertIn("ScreenTimerController.Scheduler", scheduler)
 
     def test_restore_screen_delegates_merge_save_and_ownership_cleanup(self):
         activity = (JAVA / "Activities/BackupActivity.java").read_text()
@@ -75,7 +77,12 @@ class UiDecompositionSourceTest(unittest.TestCase):
         for stem in ("Utilities/ScreenTimerController", "View/EntryActionTarget",
                      "Utilities/InputPolicy", "View/EntryListPresentation",
                      "Utilities/EntryPersistence", "Utilities/VaultRestoreOperation",
-                     "View/EntryActionDialogs", "Utilities/VaultSession"):
+                     "View/EntryActionDialogs", "Utilities/VaultSession",
+                     "Utilities/BoundedInputReader", "Utilities/BoundedOutput",
+                     "Utilities/EncryptedBackupHeader", "Utilities/TokenCalculator",
+                     "Utilities/EditorActionHelper", "Utilities/HandlerTimerScheduler",
+                     "Utilities/SecretKeyWrapper", "Utilities/DimensionConverter",
+                     "View/SimpleDoubleClickListener"):
             self.assertTrue((KOTLIN / (stem + ".kt")).is_file())
             self.assertFalse((JAVA / (stem + ".java")).exists())
         timer = (KOTLIN / "Utilities/ScreenTimerController.kt").read_text()
@@ -90,3 +97,96 @@ class UiDecompositionSourceTest(unittest.TestCase):
         self.assertIn('"EntryActionTarget(redacted)"', target)
         for forbidden in ("import android.", "Parcelable", "Serializable"):
             self.assertNotIn(forbidden, target)
+
+    def test_converted_io_and_otp_utilities_keep_java_visible_shapes(self):
+        reader = (KOTLIN / "Utilities/BoundedInputReader.kt").read_text()
+        for api in ("object BoundedInputReader", "const val MAX_DOCUMENT_BYTES = 16 * 1024 * 1024",
+                    "@JvmStatic", "@Throws(IOException::class)", "fun read(input: InputStream?, limit: Int): ByteArray"):
+            self.assertIn(api, reader)
+        # A null stream stays an IOException, and the zero-read progress guarantee is kept.
+        self.assertIn('throw IOException("Document provider returned no stream")', reader)
+        self.assertIn('throw IOException("Document exceeds size limit")', reader)
+        self.assertIn("count = 1", reader)
+
+        output = (KOTLIN / "Utilities/BoundedOutput.kt").read_text()
+        for api in ("class BoundedOutput(limit: Int) : ByteArrayOutputStream()", "@Synchronized",
+                    "override fun write(value: Int)", "override fun write(bytes: ByteArray, offset: Int, length: Int)",
+                    "fun overflowed(): Boolean", 'throw IllegalStateException("Provider output exceeds limit")',
+                    'throw IllegalArgumentException("Invalid output limit")'):
+            self.assertIn(api, output)
+        self.assertIn("overflowed = true", output)
+
+        header = (KOTLIN / "Utilities/EncryptedBackupHeader.kt").read_text()
+        for api in ("class EncryptedBackupHeader private constructor(", "companion object", "@JvmStatic",
+                    "const val MIN_BACKUP_BYTES", "const val MAX_ITERATIONS = 1_000_000",
+                    "fun getIterations(): Int", "fun getSalt(): ByteArray = salt.clone()",
+                    "fun getEncrypted(): ByteArray = encrypted.clone()"):
+            self.assertIn(api, header)
+        for api in ('throw IllegalArgumentException("Truncated encrypted backup")',
+                    'throw IllegalArgumentException("Encrypted backup exceeds size limit")',
+                    'throw IllegalArgumentException("Unsupported backup iteration count")'):
+            self.assertIn(api, header)
+
+        tokens = (KOTLIN / "Utilities/TokenCalculator.kt").read_text()
+        for api in ("object TokenCalculator", "const val TOTP_DEFAULT_PERIOD = 30", "const val TOTP_DEFAULT_DIGITS = 6",
+                    "const val HOTP_INITIAL_COUNTER = 1", "const val STEAM_DEFAULT_DIGITS = 5",
+                    "enum class HashAlgorithm", "@JvmField", "val DEFAULT_ALGORITHM: HashAlgorithm = HashAlgorithm.SHA1",
+                    "fun TOTP_RFC6238(", "fun TOTP_Steam(", "fun HOTP(", "fun MOTP("):
+            self.assertIn(api, tokens)
+        # The truncation and Steam mapping keep the original bit/long arithmetic.
+        for api in ("hash[hash.size - 1].toInt() and 0xF", "shl 0x18", "shl 0x10", "shl 0x08",
+                    "steamChars[fullToken % steamChars.size]", "fullToken /= steamChars.size",
+                    'IllegalStateException("OTP calculation failed")', "Tools.formatTokenString(",
+                    "InputPolicy.tokenParameters("):
+            self.assertIn(api, tokens)
+
+        editor = (KOTLIN / "Utilities/EditorActionHelper.kt").read_text()
+        self.assertIn("object EditorActionHelper", editor)
+        self.assertIn("fun isActionDoneOrKeyboardEnter(actionId: Int, event: KeyEvent?): Boolean", editor)
+        self.assertIn("fun isActionUpKeyboardEnter(event: KeyEvent?): Boolean", editor)
+        # An IME-reported action arrives without a KeyEvent; that case must stay non-fatal.
+        self.assertLess(editor.index("if (actionId == EditorInfo.IME_ACTION_DONE) return true"),
+                        editor.index("keyEvent.action == KeyEvent.ACTION_DOWN"))
+        self.assertNotIn("!!", editor)
+
+        scheduler = (KOTLIN / "Utilities/HandlerTimerScheduler.kt").read_text()
+        self.assertIn("class HandlerTimerScheduler : ScreenTimerController.Scheduler", scheduler)
+        self.assertIn("private val handler = Handler(Looper.getMainLooper())", scheduler)
+
+    def test_converted_crypto_tap_and_dimension_helpers_keep_their_boundaries(self):
+        wrapper = (KOTLIN / "Utilities/SecretKeyWrapper.kt").read_text()
+        # Non-final class, both checked exceptions and the RSA transformation suppression are kept.
+        self.assertIn("open class SecretKeyWrapper", wrapper)
+        self.assertIn('@SuppressLint("GetInstance")', wrapper)
+        self.assertIn("@Throws(GeneralSecurityException::class, IOException::class)", wrapper)
+        self.assertIn("Cipher.getInstance(Constants.ALGORITHM_ASYMMETRIC)", wrapper)
+        self.assertEqual(2, wrapper.count("@Throws(GeneralSecurityException::class)"),
+                         "wrap()/unwrap() must keep their checked exception for Java callers")
+        self.assertIn("cipher.init(Cipher.WRAP_MODE, pair.public)", wrapper)
+        self.assertIn("cipher.init(Cipher.UNWRAP_MODE, pair.private)", wrapper)
+        self.assertIn('cipher.unwrap(blob, "AES", Cipher.SECRET_KEY) as SecretKey', wrapper)
+        for forbidden in ("data class", "Parcelable", "Serializable"):
+            self.assertNotIn(forbidden, wrapper)
+
+        listener = (KOTLIN / "View/SimpleDoubleClickListener.kt").read_text()
+        # The Java class was abstract with a public no-argument constructor and two abstract callbacks.
+        self.assertIn("abstract class SimpleDoubleClickListener : View.OnClickListener", listener)
+        self.assertIn("override fun onClick(v: View)", listener)
+        self.assertIn("abstract fun onSingleClick(v: View)", listener)
+        self.assertIn("abstract fun onDoubleClick(v: View)", listener)
+        self.assertIn("const val DOUBLE_CLICK_TIME_DELTA = 300L", listener)
+        # The pending callback re-reads firstTap, so a second tap suppresses the single click.
+        self.assertIn("v.postDelayed({ if (firstTap) onSingleClick(v) }, DOUBLE_CLICK_TIME_DELTA)", listener)
+        self.assertNotIn("!!", listener)
+
+        dimensions = (KOTLIN / "Utilities/DimensionConverter.kt").read_text()
+        # Static-only utility: members stay Java-callable, the lookup table stays unmodifiable.
+        for api in ("object DimensionConverter", "@JvmField", "val dimensionConstantLookup: Map<String, Int>",
+                    "Collections.unmodifiableMap(m)", "@JvmStatic",
+                    "fun stringToDimensionPixelSize(dimension: String, metrics: DisplayMetrics): Int",
+                    "fun stringToDimension(dimension: String, metrics: DisplayMetrics): Float",
+                    "throw NumberFormatException()"):
+            self.assertIn(api, dimensions)
+        # The default-locale lower-casing of the unit suffix is inherited from the Java implementation.
+        self.assertIn("matcher.group(3).lowercase(Locale.getDefault())", dimensions)
+        self.assertIn(r'Pattern.compile("^\\s*(\\d+(\\.\\d+)*)\\s*([a-zA-Z]+)\\s*$")', dimensions)
