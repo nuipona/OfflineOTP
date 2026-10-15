@@ -10,12 +10,12 @@ class UiDecompositionSourceTest(unittest.TestCase):
     """Architecture source guards, not substitutes for compilation or UI/runtime tests."""
 
     def test_display_projection_and_timer_policy_have_no_android_or_io_dependencies(self):
-        for file in (JAVA / "View/EntryListPresentation.java", KOTLIN / "Utilities/ScreenTimerController.kt"):
+        for file in (KOTLIN / "View/EntryListPresentation.kt", KOTLIN / "Utilities/ScreenTimerController.kt"):
             source = file.read_text()
             for forbidden in ("import android.", "import androidx.", "import javax.crypto.",
                               "import java.io.", "import org.shadowice.flocke.andotp.Utilities.VaultSession"):
                 self.assertNotIn(forbidden, source)
-        projection = (JAVA / "View/EntryListPresentation.java").read_text()
+        projection = (KOTLIN / "View/EntryListPresentation.kt").read_text()
         self.assertNotIn("entry.destroy()", projection)
         self.assertNotIn("DatabaseHelper", projection)
 
@@ -29,9 +29,9 @@ class UiDecompositionSourceTest(unittest.TestCase):
             self.assertNotIn(forbidden, source)
         self.assertIn("VaultSession.isCurrent(epoch)", source)
         self.assertIn("projection.close()", source)
-        persistence = (JAVA / "Utilities/EntryPersistence.java").read_text()
-        self.assertLess(persistence.index("if (!(result instanceof VaultWriteResult.Saved)) return result;"),
-                        persistence.index("new EncryptedBackupTask"))
+        persistence = (KOTLIN / "Utilities/EntryPersistence.kt").read_text()
+        self.assertLess(persistence.index("if (result !is VaultWriteResult.Saved) return result"),
+                        persistence.index("EncryptedBackupTask("))
         self.assertIn("context.getApplicationContext()", persistence)
 
     def test_main_activity_wires_timer_lifecycle_without_owning_scheduling(self):
@@ -52,18 +52,18 @@ class UiDecompositionSourceTest(unittest.TestCase):
         self.assertIn("restoreOperation.restore(", body)
         self.assertNotIn("DatabaseHelper", body)
         self.assertNotIn("iterator", body)
-        operation = (JAVA / "Utilities/VaultRestoreOperation.java").read_text()
+        operation = (KOTLIN / "Utilities/VaultRestoreOperation.kt").read_text()
         self.assertIn("synchronized (VaultSession.MutationLock)", operation)
         self.assertIn("VaultSession.isCurrent(generation)", operation)
         self.assertIn("VaultWriteResult.RecoveryRequired", operation)
-        self.assertIn("for (Entry entry : imported) entry.destroy();", operation)
-        self.assertIn("for (Entry entry : current) entry.destroy();", operation)
+        self.assertIn("for (entry in imported) entry.destroy()", operation)
+        self.assertIn("for (entry in current) entry.destroy()", operation)
 
     def test_dialog_rendering_does_not_own_entry_mutations_or_session_authority(self):
-        dialogs = (JAVA / "View/EntryActionDialogs.java").read_text()
+        dialogs = (KOTLIN / "View/EntryActionDialogs.kt").read_text()
         for forbidden in ("DatabaseHelper", "VaultSession", "SecretKey", "import org.shadowice.flocke.andotp.Database.Entry;"):
             self.assertNotIn(forbidden, dialogs)
-        self.assertIn("input.setSaveEnabled(false)", dialogs)
+        self.assertIn("input.isSaveEnabled = false", dialogs)
         self.assertIn('input.setText("")', dialogs)
         adapter = (JAVA / "View/EntriesCardAdapter.java").read_text()
         self.assertIn("dialogs.dismissAll()", adapter)
@@ -72,7 +72,10 @@ class UiDecompositionSourceTest(unittest.TestCase):
         self.assertNotIn("new EditText(", adapter)
 
     def test_converted_leaf_helpers_have_one_implementation_and_keep_java_api_shapes(self):
-        for stem in ("Utilities/ScreenTimerController", "View/EntryActionTarget"):
+        for stem in ("Utilities/ScreenTimerController", "View/EntryActionTarget",
+                     "Utilities/InputPolicy", "View/EntryListPresentation",
+                     "Utilities/EntryPersistence", "Utilities/VaultRestoreOperation",
+                     "View/EntryActionDialogs", "Utilities/VaultSession"):
             self.assertTrue((KOTLIN / (stem + ".kt")).is_file())
             self.assertFalse((JAVA / (stem + ".java")).exists())
         timer = (KOTLIN / "Utilities/ScreenTimerController.kt").read_text()

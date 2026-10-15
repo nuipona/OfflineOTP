@@ -4,6 +4,7 @@ import unittest
 ROOT = Path(__file__).resolve().parents[2]
 JAVA = ROOT / "app/src/main/java/org/shadowice/flocke/andotp"
 KOTLIN = ROOT / "app/src/main/kotlin/org/shadowice/flocke/andotp"
+KOTLIN = ROOT / "app/src/main/kotlin/org/shadowice/flocke/andotp"
 
 
 class ContractMigrationSourceTest(unittest.TestCase):
@@ -24,11 +25,12 @@ class ContractMigrationSourceTest(unittest.TestCase):
 
     def test_production_task_consumers_do_not_use_legacy_fallback_adapter(self):
         for name in ("Activities/BackgroundTaskActivity.java", "Activities/IntroScreenActivity.java",
-                     "Preferences/CredentialsPreference.java", "Utilities/EntryPersistence.java"):
+                     "Preferences/CredentialsPreference.java"):
             source = (JAVA / name).read_text()
-            self.assertIn("setOutcomeCallback", source)
-            self.assertNotIn("task.setCallback(", source)
-            self.assertNotIn("taskFragment.setCallback(", source)
+        persistence = (KOTLIN / "Utilities/EntryPersistence.kt").read_text()
+        self.assertIn("setOutcomeCallback", persistence)
+        self.assertNotIn("task.setCallback(", persistence)
+        self.assertNotIn("taskFragment.setCallback(", persistence)
         activity = (JAVA / "Activities/BackgroundTaskActivity.java").read_text()
         self.assertIn("source != activeTask", activity)
         self.assertIn("source.disposeOutcome(outcome)", activity)
