@@ -84,7 +84,7 @@ Android resource ids (`R.drawable`/`R.mipmap`) and their bitmaps are platform gr
 therefore keeps `EntryThumbnail.EntryThumbnails` as its thumbnail type, exactly as the Java did.
 
 No activity, list adapter, fragment, preference, receiver, worker, dialog renderer or persistence
-implementation is converted (the task runner and its subclasses are). No coroutine, Compose, new
+implementation is converted; the task runner and its subclasses are, and so is the entry model above. No coroutine, Compose, new
 dependency, SDK/bytecode target, storage format or crypto change is included.
 
 **Source conversion is implemented; Gradle and device acceptance is still pending.** What *has* been
