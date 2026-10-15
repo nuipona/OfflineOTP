@@ -47,13 +47,16 @@ manifest.
 | `Database/EntryJsonResult.kt` | The closed parse-error set and the owned one-use seed: `copySecret()` returns copies, `close()` wipes and is idempotent, redacted `toString()`, no generated `data class` members. |
 | `Database/EntryJson.kt` | The stored document format, executed against the functional `org.json`/`Base32`/`Hex` stand-ins: legacy field defaults, the malformed-field matrix with its closed errors, the serialized field order, and the Base32/mOTP-hex secret rules. |
 | `Database/Entry.kt` | Compiled and shape-checked only: it is non-final, has both legacy adapters, the nested `OTPType`, `COLOR_RED` and `validateSecret`; constructing it or reflecting its fields loads the Java `EntryThumbnail`, which has no class file here, so its preserved behaviour is pinned by the Python source guards instead. |
+| `Utilities/DatabaseHelper.kt` | The vault repository's outcome mapping and its fail-closed document boundary are executed (every `VaultReadError` -> `Status`, `LoadResult`/`VaultException` behaviour, `stringToEntries` rejections, `entriesToString` bounds); the file transaction itself is not: `FileHelper`/`AtomicFile`, `SharedPreferences` and `EncryptionHelper` have no class files here. Its Java-visible surface is reflected. |
 | `Database/EntryList.kt` | Compiled and shape-checked only: its sorting/filtering API takes `Constants` enums and its entries are `Entry` objects, and neither type has a class file in this sandbox, so its behaviour stays covered by the Python source guards and `ApplicationTest`. |
 
 The task subclasses are compiled **against the real Java declarations** they call: `run.sh` passes
 `Settings.java`, `EncryptionHelper.java`, `BackupHelper.java`, `StorageAccessHelper.java`,
-`DatabaseHelper.java`, `KeyStoreHelper.java`, `FileHelper.java`, `EntryThumbnail.java` and
-`LetterBitmap.java` to `kotlinc` for resolution (the same mechanism already used for
-`Constants.java`). `Entry.java` is no longer among them: it is Kotlin now, and the graphical
+`KeyStoreHelper.java`, `FileHelper.java`, `EntryThumbnail.java` and `LetterBitmap.java` to
+`kotlinc` for resolution (the same mechanism already used for
+`Constants.java`). `Entry.java` and `DatabaseHelper.java` are no longer among them: both are
+Kotlin now (and the converted repository reads the same real `FileHelper`/`Constants`/
+`EncryptionHelper` declarations), while the graphical
 `EntryThumbnail`/`LetterBitmap` stay Java because their constants are Android resource ids. No class files are produced for them, so their bodies cannot be *executed*
 here, and reflection can only see members whose signatures avoid those Java-only types; the
 remaining shapes are enforced by the Python source guards in `scripts/tests/`.
@@ -81,6 +84,12 @@ Still **not** covered, and therefore still dependent on the Gradle/device gates:
 
 - `View/EntryActionDialogs.kt`, `View/EntryActionTarget.kt`, `View/EntryListPresentation.kt`:
   Android views/dialogs, or APIs that take the `Entry`/`EntryList` model types.
+- `Utilities/DatabaseHelper.kt` beyond the executed part above: the vault file transaction needs
+  `FileHelper` (`AtomicFile`), `SharedPreferences` and `EncryptionHelper`, so recovery, promotion,
+  backup/restore and wipe are covered by the instrumentation tests
+  (`VaultFailureSecurityTest`, `VaultRestoreOperationTest`) rather than here. The document *entry*
+  path (`stringToEntries` over a real entry, `entriesToString` over real entries) also needs
+  `Entry`, whose thumbnail members need the Java resource catalogue.
 - Every activity, fragment, adapter, preference, receiver and worker (all still Java).
 - **Execution** of the task subclass bodies (and of `EntryPersistence`/`VaultRestoreOperation`):
   the Java resolution sources produce no class files, so `Settings`/`DatabaseHelper`/
@@ -111,8 +120,12 @@ constructors (from text and from parsed values), `put`/`get`/`getString`/`getLon
 `getJSONObject`/`getJSONArray`/`has`/`keys`/`length` and the `opt*` fallbacks the entry code uses;
 they keep insertion order for `keys()` and for `toString()`, which emits no whitespace (so a
 reserialized document compares byte-for-byte with the stored fixtures), treat `put(name, null)` as a
-removal and integral literals as `Long`, and throw `JSONException` for a missing `get`. They do
-**not** implement `JSONTokener`, `remove`, `isNull`, `optJSONObject`, duplicate-key rejection or
+removal and integral literals as `Long`, and throw `JSONException` for a missing `get`. They also
+carry the subset of `JSONTokener` the vault parser uses (`nextValue()` with values converted to
+`JSONObject`/`JSONArray` as the platform does, and `nextClean()`, which consumes the next
+non-whitespace character and returns NUL at the end). They do **not** implement the rest of the
+tokener (`nextString`, `back`, `skipTo`, `more`, comment skipping — the vault parser rejects comment
+syntax before the tokener runs), `remove`, `isNull`, `optJSONObject`, duplicate-key rejection or
 indenting, and duplicate keys keep the last value. `commons-codec` `Base32` implements the RFC 4648
 standard padded uppercase alphabet (`decode`, `encode`, `encodeAsString`; other characters throw) and
 `Hex` only the lowercase `encodeHex(byte[])`/`decodeHex(String|CharArray)` pair the model calls.
@@ -128,7 +141,12 @@ overridden that way, and no platform timing is exercised). Kotlin objects also a
 `INSTANCE` field and static forwarders, and a private constructor produces one synthetic
 `public` bridge — both are inherent to Kotlin, not tested here.
 
-The entry checks are the reason the three replicas above exist: they parse the stored document
+The vault checks are the reason the tokener subset exists: they execute the repository's outcome
+mapping and the document boundary's rejections (null, empty, truncated, object-valued,
+trailing-content and single-quoted documents are all `VaultException(CORRUPT)`, `"[]"` is an empty
+vault, `entriesToString(null)` is a caller error) without ever touching the file system, which is why
+the rest of the transaction stays with the instrumentation tests. The entry checks are the reason the
+three replicas above exist: they parse the stored document
 format, reserialize it and compare the exact string, walk the malformed-field matrix (including the
 `MISSING_SECRET` case that the URI parser reports as its own error) and exercise the seed's
 one-use/redacted ownership and the secret rules. `Entry` itself is **not** instantiated here, so the
@@ -178,5 +196,5 @@ curl -sS -o /tmp/kt.tgz https://registry.npmjs.org/kotlin-compiler/-/kotlin-comp
 tar xzf /tmp/kt.tgz -C /tmp && chmod +x /tmp/package/bin/kotlinc*
 ```
 
-Verified with Kotlin `2.4.21` and Temurin `25.0.2` on 2026-10-15 (40 checks). Pin your own compiler
+Verified with Kotlin `2.4.21` and Temurin `25.0.2` on 2026-10-15 (41 checks). Pin your own compiler
 when recording results; the check is only as meaningful as the versions you run it with.

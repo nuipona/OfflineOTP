@@ -28,6 +28,9 @@ import org.shadowice.flocke.andotp.Database.EntryJsonError
 import org.shadowice.flocke.andotp.Database.EntryJsonResult
 import org.shadowice.flocke.andotp.Database.ValidatedEntry
 import org.shadowice.flocke.andotp.Utilities.BoundedInputReader
+import org.shadowice.flocke.andotp.Utilities.DatabaseHelper
+import org.shadowice.flocke.andotp.Utilities.VaultReadError
+import org.shadowice.flocke.andotp.Utilities.VaultReadResult
 import org.shadowice.flocke.andotp.Utilities.ConfirmedPasswordTransformationHelper
 import org.shadowice.flocke.andotp.Utilities.DimensionConverter
 import org.shadowice.flocke.andotp.Utilities.SecretKeyWrapper
@@ -805,6 +808,123 @@ fun main() {
         // thumbnail-dependent members are pinned by the reflection source guards instead, because
         // EntryThumbnail stays Java and therefore has no class file in this sandbox (see README).
     }
+
+    check("the converted vault repository keeps its Java-visible surface and fails closed") {
+        val helper = DatabaseHelper::class.java
+        expect(Modifier.isPublic(helper.modifiers), { "DatabaseHelper is not public" })
+        // Static-only utility: the deliberate `object` delta is INSTANCE plus static forwarders.
+        expectPublicFieldValue(helper, "INSTANCE", DatabaseHelper, DatabaseHelper::class.java, true)
+        // The lock every vault transaction is serialized on, shared with the Java callers that
+        // synchronize on DatabaseHelper.DatabaseFileLock.
+        expectPublicFieldValue(helper, "DatabaseFileLock", VaultSession.MutationLock, Any::class.java, true)
+        expect(DatabaseHelper.DatabaseFileLock === VaultSession.MutationLock, { "vault lock identity" })
+        expectPublicFieldValue(helper, "TRANSACTION_ID", "vault_transaction_id", String::class.java, true)
+        expectPublicFieldValue(helper, "PENDING_FILE", "secrets.pending", String::class.java, true)
+
+        for (signature in listOf(
+                "static boolean recoverPendingDatabase(Context)",
+                "static VaultReadResult readVault(Context,SecretKey)",
+                "static LoadResult loadDatabaseResult(Context,SecretKey)",
+                "static ArrayList loadDatabase(Context,SecretKey)",
+                "static VaultWriteResult saveVault(Context,ArrayList,SecretKey)",
+                "static boolean saveDatabase(Context,ArrayList,SecretKey)",
+                "static boolean changeEncryption(Context,SecretKey,SecretKey,boolean,SettingsCommit)",
+                "static VaultWriteResult changeVaultEncryption(Context,SecretKey,SecretKey,boolean,VaultSettingsCommit)",
+                "static boolean canInitialize(Context)",
+                "static boolean backupDatabase(Context)",
+                "static boolean restoreDatabaseBackup(Context)",
+                "static void wipeDatabase(Context)",
+                "static String entriesToString(ArrayList)",
+                "static ArrayList stringToEntries(String)")) {
+            expectMethod(helper, signature)
+        }
+
+        // Nested types stay named the way Java callers and the instrumentation tests refer to them.
+        val status = DatabaseHelper.Status::class.java
+        expect(status.isEnum, { "Status is not an enum" })
+        expect(DatabaseHelper.Status.values().map { it.name } == listOf("SUCCESS", "MISSING", "MISSING_KEY",
+                "AUTHENTICATION_FAILED", "CORRUPT", "IO_FAILURE"), { "Status constants changed" })
+        expectField(DatabaseHelper.VaultException::class.java, "status", DatabaseHelper.Status::class.java, false)
+        expect(IllegalStateException::class.java.isAssignableFrom(DatabaseHelper.VaultException::class.java),
+                { "VaultException no longer is an IllegalStateException" })
+        expectField(DatabaseHelper.LoadResult::class.java, "status", DatabaseHelper.Status::class.java, false)
+        expect(AutoCloseable::class.java.isAssignableFrom(DatabaseHelper.LoadResult::class.java),
+                { "LoadResult is not AutoCloseable" })
+        expectMethod(DatabaseHelper.LoadResult::class.java, "boolean isSuccess()")
+        expectMethod(DatabaseHelper.LoadResult::class.java, "ArrayList requireEntries()")
+        expectMethod(DatabaseHelper.LoadResult::class.java, "void close()")
+        // Both metadata callbacks stay single-method interfaces so Java lambdas keep compiling.
+        for (callback in listOf(DatabaseHelper.SettingsCommit::class.java,
+                DatabaseHelper.VaultSettingsCommit::class.java)) {
+            expect(callback.isInterface, { "${callback.simpleName} is not an interface" })
+            expect(callback.declaredMethods.count { Modifier.isPublic(it.modifiers) } == 1,
+                    { "${callback.simpleName} is no longer a single-method interface" })
+        }
+        expectMethod(DatabaseHelper.SettingsCommit::class.java, "boolean commit(String)")
+        expectMethod(DatabaseHelper.VaultSettingsCommit::class.java, "VaultCommitDecision commit(String)")
+
+        // Every read error keeps a legacy Status, including the mapping the instrumented
+        // "failed preference commit" test depends on, and an empty vault is Loaded(empty).
+        expect(DatabaseHelper.LoadResult.create(VaultReadResult.Unavailable(VaultReadError.MISSING)).status
+                == DatabaseHelper.Status.MISSING, { "MISSING mapping" })
+        expect(DatabaseHelper.LoadResult.create(VaultReadResult.Unavailable(VaultReadError.MISSING_KEY)).status
+                == DatabaseHelper.Status.MISSING_KEY, { "MISSING_KEY mapping" })
+        expect(DatabaseHelper.LoadResult.create(VaultReadResult.Unavailable(VaultReadError.AUTHENTICATION_FAILED)).status
+                == DatabaseHelper.Status.AUTHENTICATION_FAILED, { "AUTHENTICATION_FAILED mapping" })
+        expect(DatabaseHelper.LoadResult.create(VaultReadResult.Unavailable(VaultReadError.CORRUPT)).status
+                == DatabaseHelper.Status.CORRUPT, { "CORRUPT mapping" })
+        expect(DatabaseHelper.LoadResult.create(VaultReadResult.Unavailable(VaultReadError.IO_FAILURE)).status
+                == DatabaseHelper.Status.IO_FAILURE, { "IO_FAILURE mapping" })
+        // The legacy status set has no recovery value, and the instrumented test that wipes a failed
+        // preference commit expects IO_FAILURE rather than a thrown IllegalArgumentException.
+        expect(DatabaseHelper.LoadResult.create(VaultReadResult.Unavailable(VaultReadError.RECOVERY_REQUIRED)).status
+                == DatabaseHelper.Status.IO_FAILURE, { "RECOVERY_REQUIRED mapping" })
+
+        val missing = DatabaseHelper.LoadResult.create(VaultReadResult.Unavailable(VaultReadError.MISSING))
+        expect(!missing.isSuccess(), { "an unavailable vault reported itself as loaded" })
+        missing.close()
+        missing.close()
+        val empty = DatabaseHelper.LoadResult.create(VaultReadResult.Loaded(ArrayList()))
+        expect(empty.status == DatabaseHelper.Status.SUCCESS && empty.isSuccess(), { "empty vault load" })
+        expect(empty.requireEntries().isEmpty(), { "empty vault entries" })
+        empty.close()
+
+        val unavailable = DatabaseHelper.LoadResult.create(VaultReadResult.Unavailable(VaultReadError.AUTHENTICATION_FAILED))
+        val raised = try {
+            unavailable.requireEntries()
+            null
+        } catch (error: DatabaseHelper.VaultException) {
+            error
+        }
+        expect(raised?.status == DatabaseHelper.Status.AUTHENTICATION_FAILED, { "VaultException status" })
+        expect(raised?.message == "Vault unavailable: AUTHENTICATION_FAILED",
+                { "VaultException message: ${raised?.message}" })
+
+        // The document boundary fails closed on the desktop JVM too: every rejection is a
+        // VaultException with CORRUPT, never a short/empty list that could overwrite a vault.
+        fun expectCorrupt(data: String?) {
+            val error = try {
+                DatabaseHelper.stringToEntries(data)
+                null
+            } catch (thrown: DatabaseHelper.VaultException) {
+                thrown
+            }
+            expect(error?.status == DatabaseHelper.Status.CORRUPT, { "expected CORRUPT for [$data], got $error" })
+        }
+        expectCorrupt(null)
+        expectCorrupt("")
+        expectCorrupt("{")
+        expectCorrupt("{\"secret\":\"GEZDGNBVGY3TQOJQ\"}")   // an object, not an array of entries
+        expectCorrupt("[] []")                                    // trailing content after the array
+        expectCorrupt("[{'secret':'GEZDGNBVGY3TQOJQ'}]")          // the vault format is double-quoted
+        expect(DatabaseHelper.stringToEntries("[]").isEmpty(), { "an empty vault document is an empty list" })
+        expect(DatabaseHelper.stringToEntries(" [ ] ").isEmpty(), { "whitespace around the array" })
+
+        // Caller errors stay caller errors: they must not be reported as a corrupt vault.
+        expectThrows(IllegalArgumentException::class.java) { DatabaseHelper.entriesToString(null) }
+        expect(DatabaseHelper.entriesToString(ArrayList()) == "[]", { "empty vault serializes to []" })
+    }
+
 
     check("bounded document reads reject oversize input and keep the caller's stream") {
         expect(BoundedInputReader.read(ByteArrayInputStream(ByteArray(0)), 0).isEmpty(), { "empty" })

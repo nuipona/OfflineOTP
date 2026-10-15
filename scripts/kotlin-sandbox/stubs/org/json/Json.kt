@@ -185,6 +185,24 @@ internal class JSONReader(private val text: String) {
         return value
     }
 
+    /** [JSONTokener.nextValue]: one value from the current position, no whole-document check. */
+    internal fun readValueForTokener(): Any? = readValue()
+
+    /**
+     * [JSONTokener.nextClean]: consumes and returns the next non-whitespace character, or NUL at the
+     * end of the input. The platform class would also skip comments here; the vault parser rejects
+     * comment syntax before the tokener runs (see [org.shadowice.flocke.andotp.Utilities.InputPolicy.jsonDepth]).
+     */
+    internal fun nextCleanForTokener(): Char {
+        while (position < text.length) {
+            val c = text[position]
+            position++
+            if (c == '\t' || c == ' ' || c == '\n' || c == '\r') continue
+            return c
+        }
+        return 0.toChar()
+    }
+
     private fun readValue(): Any? {
         skipWhitespace()
         if (position >= text.length) fail("Unexpected end of input")
@@ -309,6 +327,21 @@ internal class JSONReader(private val text: String) {
     }
 
     private fun fail(message: String): Nothing = throw JSONException("$message at $position")
+}
+
+/**
+ * Stand-in for the platform tokener over the same reader: `nextValue()` (values converted to
+ * [JSONObject]/[JSONArray] as the platform does) and `nextClean()`. Only the two entry points the
+ * vault document parser uses exist here; comments, `nextString`, `back`, `skipTo`, `more` and the
+ * remaining tokener API are not implemented, and the vault document path is not *executed* in this
+ * sandbox (it needs `Entry`, whose members need the Java thumbnail catalogue).
+ */
+class JSONTokener(json: String?) {
+    private val reader = JSONReader(json ?: throw JSONException("Null input"))
+
+    fun nextValue(): Any? = converted(reader.readValueForTokener())
+
+    fun nextClean(): Char = reader.nextCleanForTokener()
 }
 
 private fun jsonObject(json: String?): Map<String, Any?> {

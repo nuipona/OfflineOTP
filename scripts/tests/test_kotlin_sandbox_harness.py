@@ -52,10 +52,14 @@ class KotlinSandboxHarnessTest(unittest.TestCase):
         self.assertIn('"${JAVA_SOURCES[@]}"', script)
         # The task subclasses resolve the real settings/database/crypto helpers, not stubs of them.
         for resolved in ("Utilities/Settings.java", "Utilities/EncryptionHelper.java",
-                         "Utilities/DatabaseHelper.java", "Utilities/KeyStoreHelper.java",
+                         "Utilities/KeyStoreHelper.java",
                          "Utilities/BackupHelper.java", "Utilities/StorageAccessHelper.java",
                          "Utilities/EntryThumbnail.java"):
             self.assertIn(f"$ROOT/app/src/main/java/org/shadowice/flocke/andotp/{resolved}", script)
+        # The vault repository is Kotlin since the eighth batch, so it is compiled (not resolved)
+        # and resolves the same Java helpers it reads (FileHelper/Constants/EncryptionHelper).
+        self.assertIn("$KOTLIN_APP/Utilities/DatabaseHelper.kt", script)
+        self.assertFalse((ROOT / "app/src/main/java/org/shadowice/flocke/andotp/Utilities/DatabaseHelper.java").exists())
         # EntryThumbnail stays Java (its resource ids need the Android toolchain), so the converted
         # Entry resolves the real declaration rather than a stub of it.
         self.assertIn("$KOTLIN_APP/Database/Entry.kt", script)
