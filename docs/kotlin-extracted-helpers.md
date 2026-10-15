@@ -145,7 +145,8 @@ Tenth batch (number preference and hideable notice):
   preference against recording fake widgets/persistence/listeners and reflects the dialog API only;
   it cannot instantiate `HideableDialog` because `Settings` has no runtime class file there.
   Sandbox resource generation now emits styleable arrays and distinct deterministic attribute slots
-  from `declare-styleable` XML, not scalar stand-ins for arrays. These slots are **not aapt IDs or
+  from `declare-styleable` XML, not scalar stand-ins for arrays. (Since the thirteenth batch the
+  scalar ids are distinct deterministic stand-ins too, so checks can tell resources apart.) These slots are **not aapt IDs or
   ordering**, and fake typed arrays do not resolve real XML, references or themes.
 - Added Java instrumentation tests cover real picker configuration from application XML, summary
   updates, cancel/veto/accept listeners, default/restore hooks, notice layout listeners and immediate
@@ -153,8 +154,48 @@ Tenth batch (number preference and hideable notice):
   persistence calls rather than claim real PreferenceManager disk I/O, and do not show an unsuppressed
   dialog window. They still need compilation/execution on the Android gates.
 
-No activity, entry-card list adapter/view holder, fragment, credential preference, receiver, worker,
-larger dialog renderer or persistence implementation is converted; the task runner and its subclasses are, and so is the entry model above. No coroutine, Compose, new
+Eleventh batch (the vault repository — the assessment's second conversion target):
+
+- `Utilities/DatabaseHelper.kt` (replacing `DatabaseHelper.java`): the serialized vault file
+  transaction — recovery of a staged write, the authenticated read, the bounded write, the staged
+  encryption migration, backup/restore/wipe and the entry-document writer/parser. The typed
+  outcomes (`VaultReadResult`, `VaultWriteResult`, `VaultCommitDecision`) and the session already
+  existed in `VaultContracts.kt`/`VaultSession.kt`; this batch moves the repository that produces
+  them. Every member was `static` in Java, so the conversion is the documented `object` delta with
+  `@JvmStatic` forwarders; the Java-visible names, the nested `Status`/`LoadResult`/`VaultException`
+  types (including both public `status` fields) and both callback interfaces are unchanged.
+- This batch was first prepared on top of the seventh batch (as PR #9) and is rebased here onto the
+  thumbnail/adapter/preference batches; the repository source it converts is the same
+  `DatabaseHelper.java` those batches left untouched.
+
+Twelfth batch (document and backup I/O helpers):
+
+- `Utilities/StorageAccessHelper.kt` and `Utilities/BackupHelper.kt` replace the Java helpers that the
+  backup/restore tasks, `EntryPersistence`, `BackupActivity`, `SettingsActivity` and
+  `ScanQRCodeFromFile` call: Storage Access Framework reads/writes, document display names, backup
+  file naming/creation, the automatic-backup policy and the encrypted-backup writer. Both were
+  static-only, so both are the documented `object` delta with `@JvmStatic` forwarders; the nested
+  `BackupHelper.BackupFile` holder stays an extendable class with public mutable fields.
+- The sandbox now **executes** the storage helper against a recording fake provider (see below);
+  `BackupHelper` compiles against the real `Settings`/`EncryptionHelper`/`Constants` declarations
+  but its members take the Java-only `Constants.BackupType`, so only its holder runs here.
+
+Thirteenth batch (notification and QR-image helpers):
+
+- `Utilities/NotificationHelper.kt` and `Utilities/ScanQRCodeFromFile.kt` replace the Java helpers that
+  `MainActivity`, `SettingsActivity`, the encrypted-backup receiver and the backup worker call: the
+  Android 13 notification-permission request, the two backup channels and their notifications, and
+  QR decoding from a user-chosen image. Both were static-only, so both are the documented `object`
+  delta; the receiver and worker that post the notifications stay Java (components).
+- The sandbox **executes** the whole QR pipeline against scripted zxing/`BitmapFactory` stand-ins
+  and the permission gate against fake fragments; the channel/notification members take the
+  Java-only `Constants.NotificationChannel`, so they only compile here.
+
+No activity, entry-card list adapter/view holder, fragment, credential preference, receiver, worker
+or larger dialog renderer is converted; the task runner and its subclasses are, and so are the entry
+model, the vault repository and the document/backup, notification and QR-image helpers above. The repository's own storage primitives
+(`Utilities/FileHelper.java`) and the Android file/preference surface it uses stay Java and are
+resolved by the sandbox rather than converted. No coroutine, Compose, new
 dependency, SDK/bytecode target, storage format or crypto change is included.
 
 **Source conversion is implemented; Gradle and device acceptance is still pending.** What *has* been
@@ -435,6 +476,146 @@ the same exception type and the same messages' shape.
   already produces.
 - `Entry` is `open`, not final: it was extendable Java, and `EntryList`/the views hold it as a model.
 
+### Vault repository
+
+The repository is the only owner of the vault file transaction, and it stays exactly that. Only the
+language changed: every method, the nested types and the callback interfaces keep their Java
+signatures, and the ordering below is the ordering the hardened Java had.
+
+- **Reads distinguish absence from failure**, in this precedence: a poisoned/unrecoverable process
+  (`RECOVERY_REQUIRED`) before the file check, `MISSING` before `MISSING_KEY` (a missing vault is
+  first-run, not a key problem), then `AUTHENTICATION_FAILED` for a `BadPaddingException` caught
+  *before* the broader `IOException` and `Exception` arms that map to `IO_FAILURE` and `CORRUPT`. A
+  reordering of those catches would silently relabel a decryption failure, so the source guard pins
+  the order. Decrypted plaintext is wiped in the `finally` on every path, including the success one.
+- **`LoadResult` keeps the legacy mapping** `VaultReadError -> Status` with one arm per error, so a
+  future error constant cannot turn into an `IllegalArgumentException` inside a constructor (the
+  Java's `Status.valueOf(error.name())` would do exactly that for any constant without a same-named
+  `Status`; it special-cased `RECOVERY_REQUIRED` before reaching it). `RECOVERY_REQUIRED`
+  still maps to `IO_FAILURE`: the legacy status set has no recovery value, and
+  `VaultFailureSecurityTest.failedPreferenceCommitBlocksWritesUntilRestartOrExplicitWipe` asserts
+  that status after wiping a failed preference commit. `LoadResult` stays a one-use view over the
+  typed read result — `requireEntries()` transfers entry ownership once and throws `VaultException`
+  otherwise, `close()` destroys only untransferred entries.
+- **The staged migration is unchanged**: ciphertext is staged with a 36-byte UUID prefix, the
+  metadata commit is asked for a decision, the marker preference is read back, `CANCELED` is only
+  accepted *before* any metadata mutation, and an `UNKNOWN`/uncommitted marker poisons the process
+  (`transactionPoisoned`) so every later recovery and write fails closed until an explicit wipe or
+  restart. A committed-but-unpromoted stage is reported as `RecoveryRequired(COMMITTED)`, never as a
+  rollback. All entry ownership held by the transaction (the failed-backup branch and the `finally`)
+  is destroyed.
+- **Bounded and fail-closed documents**: `entriesToString` refuses null/oversized input as a caller
+  error (`IllegalArgumentException`) and reports a corrupt vault for per-entry failures; the parser
+  rejects a document over `MAX_DOCUMENT_BYTES`, runs `InputPolicy.jsonDepth` before the platform
+  tokener, requires the whole value to be a JSON array with nothing but whitespace after it, and
+  destroys every partially parsed entry before reporting `CORRUPT`. A malformed document is never a
+  short or empty list.
+- **Visibility of the two constants**: `TRANSACTION_ID` and `PENDING_FILE` were package-private
+  fields in Java (`static final String` with no modifier). Kotlin has no package-private visibility,
+  so they are `const val` — same names, same values, read by the same-package `Settings` and by the
+  instrumentation tests, but now also visible to out-of-package Java as two non-secret strings. The
+  anti-pattern that kept `Constants`/`FileHelper` Java does not apply here: these are `String`
+  constants, not a class whose *type* would have to be published.
+- **Constructors that stay non-public**: `LoadResult` and `VaultException` had package-private /
+  private constructors in Java. Both are `private constructor` plus a `@JvmSynthetic internal`
+  factory (`LoadResult.create`, `VaultException.create`), so Java still cannot construct them while
+  this file can. The companions add a static `Companion` field with no Java-callable member, and
+  the private constructors get Kotlin's synthetic accessor; neither is usable from Java source.
+  No `!!` appears in the file.
+- **Fields stay fields**: `LoadResult.status` and `VaultException.status` were `public final`
+  fields in Java and are `@JvmField` here, so Java keeps reading `result.status`/`error.status`
+  rather than needing a `getStatus()` accessor. (PR #9's first draft had dropped `@JvmField` on the
+  exception; it was restored when the batch was rebased.)
+- **Nullability follows the Java checks**: `key`/`oldKey`/`newKey` stay nullable (missing keys are
+  explicit `MISSING_KEY` outcomes), and so does the entry list on the write path — the Java reached
+  `entriesToString`'s null check and reported a null list as `Rejected(INVALID_INPUT)` after the
+  read, so `saveVault`/`saveDatabase` keep accepting null instead of failing Kotlin's parameter
+  check. Parameters the Java dereferenced without a check are non-null and now **fail fast** at the
+  call: a null `context` throws before the lock is taken (the Java threw the same
+  `NullPointerException` at its first file lookup, or returned the fail-closed result unchanged in a
+  poisoned process), and a null `commit` callback for `changeEncryption`/
+  `changeVaultEncryption` is rejected before anything is staged. In the Java that null was only
+  dereferenced *inside* the staged transaction, where the catch turned it into `UNKNOWN` and
+  poisoned the process; failing before staging is the documented trade-off of this repository's
+  conversions. Every in-repository caller passes a non-null context and callback.
+
+### Document and backup I/O
+
+These helpers are the app's boundary to user-chosen documents, so the conversion keeps every bound
+and refusal exactly where the Java had it.
+
+- **Writes are `content:`-only, bounded and permission-gated**: a null/oversized (`MAX_URI_CHARS`)
+  URI, a non-`content` scheme, null data, data over `MAX_DOCUMENT_BYTES` or a refused permission all
+  return `false` before the provider is touched. The document is opened with the truncating `"wt"`
+  mode, and the caller's `BooleanSupplier` is asked again after opening, before **every** 8 KiB chunk
+  and once more after the flush, so a revoked session stops a write mid-document and is reported as
+  a failure even when every byte was written (the backup task then deletes the new document).
+  `IOException`/`RuntimeException` from the provider stay `false`; provider writes are still not
+  atomic, which is why automatic backups always create a new document.
+- **Reads are bounded and file URIs stay confined**: `loadFile` refuses null/oversized URIs, accepts
+  `content:` documents, and accepts `file:` URIs only when the canonical path is strictly inside the
+  private cache directory — the `+ File.separator` suffix keeps a sibling such as `cache-evil/`
+  out, and canonicalization defeats `..`. The stream is read through `BoundedInputReader` with the
+  document limit regardless of provider metadata, and `loadFile` still declares `IOException`
+  (`@Throws`) because the Java `ScanQRCodeFromFile` catches it. `loadFileString` stays the
+  never-throwing `""` fallback.
+- **Display names are advisory**: provider metadata is used only when the cursor has a non-null
+  `DISPLAY_NAME`; any query failure, missing row/column or null value falls back to the last path
+  segment, and a null/oversized URI or name yields `"backup"`. The `MAX_TEXT_CHARS` bound is applied
+  *before* control characters are stripped, and the stripping regex is the same `[\p{Cntrl}]`, i.e.
+  the ASCII control set of `java.util.regex` — C1 controls such as U+0085 are kept, as before.
+- **Backup naming and the encrypted layout are unchanged**: automatic backups get a fresh
+  `otp_accounts_<UUID>.json.aes`/`.json.gpg` name so the last recoverable backup is never truncated;
+  the MIME mapping keeps its `application/octet-stream` fallback; `backupFilename` still constructs
+  `Settings` before inspecting the type and falls back to the encrypted name; `autoBackupType` still
+  requires a location before it consults the backup password. `backupToFile` refuses a missing/empty
+  password or a refused permission before deriving a key, then writes the iteration count
+  (`INT_LENGTH` bytes), the salt (`ENCRYPTION_IV_LENGTH` bytes) and the AES-GCM output in that order,
+  and still maps every exception to `false` without logging.
+- **Nullability follows the Java checks**: the document URI, the data array and the backup password
+  stay nullable (the Java null-checked them). The context, the permission supplier, the backup
+  location, the backup type, the `String` payload of `saveFile` and the backup `plain` text are
+  non-null and now **fail fast** at the call. For the context, the permission supplier and `plain`,
+  the Java only dereferenced them inside its catch-all blocks, so a null there used to come back as
+  `false`/`""`/the fallback name instead of an exception — the documented trade-off of these
+  conversions. Every in-repository caller passes non-null values (the Kotlin task callers are
+  compile-time checked).
+- **Shape deltas**: both classes are now final with a private constructor and an `INSTANCE` field
+  (the `object` delta; neither was ever instantiated or subclassed). `BackupFile` keeps its public
+  no-argument constructor, stays non-final, and its `file`/`errorMessage` remain public mutable
+  fields (`@JvmField`), not accessors.
+
+### Notifications and QR images
+
+- **The permission gate keeps its shape**: no request without an attached activity or before API 33
+  (`TIRAMISU`), then a request for `POST_NOTIFICATIONS` with request code 1 only when the permission
+  is not granted. The early-return `SDK_INT` check is kept in the same form, because lint's `NewApi`/
+  `InlinedApi` gates (warnings are errors in this build) analyse exactly that flow; the permission
+  name stays a class-level constant as in the Java.
+- **Channels are unchanged**: ids are `"andOTP_"` plus the enum name lower-cased with the **default
+  locale**, as the Java `toLowerCase()` did — Kotlin's `lowercase()` would use the root locale and
+  silently rename the channel under a Turkish locale. That pre-existing locale dependence
+  (`andOTP_backup_faıled` there) is documented, not fixed: a fix needs a channel migration. Names,
+  descriptions, `IMPORTANCE_HIGH`/`IMPORTANCE_LOW` and the default importance for the initial
+  constructor are the same, and every notification still reuses id 1.
+- **One documented API delta**: the Java built `NotificationCompat.Builder(context, null)` and set the
+  channel id after creating the channel. The AndroidX constructor's channel id is `@NonNull` for
+  Kotlin, so the converted code passes the same id to the constructor; the builder only stores the
+  id, so the posted notification is identical. The `String` body stays nullable (`bigText` accepts
+  null and the Java never dereferenced it).
+- **QR decoding keeps its pipeline and messages**: a bounded `StorageAccessHelper.loadFile` (either
+  failure kind → the load-error toast), a bounds-only decode checked by `InputPolicy.validImage`
+  before any pixel allocation, the full `ARGB_8888` decode checked again (and recycled when
+  rejected), the pixel copy followed by recycling in `finally`, then a QR-only decode and a retry
+  with `TRY_HARDER` on the same binary bitmap. The Java threw the saved failure and caught it by
+  type; the Kotlin picks the message with a `when` over the same types in the same order, so the
+  **last** decode failure still decides between the checksum, format and generic toasts, a missing
+  failure still means "not found", and the stack trace is still printed. The hint maps are built
+  once as `EnumMap`s, the retry map being a copy.
+- **Nullability**: the image URI stays nullable (a missing intent URI becomes the load-error toast),
+  the decoded contents stay a nullable return; `context`, `fragment` and the notification channel
+  fail fast when null — the Java dereferenced each of them without a check.
+
 ## Tests and acceptance
 
 Existing Java/Kotlin characterization tests remain in place and unchanged: the RFC vector tests in
@@ -459,15 +640,48 @@ semantics a mechanical conversion could drop (the HOTP/TOTP branch in `ownedSecr
 `app/src/androidTest/.../Database/EntryJsonTest.java`, characterizes the boundary on a device:
 stored-format equality for a round-tripped document, the malformed-field matrix, the seed ownership
 rules, the `Entry` adapter's round trip and failure messages, the URI parameter set, the token
-calculators and the manual-entry secret validator.
+calculators and the manual-entry secret validator. With the vault-repository batch the converted-stem
+list gains `Utilities/DatabaseHelper`, and a dedicated guard
+(`test_converted_vault_repository_keeps_the_transaction_and_its_java_surface`) pins the `object`
+shape with its fourteen `@JvmStatic` members, the lock/constant fields, both `@JvmField` status
+fields, the nullable write-path entry list, the read precedence and catch order, the plaintext wipe,
+the poison flag and recovery ordering, the session-locking wipe and the three entry-destroy paths;
+the contract-migration guard now reads the Kotlin repository for the staged-commit, poison, UUID
+prefix and write-bound invariants. The existing instrumentation suites that drive the repository
+(`VaultFailureSecurityTest`, `VaultRestoreOperationTest`, `CredentialLifecycleSecurityTest`,
+`IpcAuthorizationSecurityTest`, `ApplicationTest`) are unchanged and still need a device run. With
+the document/backup batch the stem list gains `Utilities/StorageAccessHelper` and
+`Utilities/BackupHelper`, and `scripts/tests/test_kotlin_document_io_conversion.py` pins their
+static surfaces, nullability, the refusal order before the provider, the four permission checks
+around the chunked write, the cache-confinement expression, the bound-before-strip display-name
+rule, the unique backup names, the MIME mapping and the encrypted-backup byte layout.
+`scripts/tests/test_documentation_links.py` now fails on any relative documentation link to a file
+that no longer exists (several evidence links still pointed at converted `.java` files). A new Java
+instrumentation test, `app/src/androidTest/.../Utilities/KotlinDocumentIoInteropTest.java`,
+characterizes the real `ContentResolver`/`Uri`/`DocumentFile` paths and the Java call sites: cache
+fixture reads and every refused URI (outside, sibling prefix, `..`, the cache itself, `https`, a
+missing provider), content-only writes, missing-provider failures and refused permissions,
+display-name fallback and control-character stripping, the missing-tree creation message, the
+settings-driven file names and the encrypted-backup refusals. It has **not been compiled or run**
+here; no test provider is registered, so a successful provider write is not covered by it either.
+With the notification/QR batch the stem list gains `Utilities/NotificationHelper` and
+`Utilities/ScanQRCodeFromFile`, and `scripts/tests/test_kotlin_notification_qr_conversion.py` pins the
+permission gate's exact form, the default-locale channel ids, names and importances, the single
+notification id, the constructor-time channel id, the QR pipeline order, both recycling points, the
+four load-error toasts, the last-failure-wins bookkeeping, the type order of the failure messages,
+the hint maps and the distinct resource stand-ins. `KotlinNotificationQrInteropTest` (Java,
+instrumentation) round-trips a QR code generated with zxing's own writer through the real
+`BitmapFactory`/zxing path, checks blank, undecodable, refused and missing images, the real channels'
+names and importances, and that both `notify` overloads are callable from Java. It has **not been
+compiled or run** here.
 
 ### Executed here: partial sandbox compile/run check
 
 `scripts/kotlin-sandbox/` compiles the converted platform-free/low-platform sources against
 hand-written platform stubs and runs `Checks.kt` on a desktop JVM; `bootstrap-toolchain.sh` fetches
 a JDK and the Kotlin compiler from package mirrors when the machine has neither. Executed on
-2026-10-15 with **Kotlin 2.4.21 and Temurin 25.0.2** (`-jvm-target 1.8`), it reports 40 passing
-checks:
+2026-10-15 with **Kotlin 2.4.21 and Temurin 25.0.2** (`-jvm-target 1.8`), it reports 60 passing
+checks after the thirteenth batch:
 
 - RFC 6238 TOTP vectors (SHA-1/256/512, six timestamps, eight digits) and RFC 4226 HOTP vectors.
 - TOTP/HOTP agreement with an independent HMAC implementation, including offsets and 1/30/60/86400 s periods.
@@ -495,18 +709,67 @@ checks:
   and a stale captured generation being cancelled before work begins.
 - `VaultSession` facade shapes (mutation lock field, static generation/listener forwarders) read
   live by the runner.
+- The vault outcome mapping and the fail-closed document boundary executed in the sandbox: every
+  `VaultReadError` maps to the same `Status` (including `RECOVERY_REQUIRED -> IO_FAILURE`),
+  `LoadResult` reports an empty vault as success and an unavailable one as `VaultException` with the
+  status-only message, and `stringToEntries` returns `CORRUPT` (never an empty list) for null, empty,
+  truncated, object-valued, trailing-content and single-quoted input while `"[]"` stays an empty
+  vault and `entriesToString(null)` stays a caller error. Both legacy `status` members are asserted
+  to be public final fields (no `getStatus()` accessor) and neither nested type has a Java-callable
+  constructor.
+- The repository's document path over **real entries** (possible since `Entry` and its thumbnail
+  catalogue are both Kotlin): the stored document parses into an entry and is written back
+  byte-for-byte, a valid entry followed by an empty, seedless, non-object or truncated one rejects the
+  whole document as `CORRUPT`, a destroyed entry cannot be written (`CORRUPT`) and the entry-count
+  bound stays a caller error.
+- The poisoned-transaction quiescence: with the private poison flag set by reflection (the ambiguous
+  commit that sets it needs storage), recovery, reads, the legacy load, both write adapters
+  (including a null entry list), both encryption-change adapters, initialization and restore all
+  return their fail-closed results **before** reaching `FileHelper` — which has no class file here,
+  so a dropped guard fails the check — a poisoned write fails the session, and no metadata commit
+  callback runs. The check clears the flag and re-locks the session afterwards.
+- `StorageAccessHelper` **executed** against a recording fake provider over real temporary files
+  (through a replicated write-truncate `ParcelFileDescriptor`): a 20,000-byte write in three chunks
+  with exactly six permission checks and a closed descriptor; revocation before the third chunk
+  (16 KiB written, no further checks, descriptor closed), refusal right after opening and after the
+  flush; empty and UTF-8 `String` writes; the exact document bound accepted and every pre-open
+  refusal (null URI/data, `file:` scheme, oversized URI/data, refused permission) proven not to
+  reach the provider; missing descriptors and provider exceptions as `false`. Reads: content and
+  cache-fixture documents (stream closed), refusal of null/oversized/`https`/outside/sibling-prefix/
+  `..`/cache-directory/empty-path URIs before the provider, the byte limit on a lazily oversized
+  stream, a null stream, and provider exceptions propagating from `loadFile` but becoming `""` in
+  `loadFileString`. Display names: control-character stripping (C1 kept), cursor closing and
+  projection, every metadata fallback, the bound applied before stripping, the placeholder cases and
+  no query for `file:` URIs.
+- The static Java surfaces of both helpers: `StorageAccessHelper`'s six `@JvmStatic` signatures with
+  `IOException` declared on `loadFile` only, and `BackupHelper.BackupFile` as a non-final static
+  nested class with public mutable fields and its defaults. `BackupHelper`'s own methods take the
+  Java-only `Constants.BackupType`, so they are pinned by the Python guards instead.
+- `ScanQRCodeFromFile` **executed** against scripted stand-ins (a recording `BitmapFactory` hook, a
+  pixel-holding `Bitmap`, a replaying zxing `QRCodeReader`, recorded toasts): both load-failure
+  kinds, rejected bounds (undecodable, empty, oversized, too many pixels) never reaching the full
+  decode, a failed or disagreeing full decode (recycled), a first-pass success with the bitmap's
+  pixels handed to the luminance source and the bitmap recycled, the `TRY_HARDER` retry on the same
+  binary bitmap after a failure or a textless result, the last-failure-wins message matrix, and the
+  still-printed stack traces. The hint maps are reflected (separate `EnumMap`s, a `Vector` of
+  `QR_CODE`, `TRY_HARDER` only in the copy).
+- `NotificationHelper`'s permission gate executed with a runtime `SDK_INT` stand-in and fake
+  fragments/activities (below API 33, missing and granted permission, detached fragment); its
+  channel/notification members take the Java-only `Constants.NotificationChannel` and are pinned by
+  the Python guards.
 - The entry document boundary executed against functional `org.json`/`Base32`/`Hex` replicas: the
   stored field order and defaults (including a reserialization that equals the legacy string
   byte-for-byte), the malformed-field matrix with its closed error set, the `ValidatedEntry`
   one-use/redacted ownership, and the Base32/mOTP-hex secret rules.
-- The converted `Entry` class **reflected, not instantiated**: public and non-final class, the six
-  constructors including both `Exception`-declaring adapters, the `OTPType` constants, `COLOR_RED`,
-  thumbnail getter and `validateSecret` for Base32/mOTP secrets.
+- The converted `Entry` class reflected: public and non-final class, the six constructors including
+  both `Exception`-declaring adapters, the `OTPType` constants, `COLOR_RED`, thumbnail getter and
+  `validateSecret` for Base32/mOTP secrets. It is instantiated only through the vault document check
+  above (document adapter, validation, serialization, destroy); its token/URI members are not run.
 - Thumbnail enum lookups and Java-visible rendering/lookup/getter signatures. The 346 enum/resource
   mappings are also fingerprinted by a Python source guard; actual pixels are not sandbox-tested.
-- The ten converted task subclasses are **type-checked against the real Java declarations** they
-  call: `run.sh` passes `Settings.java`, `EncryptionHelper.java`, `BackupHelper.java`,
-  `StorageAccessHelper.java`, `DatabaseHelper.java`, `KeyStoreHelper.java` and `FileHelper.java`
+- The ten converted task subclasses, the converted repository and the backup helper are
+  **type-checked against the real Java declarations** they call: `run.sh` passes `Settings.java`,
+  `EncryptionHelper.java`, `KeyStoreHelper.java` and `FileHelper.java` (plus `Constants.java`)
   to `kotlinc` for resolution, so the
   Kotlin calls are verified against the actual parameter/return types instead of stub copies. Their
   bodies are not executed (the Java sources produce no class files on the desktop JVM), and
@@ -534,7 +797,13 @@ Both flavors must compile and pass host tests, focused lint and packaged-manifes
 28/36 instrumentation matrix, plus the independent release/reproducibility and dependency
 comparisons. Java-side compilation of the callers, `Handler`/`Looper` timing on a real main thread,
 `KeyEvent` delivery, `TypedValue.applyDimension` (the stub replicates the documented density formula),
-the real `View.postDelayed` scheduling, `Entry`'s thumbnail-dependent members and the real
+the real `View.postDelayed` scheduling, `Entry`'s thumbnail-dependent members, the vault file
+transaction itself (`FileHelper`/`AtomicFile`, `SharedPreferences`, `EncryptionHelper` and the
+staged-promotion choreography all need a device), real Storage Access Framework providers (the
+platform `ContentResolver`/`ParcelFileDescriptor`, `DocumentFile` tree creation, URI grants and
+provider write semantics), the encrypted-backup writer and settings-driven backup names (which need
+`EncryptionHelper`/`Settings`), real image decoding, zxing, notification channels/posting and the
+runtime-permission flow, and the real
 `org.json`/`commons-codec`/`android.net.Uri` behaviour beyond the documented replicated subsets are
 not covered by the sandbox check. See
 [build commands](build-and-security-tests.md). Remaining decomposition and UI conversion work is
@@ -553,6 +822,10 @@ tracked in the [decomposition plan](ui-decomposition-plan.md).
   point like the activities and receivers, not a task subclass over the runner. Component
   conversion is a separate decision from the task layer (see the sixth batch).
 
+`Utilities/DatabaseHelper` is no longer Java either: it is converted (eleventh batch), and the
+package-private-visibility rule above did not block it because the only package-private members were
+two `String` constants and a nested class whose constructor Java never called.
+
 The drag & drop trio, `UIHelper`, `ConfirmedPasswordTransformationHelper` and `BackupTaskResult`
 are no longer in this list: they are converted (see the fourth batch above). The task subclasses
 and their runner are converted too (fifth and sixth batches); the *workers*, receivers and other
@@ -560,6 +833,6 @@ components remain Java.
 
 The thumbnail pair has also left this list (eighth batch). The small visibility widenings are
 explicitly recorded above; these leaf renderers still need Android acceptance despite their sandbox
-compile. Latest local check after the tenth batch: 67 Python guards and 50 sandbox checks passed. The both-flavor Gradle
+compile. Latest local check after the thirteenth batch: 78 Python guards and 60 sandbox checks passed. The both-flavor Gradle
 host/lint/instrumentation-APK build was attempted but stopped at the Gradle 8.13 distribution download
 (`SSLHandshakeException` from `services.gradle.org`); no Android acceptance result is claimed.

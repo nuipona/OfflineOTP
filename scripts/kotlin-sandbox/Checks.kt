@@ -30,6 +30,16 @@ import org.shadowice.flocke.andotp.Database.ValidatedEntry
 import org.shadowice.flocke.andotp.Utilities.EntryThumbnail
 import org.shadowice.flocke.andotp.Utilities.LetterBitmap
 import org.shadowice.flocke.andotp.Utilities.BoundedInputReader
+import org.shadowice.flocke.andotp.Utilities.BackupHelper
+import org.shadowice.flocke.andotp.Utilities.StorageAccessHelper
+import org.shadowice.flocke.andotp.Utilities.NotificationHelper
+import org.shadowice.flocke.andotp.Utilities.ScanQRCodeFromFile
+import org.shadowice.flocke.andotp.Utilities.DatabaseHelper
+import org.shadowice.flocke.andotp.Utilities.VaultReadError
+import org.shadowice.flocke.andotp.Utilities.VaultReadResult
+import org.shadowice.flocke.andotp.Utilities.VaultCommitDecision
+import org.shadowice.flocke.andotp.Utilities.VaultCommitState
+import org.shadowice.flocke.andotp.Utilities.VaultWriteResult
 import org.shadowice.flocke.andotp.Utilities.ConfirmedPasswordTransformationHelper
 import org.shadowice.flocke.andotp.Utilities.DimensionConverter
 import org.shadowice.flocke.andotp.Utilities.SecretKeyWrapper
@@ -69,8 +79,15 @@ import android.app.AlertDialog
 import android.content.Context
 import android.content.DialogInterface
 import android.content.Intent
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import android.graphics.Canvas
+import android.content.pm.PackageManager
+import android.widget.Toast
 import android.net.Uri
+import android.database.Cursor
+import android.os.ParcelFileDescriptor
+import android.provider.OpenableColumns
 import android.os.Handler
 import android.os.IBinder
 import android.text.method.PasswordTransformationMethod
@@ -84,10 +101,18 @@ import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.google.android.material.textfield.TextInputEditText
 import com.google.android.material.textfield.TextInputLayout
+import com.google.zxing.BarcodeFormat
+import com.google.zxing.ChecksumException
+import com.google.zxing.DecodeHintType
+import com.google.zxing.FormatException
+import com.google.zxing.NotFoundException
+import com.google.zxing.RGBLuminanceSource
+import com.google.zxing.qrcode.QRCodeReader
 
 import org.json.JSONObject
 
 import java.io.ByteArrayInputStream
+import java.io.File
 import java.io.IOException
 import java.io.InputStream
 import java.lang.reflect.Method
@@ -465,6 +490,108 @@ private class SandboxNumberPreference(context: Context) : NumberPickerPreference
     fun close(positive: Boolean) = onDialogClosed(positive)
     fun initialize(restore: Boolean, value: Any?) = onSetInitialValue(restore, value)
     fun defaultValue(array: android.content.res.TypedArray, index: Int): Any = onGetDefaultValue(array, index)
+}
+
+
+// --- fake document provider for the storage helper -------------------------------------------
+
+/** A `content:` URI built through the replicated `Uri.Builder` (the stub's `parse` stays inert). */
+private fun contentUri(vararg segments: String): Uri {
+    val builder = Uri.Builder().scheme("content").authority("org.example.documents")
+    for (segment in segments) builder.appendPath(segment)
+    return builder.build()
+}
+
+/** A `file:` URI over an absolute path, one segment at a time so `..` survives unnormalized. */
+private fun fileUri(path: String): Uri {
+    val builder = Uri.Builder().scheme("file")
+    for (segment in path.split('/').filter { it.isNotEmpty() }) builder.appendPath(segment)
+    return builder.build()
+}
+
+/** Serves one row (or none) of document metadata and records that it was closed. */
+private class FakeCursor(private val displayName: String?, private val hasRow: Boolean = true,
+                         private val column: Int = 0) : Cursor {
+    var closed = false
+    override fun moveToFirst(): Boolean = hasRow
+    override fun moveToNext(): Boolean = false
+    override fun getColumnIndex(columnName: String?): Int =
+        if (columnName == OpenableColumns.DISPLAY_NAME) column else -1
+    override fun getColumnIndexOrThrow(columnName: String?): Int = getColumnIndex(columnName)
+    override fun getString(columnIndex: Int): String? = displayName
+    override fun getInt(columnIndex: Int): Int = 0
+    override fun isNull(columnIndex: Int): Boolean = displayName == null
+    override fun close() {
+        closed = true
+    }
+}
+
+/** Records every provider call; writes go to [target] through the replicated descriptor. */
+private class FakeResolver : android.content.ContentResolver() {
+    val calls = ArrayList<String>()
+    var target: File? = null
+    var descriptor: ParcelFileDescriptor? = null
+    var failure: RuntimeException? = null
+    var cursor: Cursor? = null
+    var projection: List<String>? = null
+    var input: InputStream? = null
+
+    override fun openFileDescriptor(uri: Uri?, mode: String?): ParcelFileDescriptor? {
+        calls.add("open $mode")
+        failure?.let { throw it }
+        val file = target ?: return null
+        return ParcelFileDescriptor.open(file, ParcelFileDescriptor.parseMode(mode)).also { descriptor = it }
+    }
+
+    override fun query(uri: Uri?, projection: Array<String>?, selection: String?,
+                       selectionArgs: Array<String>?, sortOrder: String?): Cursor? {
+        calls.add("query")
+        this.projection = projection?.toList()
+        failure?.let { throw it }
+        return cursor
+    }
+
+    override fun openInputStream(uri: Uri?): InputStream? {
+        calls.add("read")
+        failure?.let { throw it }
+        return input
+    }
+}
+
+private class FakeStorageContext(val resolver: FakeResolver, private val cache: File) : Context() {
+    override fun getContentResolver(): android.content.ContentResolver = resolver
+    override fun getCacheDir(): File = cache
+}
+
+/** Answers the permission checks from a script and counts how often it was asked. */
+private class ScriptedPermission(private val refuseAt: Int = -1) : java.util.function.BooleanSupplier {
+    var asked = 0
+    override fun getAsBoolean(): Boolean {
+        asked++
+        return asked != refuseAt
+    }
+}
+
+/** A stream that reports whether it was closed. */
+private class ClosingStream(bytes: ByteArray) : ByteArrayInputStream(bytes) {
+    var closed = false
+    override fun close() {
+        closed = true
+        super.close()
+    }
+}
+
+/** Produces [size] zero bytes lazily, so an oversized document needs no large fixture. */
+private class ZeroStream(private val size: Long) : InputStream() {
+    private var produced = 0L
+    override fun read(): Int = if (produced++ < size) 0 else -1
+    override fun read(buffer: ByteArray, offset: Int, length: Int): Int {
+        if (produced >= size) return -1
+        val count = minOf(length.toLong(), size - produced).toInt()
+        java.util.Arrays.fill(buffer, offset, offset + count, 0.toByte())
+        produced += count
+        return count
+    }
 }
 
 fun main() {
@@ -1054,6 +1181,581 @@ fun main() {
         expect(Modifier.isStatic(show.modifiers), { "legacy Java show spelling/static API" })
         expect(View.OnClickListener::class.java.isAssignableFrom(dialog), { "click listener" })
         expect(android.widget.CompoundButton.OnCheckedChangeListener::class.java.isAssignableFrom(dialog), { "checkbox listener" })
+    }
+
+    check("the converted vault repository keeps its Java-visible surface and fails closed") {
+        val helper = DatabaseHelper::class.java
+        expect(Modifier.isPublic(helper.modifiers), { "DatabaseHelper is not public" })
+        // Static-only utility: the deliberate `object` delta is INSTANCE plus static forwarders.
+        expectPublicFieldValue(helper, "INSTANCE", DatabaseHelper, DatabaseHelper::class.java, true)
+        // The lock every vault transaction is serialized on, shared with the Java callers that
+        // synchronize on DatabaseHelper.DatabaseFileLock.
+        expectPublicFieldValue(helper, "DatabaseFileLock", VaultSession.MutationLock, Any::class.java, true)
+        expect(DatabaseHelper.DatabaseFileLock === VaultSession.MutationLock, { "vault lock identity" })
+        expectPublicFieldValue(helper, "TRANSACTION_ID", "vault_transaction_id", String::class.java, true)
+        expectPublicFieldValue(helper, "PENDING_FILE", "secrets.pending", String::class.java, true)
+
+        for (signature in listOf(
+                "static boolean recoverPendingDatabase(Context)",
+                "static VaultReadResult readVault(Context,SecretKey)",
+                "static LoadResult loadDatabaseResult(Context,SecretKey)",
+                "static ArrayList loadDatabase(Context,SecretKey)",
+                "static VaultWriteResult saveVault(Context,ArrayList,SecretKey)",
+                "static boolean saveDatabase(Context,ArrayList,SecretKey)",
+                "static boolean changeEncryption(Context,SecretKey,SecretKey,boolean,SettingsCommit)",
+                "static VaultWriteResult changeVaultEncryption(Context,SecretKey,SecretKey,boolean,VaultSettingsCommit)",
+                "static boolean canInitialize(Context)",
+                "static boolean backupDatabase(Context)",
+                "static boolean restoreDatabaseBackup(Context)",
+                "static void wipeDatabase(Context)",
+                "static String entriesToString(ArrayList)",
+                "static ArrayList stringToEntries(String)")) {
+            expectMethod(helper, signature)
+        }
+
+        // Nested types stay named the way Java callers and the instrumentation tests refer to them.
+        val status = DatabaseHelper.Status::class.java
+        expect(status.isEnum, { "Status is not an enum" })
+        expect(DatabaseHelper.Status.values().map { it.name } == listOf("SUCCESS", "MISSING", "MISSING_KEY",
+                "AUTHENTICATION_FAILED", "CORRUPT", "IO_FAILURE"), { "Status constants changed" })
+        expectField(DatabaseHelper.VaultException::class.java, "status", DatabaseHelper.Status::class.java, false)
+        expect(IllegalStateException::class.java.isAssignableFrom(DatabaseHelper.VaultException::class.java),
+                { "VaultException no longer is an IllegalStateException" })
+        expectField(DatabaseHelper.LoadResult::class.java, "status", DatabaseHelper.Status::class.java, false)
+        // Both legacy `status` members were public final fields in Java and stay fields, not getters,
+        // and neither nested type gained a Java-callable constructor (Kotlin's synthetic accessor
+        // for the companion factory is not callable from Java source).
+        for (owner in listOf(DatabaseHelper.VaultException::class.java, DatabaseHelper.LoadResult::class.java)) {
+            val statusField = field(owner, "status")!!
+            expect(Modifier.isPublic(statusField.modifiers) && Modifier.isFinal(statusField.modifiers),
+                    { "${owner.simpleName}.status is no longer a public final field" })
+            expect(owner.declaredMethods.none { it.name == "getStatus" },
+                    { "${owner.simpleName} grew a getStatus() accessor" })
+            expect(owner.declaredConstructors.none { !it.isSynthetic && !Modifier.isPrivate(it.modifiers) },
+                    { "${owner.simpleName} gained a Java-callable constructor" })
+        }
+        expect(AutoCloseable::class.java.isAssignableFrom(DatabaseHelper.LoadResult::class.java),
+                { "LoadResult is not AutoCloseable" })
+        expectMethod(DatabaseHelper.LoadResult::class.java, "boolean isSuccess()")
+        expectMethod(DatabaseHelper.LoadResult::class.java, "ArrayList requireEntries()")
+        expectMethod(DatabaseHelper.LoadResult::class.java, "void close()")
+        // Both metadata callbacks stay single-method interfaces so Java lambdas keep compiling.
+        for (callback in listOf(DatabaseHelper.SettingsCommit::class.java,
+                DatabaseHelper.VaultSettingsCommit::class.java)) {
+            expect(callback.isInterface, { "${callback.simpleName} is not an interface" })
+            expect(callback.declaredMethods.count { Modifier.isPublic(it.modifiers) } == 1,
+                    { "${callback.simpleName} is no longer a single-method interface" })
+        }
+        expectMethod(DatabaseHelper.SettingsCommit::class.java, "boolean commit(String)")
+        expectMethod(DatabaseHelper.VaultSettingsCommit::class.java, "VaultCommitDecision commit(String)")
+
+        // Every read error keeps a legacy Status, including the mapping the instrumented
+        // "failed preference commit" test depends on, and an empty vault is Loaded(empty).
+        expect(DatabaseHelper.LoadResult.create(VaultReadResult.Unavailable(VaultReadError.MISSING)).status
+                == DatabaseHelper.Status.MISSING, { "MISSING mapping" })
+        expect(DatabaseHelper.LoadResult.create(VaultReadResult.Unavailable(VaultReadError.MISSING_KEY)).status
+                == DatabaseHelper.Status.MISSING_KEY, { "MISSING_KEY mapping" })
+        expect(DatabaseHelper.LoadResult.create(VaultReadResult.Unavailable(VaultReadError.AUTHENTICATION_FAILED)).status
+                == DatabaseHelper.Status.AUTHENTICATION_FAILED, { "AUTHENTICATION_FAILED mapping" })
+        expect(DatabaseHelper.LoadResult.create(VaultReadResult.Unavailable(VaultReadError.CORRUPT)).status
+                == DatabaseHelper.Status.CORRUPT, { "CORRUPT mapping" })
+        expect(DatabaseHelper.LoadResult.create(VaultReadResult.Unavailable(VaultReadError.IO_FAILURE)).status
+                == DatabaseHelper.Status.IO_FAILURE, { "IO_FAILURE mapping" })
+        // The legacy status set has no recovery value, and the instrumented test that wipes a failed
+        // preference commit expects IO_FAILURE rather than a thrown IllegalArgumentException.
+        expect(DatabaseHelper.LoadResult.create(VaultReadResult.Unavailable(VaultReadError.RECOVERY_REQUIRED)).status
+                == DatabaseHelper.Status.IO_FAILURE, { "RECOVERY_REQUIRED mapping" })
+
+        val missing = DatabaseHelper.LoadResult.create(VaultReadResult.Unavailable(VaultReadError.MISSING))
+        expect(!missing.isSuccess(), { "an unavailable vault reported itself as loaded" })
+        missing.close()
+        missing.close()
+        val empty = DatabaseHelper.LoadResult.create(VaultReadResult.Loaded(ArrayList()))
+        expect(empty.status == DatabaseHelper.Status.SUCCESS && empty.isSuccess(), { "empty vault load" })
+        expect(empty.requireEntries().isEmpty(), { "empty vault entries" })
+        empty.close()
+
+        val unavailable = DatabaseHelper.LoadResult.create(VaultReadResult.Unavailable(VaultReadError.AUTHENTICATION_FAILED))
+        val raised = try {
+            unavailable.requireEntries()
+            null
+        } catch (error: DatabaseHelper.VaultException) {
+            error
+        }
+        expect(raised?.status == DatabaseHelper.Status.AUTHENTICATION_FAILED, { "VaultException status" })
+        expect(raised?.message == "Vault unavailable: AUTHENTICATION_FAILED",
+                { "VaultException message: ${raised?.message}" })
+
+        // The document boundary fails closed on the desktop JVM too: every rejection is a
+        // VaultException with CORRUPT, never a short/empty list that could overwrite a vault.
+        fun expectCorrupt(data: String?) {
+            val error = try {
+                DatabaseHelper.stringToEntries(data)
+                null
+            } catch (thrown: DatabaseHelper.VaultException) {
+                thrown
+            }
+            expect(error?.status == DatabaseHelper.Status.CORRUPT, { "expected CORRUPT for [$data], got $error" })
+        }
+        expectCorrupt(null)
+        expectCorrupt("")
+        expectCorrupt("{")
+        expectCorrupt("{\"secret\":\"GEZDGNBVGY3TQOJQ\"}")   // an object, not an array of entries
+        expectCorrupt("[] []")                                    // trailing content after the array
+        expectCorrupt("[{'secret':'GEZDGNBVGY3TQOJQ'}]")          // the vault format is double-quoted
+        expect(DatabaseHelper.stringToEntries("[]").isEmpty(), { "an empty vault document is an empty list" })
+        expect(DatabaseHelper.stringToEntries(" [ ] ").isEmpty(), { "whitespace around the array" })
+
+        // Caller errors stay caller errors: they must not be reported as a corrupt vault.
+        expectThrows(IllegalArgumentException::class.java) { DatabaseHelper.entriesToString(null) }
+        expect(DatabaseHelper.entriesToString(ArrayList()) == "[]", { "empty vault serializes to []" })
+    }
+
+
+    check("the vault document round-trips real entries and rejects a partial document whole") {
+        // Entry and its thumbnail catalogue are both Kotlin now, so the repository's document path
+        // runs over real entries here; the encrypted file transaction around it still does not.
+        val stored = "[$STORED_ENTRY_JSON]"
+        val entries = DatabaseHelper.stringToEntries(stored)
+        try {
+            expect(entries.size == 1, { "expected one entry, got ${entries.size}" })
+            expect(entries[0].getLabel() == "5 von 5 Sterne", { "label ${entries[0].getLabel()}" })
+            expect(entries[0].getTags() == listOf("test1", "test2"), { "tags ${entries[0].getTags()}" })
+            // The writer reproduces the stored document byte for byte: field order and defaults.
+            val rewritten = DatabaseHelper.entriesToString(entries)
+            expect(rewritten == stored, { "rewritten vault differs: $rewritten" })
+        } finally {
+            for (entry in entries) entry.destroy()
+        }
+        // One bad entry rejects the whole document; the valid prefix is never returned.
+        for (document in listOf("[$STORED_ENTRY_JSON,{}]",
+                "[$STORED_ENTRY_JSON,{\"secret\":\"\"}]",
+                "[$STORED_ENTRY_JSON,1]",
+                "[$STORED_ENTRY_JSON")) {
+            val error = try {
+                DatabaseHelper.stringToEntries(document)
+                null
+            } catch (thrown: DatabaseHelper.VaultException) {
+                thrown
+            }
+            expect(error?.status == DatabaseHelper.Status.CORRUPT, { "expected CORRUPT for [$document], got $error" })
+        }
+        // A destroyed (seedless) entry cannot be written: CORRUPT, never a partial document.
+        val destroyed = DatabaseHelper.stringToEntries(stored)
+        destroyed[0].destroy()
+        val writeError = try {
+            DatabaseHelper.entriesToString(destroyed)
+            null
+        } catch (thrown: DatabaseHelper.VaultException) {
+            thrown
+        }
+        expect(writeError?.status == DatabaseHelper.Status.CORRUPT, { "destroyed entry write: $writeError" })
+        // The entry-count bound is a caller error, checked before any entry is serialized.
+        val oversized = ArrayList(java.util.Collections.nCopies(InputPolicy.MAX_ENTRIES + 1, destroyed[0]))
+        expectThrows(IllegalArgumentException::class.java) { DatabaseHelper.entriesToString(oversized) }
+    }
+
+    check("a poisoned vault transaction short-circuits every entry point before storage") {
+        // `transactionPoisoned` is what an ambiguous metadata commit leaves behind; that commit path
+        // needs FileHelper/SharedPreferences, which have no class files here, so the flag is set
+        // directly. Every entry point below must then return before touching storage: reaching
+        // FileHelper would fail with NoClassDefFoundError, so a dropped guard cannot pass silently.
+        val poison = DatabaseHelper::class.java.getDeclaredField("transactionPoisoned")
+        expect(Modifier.isPrivate(poison.modifiers) && Modifier.isStatic(poison.modifiers) &&
+                poison.type == BOOLEAN_TYPE, { "poison flag shape changed" })
+        poison.isAccessible = true
+        val context = Context()
+        val key = SecretKeySpec(ByteArray(32), "AES")
+        val commits = AtomicInteger()
+        poison.setBoolean(null, true)
+        try {
+            expect(!DatabaseHelper.recoverPendingDatabase(context), { "recovery ran while poisoned" })
+            val read = DatabaseHelper.readVault(context, key)
+            expect(read == VaultReadResult.Unavailable(VaultReadError.RECOVERY_REQUIRED), { "read: $read" })
+            DatabaseHelper.loadDatabaseResult(context, key).use { legacy ->
+                expect(legacy.status == DatabaseHelper.Status.IO_FAILURE, { "legacy load: ${legacy.status}" })
+            }
+            val saved = DatabaseHelper.saveVault(context, ArrayList(), key)
+            expect(saved == VaultWriteResult.RecoveryRequired(VaultCommitState.UNKNOWN), { "save: $saved" })
+            expect(VaultSession.snapshot() is SessionState.Failed, { "a poisoned write left the session usable" })
+            // A null list is accepted at the boundary (the Java reported it after the read).
+            expect(!DatabaseHelper.saveDatabase(context, null, key), { "legacy save while poisoned" })
+            val changed = DatabaseHelper.changeVaultEncryption(context, key, key, false) {
+                commits.incrementAndGet()
+                VaultCommitDecision.COMMITTED
+            }
+            expect(changed == VaultWriteResult.RecoveryRequired(VaultCommitState.UNKNOWN), { "change: $changed" })
+            expect(!DatabaseHelper.changeEncryption(context, key, key, true) { commits.incrementAndGet() > 0 },
+                    { "legacy change while poisoned" })
+            expect(commits.get() == 0, { "a metadata commit ran while poisoned" })
+            expect(!DatabaseHelper.canInitialize(context), { "initialization allowed while poisoned" })
+            expect(!DatabaseHelper.restoreDatabaseBackup(context), { "restore ran while poisoned" })
+        } finally {
+            poison.setBoolean(null, false)
+            VaultSession.lock(SessionLockReason.RESET) // leave no failed session behind for later checks
+        }
+    }
+
+    check("document writes are content-only, bounded and re-check permission around every chunk") {
+        val directory = java.nio.file.Files.createTempDirectory("andotp-sandbox").toFile()
+        try {
+            val resolver = FakeResolver()
+            val context = FakeStorageContext(resolver, File(directory, "cache"))
+            val document = File(directory, "backup.json.aes")
+            val uri = contentUri("document", "backup.json.aes")
+            val data = ByteArray(20000) { (it % 251).toByte() }
+
+            // Three 8 KiB chunks: asked before opening, after opening, before each chunk and after the flush.
+            resolver.target = document
+            val permission = ScriptedPermission()
+            expect(StorageAccessHelper.saveFile(context, uri, data, permission), { "a permitted write failed" })
+            expect(document.readBytes().contentEquals(data), { "written bytes differ" })
+            expect(permission.asked == 6, { "permission asked ${permission.asked} times, expected 6" })
+            expect(resolver.calls == listOf("open wt"), { "provider calls ${resolver.calls}" })
+            expect(!resolver.descriptor!!.getFileDescriptor().valid(), { "descriptor left open after a write" })
+
+            // Revoked before the third chunk: false, the write stops there and nothing stays open.
+            val revoked = ScriptedPermission(refuseAt = 5)
+            expect(!StorageAccessHelper.saveFile(context, uri, data, revoked), { "a revoked write reported success" })
+            expect(document.length() == 16384L, { "revocation wrote ${document.length()} bytes" })
+            expect(revoked.asked == 5, { "a revoked write kept asking: ${revoked.asked}" })
+            expect(!resolver.descriptor!!.getFileDescriptor().valid(), { "descriptor left open after revocation" })
+
+            // Refused right after opening (nothing written) and after the final flush (all written, still false).
+            expect(!StorageAccessHelper.saveFile(context, uri, data, ScriptedPermission(refuseAt = 2)), { "after-open refusal" })
+            expect(document.length() == 0L, { "after-open refusal wrote ${document.length()} bytes" })
+            expect(!StorageAccessHelper.saveFile(context, uri, data, ScriptedPermission(refuseAt = 6)), { "final refusal" })
+            expect(document.length() == data.size.toLong(), { "final refusal must not truncate what was written" })
+
+            // An empty document is opened, flushed and permitted three times; the String overload is UTF-8.
+            val empty = ScriptedPermission()
+            expect(StorageAccessHelper.saveFile(context, uri, ByteArray(0), empty) && empty.asked == 3, { "empty write" })
+            expect(StorageAccessHelper.saveFile(context, uri, "Grüße"), { "String overload" })
+            expect(document.readText(Charsets.UTF_8) == "Grüße", { "String overload encoding" })
+
+            // Refused before the provider is touched: the scheme, the bounds, a missing URI/data,
+            // and a permission that is already gone.
+            resolver.calls.clear()
+            val longUri = contentUri("x".repeat(InputPolicy.MAX_URI_CHARS))
+            for ((label, refused) in listOf(
+                    "null uri" to { StorageAccessHelper.saveFile(context, null, data) },
+                    "null data" to { StorageAccessHelper.saveFile(context, uri, null as ByteArray?) },
+                    "file scheme" to { StorageAccessHelper.saveFile(context, fileUri(document.path), data) },
+                    "long uri" to { StorageAccessHelper.saveFile(context, longUri, data) },
+                    "oversized" to { StorageAccessHelper.saveFile(context, uri, ByteArray(BoundedInputReader.MAX_DOCUMENT_BYTES + 1)) },
+                    "not permitted" to { StorageAccessHelper.saveFile(context, uri, data, ScriptedPermission(refuseAt = 1)) })) {
+                expect(!refused(), { "$label was written" })
+            }
+            expect(resolver.calls.isEmpty(), { "the provider was reached by a refused write: ${resolver.calls}" })
+            // The exact bound is still accepted.
+            expect(StorageAccessHelper.saveFile(context, uri, ByteArray(BoundedInputReader.MAX_DOCUMENT_BYTES)), { "exact bound" })
+
+            // Provider failures are false, never an exception: no descriptor, or a SecurityException.
+            resolver.target = null
+            expect(!StorageAccessHelper.saveFile(context, uri, data), { "a missing descriptor reported success" })
+            resolver.failure = SecurityException("revoked grant")
+            expect(!StorageAccessHelper.saveFile(context, uri, data), { "a provider exception reported success" })
+        } finally {
+            directory.deleteRecursively()
+        }
+    }
+
+    check("document reads are bounded and file URIs stay confined to the private cache") {
+        val directory = java.nio.file.Files.createTempDirectory("andotp-sandbox").toFile()
+        try {
+            val resolver = FakeResolver()
+            val cache = File(directory, "cache").apply { mkdirs() }
+            val context = FakeStorageContext(resolver, cache)
+            val bytes = "{\"version\":1}".toByteArray(Charsets.UTF_8)
+
+            // A content document is read through the provider, and the provider's stream is closed.
+            val stream = ClosingStream(bytes)
+            resolver.input = stream
+            expect(StorageAccessHelper.loadFile(context, contentUri("document", "a")).contentEquals(bytes), { "content read" })
+            expect(stream.closed, { "the provider stream was left open" })
+            resolver.input = ByteArrayInputStream(bytes)
+            expect(StorageAccessHelper.loadFileString(context, contentUri("document", "a")) == "{\"version\":1}", { "text read" })
+
+            // A cache fixture is allowed, through the same provider path.
+            resolver.input = ByteArrayInputStream(bytes)
+            expect(StorageAccessHelper.loadFile(context, fileUri(File(cache, "fixture.png").path)).contentEquals(bytes),
+                    { "a private cache fixture was refused" })
+
+            // Everything else is an IOException before the provider is asked for a stream.
+            resolver.calls.clear()
+            val sibling = File(directory, "cache-evil/fixture.png").path      // shares the cache prefix
+            val traversal = cache.path + "/../secrets.dat"                     // canonicalized out of the cache
+            for ((label, uri) in listOf(
+                    "null" to null,
+                    "long" to contentUri("x".repeat(InputPolicy.MAX_URI_CHARS)),
+                    "http" to Uri.Builder().scheme("https").authority("example.org").appendPath("a").build(),
+                    "outside" to fileUri(File(directory, "secrets.dat").path),
+                    "sibling" to fileUri(sibling),
+                    "traversal" to fileUri(traversal),
+                    "cache itself" to fileUri(cache.path),
+                    "empty path" to Uri.Builder().scheme("file").build())) {
+                expectThrows(IOException::class.java) { StorageAccessHelper.loadFile(context, uri) }
+                expect(StorageAccessHelper.loadFileString(context, uri) == "", { "$label produced text" })
+            }
+            expect(resolver.calls.isEmpty(), { "a refused URI reached the provider: ${resolver.calls}" })
+
+            // The byte limit holds regardless of what the provider reports or streams.
+            resolver.input = ZeroStream(BoundedInputReader.MAX_DOCUMENT_BYTES + 1L)
+            expectThrows(IOException::class.java) { StorageAccessHelper.loadFile(context, contentUri("big")) }
+            resolver.input = null
+            expectThrows(IOException::class.java) { StorageAccessHelper.loadFile(context, contentUri("none")) }
+            // Provider exceptions propagate from loadFile and become "" in loadFileString.
+            resolver.failure = SecurityException("revoked grant")
+            expectThrows(SecurityException::class.java) { StorageAccessHelper.loadFile(context, contentUri("a")) }
+            expect(StorageAccessHelper.loadFileString(context, contentUri("a")) == "", { "provider failure produced text" })
+        } finally {
+            directory.deleteRecursively()
+        }
+    }
+
+    check("document display names are advisory, bounded and lose ASCII control characters") {
+        val resolver = FakeResolver()
+        val context = FakeStorageContext(resolver, File("."))
+        val uri = contentUri("document", "last-segment.json")
+
+        val cursor = FakeCursor("My\u0000Backup\n\t.json\u007F")
+        resolver.cursor = cursor
+        expect(StorageAccessHelper.getContentFileName(context, uri) == "MyBackup.json", { "control characters kept" })
+        expect(cursor.closed, { "the metadata cursor was left open" })
+        expect(resolver.projection == listOf(OpenableColumns.DISPLAY_NAME), { "projection ${resolver.projection}" })
+        // \p{Cntrl} is the ASCII set of java.util.regex: a C1 control such as U+0085 is not stripped.
+        resolver.cursor = FakeCursor("name\u0085")
+        expect(StorageAccessHelper.getContentFileName(context, uri) == "name\u0085", { "C1 control handling changed" })
+
+        // Unusable metadata falls back to the last path segment.
+        for (unusable in listOf<Cursor?>(null, FakeCursor("x", hasRow = false), FakeCursor("x", column = -1), FakeCursor(null))) {
+            resolver.cursor = unusable
+            expect(StorageAccessHelper.getContentFileName(context, uri) == "last-segment.json", { "fallback for $unusable" })
+        }
+        resolver.failure = IllegalStateException("provider died")
+        expect(StorageAccessHelper.getContentFileName(context, uri) == "last-segment.json", { "query failure" })
+        resolver.failure = null
+
+        // The length bound applies before stripping; bad input yields the "backup" placeholder.
+        resolver.cursor = FakeCursor("\u0000".repeat(InputPolicy.MAX_TEXT_CHARS + 1))
+        expect(StorageAccessHelper.getContentFileName(context, uri) == "backup", { "the bound was applied after stripping" })
+        resolver.cursor = FakeCursor("n".repeat(InputPolicy.MAX_TEXT_CHARS))
+        expect(StorageAccessHelper.getContentFileName(context, uri) == "n".repeat(InputPolicy.MAX_TEXT_CHARS), { "exact bound" })
+        resolver.cursor = null
+        expect(StorageAccessHelper.getContentFileName(context, null) == "backup", { "null uri" })
+        expect(StorageAccessHelper.getContentFileName(context, contentUri("x".repeat(InputPolicy.MAX_URI_CHARS))) == "backup",
+                { "long uri" })
+        expect(StorageAccessHelper.getContentFileName(context, Uri.Builder().scheme("content").authority("a").build()) == "backup",
+                { "no metadata and no path segment" })
+
+        // Only content URIs are queried; a file URI goes straight to its last segment.
+        resolver.calls.clear()
+        expect(StorageAccessHelper.getContentFileName(context, fileUri("/data/cache/plain.png")) == "plain.png", { "file name" })
+        expect(resolver.calls.isEmpty(), { "a file URI was queried: ${resolver.calls}" })
+    }
+
+    check("the storage and backup helpers keep their static Java surface") {
+        val storage = StorageAccessHelper::class.java
+        expectPublicFieldValue(storage, "INSTANCE", StorageAccessHelper, storage, true)
+        for (signature in listOf(
+                "static boolean saveFile(Context,Uri,byte[])",
+                "static boolean saveFile(Context,Uri,byte[],BooleanSupplier)",
+                "static boolean saveFile(Context,Uri,String)",
+                "static String getContentFileName(Context,Uri)",
+                "static byte[] loadFile(Context,Uri)",
+                "static String loadFileString(Context,Uri)")) {
+            expectMethod(storage, signature)
+        }
+        // Java callers (ScanQRCodeFromFile) catch IOException around loadFile, so it must stay declared.
+        val load = storage.getMethod("loadFile", Context::class.java, Uri::class.java)
+        expect(load.exceptionTypes.toList() == listOf(IOException::class.java), { "loadFile throws ${load.exceptionTypes.toList()}" })
+        expect(storage.declaredMethods.filter { Modifier.isPublic(it.modifiers) && Modifier.isStatic(it.modifiers) }
+                .none { it.exceptionTypes.isNotEmpty() && it.name != "loadFile" }, { "an unexpected checked exception appeared" })
+
+        // BackupHelper's members take the Java Constants.BackupType, which has no class file here,
+        // so its methods cannot be reflected; the nested result type can, and it stays a mutable,
+        // extendable Java-style holder with public fields and a public no-argument constructor.
+        val backupFile = BackupHelper.BackupFile::class.java
+        expect(!Modifier.isFinal(backupFile.modifiers) && Modifier.isStatic(backupFile.modifiers),
+                { "BackupFile is final or no longer a static nested class" })
+        expect(backupFile.enclosingClass == BackupHelper::class.java, { "BackupFile moved" })
+        for ((name, fieldType) in listOf("file" to androidx.documentfile.provider.DocumentFile::class.java, "errorMessage" to INT_TYPE)) {
+            val found = field(backupFile, name)!!
+            expect(found.type == fieldType && Modifier.isPublic(found.modifiers) && !Modifier.isFinal(found.modifiers) &&
+                    !Modifier.isStatic(found.modifiers), { "BackupFile.$name is no longer a public mutable field" })
+        }
+        val fresh = BackupHelper.BackupFile()
+        expect(fresh.file == null && fresh.errorMessage == 0, { "BackupFile defaults changed" })
+        expect(backupFile.declaredMethods.none { it.name.startsWith("get") || it.name.startsWith("set") },
+                { "BackupFile grew accessors instead of fields" })
+    }
+
+    check("QR image decoding keeps its bounds, two decode passes and the last failure's message") {
+        val resolver = FakeResolver()
+        val context = FakeStorageContext(resolver, File("."))
+        val image = contentUri("document", "qr.png")
+        val decodes = ArrayList<Boolean>()        // inJustDecodeBounds of every BitmapFactory call
+        var fullDecodeConfig: Bitmap.Config? = null
+        fun serve(boundsWidth: Int, boundsHeight: Int, bitmap: Bitmap?) {
+            resolver.input = ByteArrayInputStream(byteArrayOf(1, 2, 3))
+            decodes.clear()
+            BitmapFactory.decoder = { bounds, options ->
+                decodes.add(bounds)
+                if (bounds) {
+                    options.outWidth = boundsWidth
+                    options.outHeight = boundsHeight
+                    null
+                } else {
+                    fullDecodeConfig = options.inPreferredConfig
+                    bitmap
+                }
+            }
+        }
+        fun scan(uri: Uri? = image): Pair<String?, List<Int>> {
+            Toast.shown.clear()
+            QRCodeReader.calls.clear()
+            val contents = ScanQRCodeFromFile.scanQRImage(context, uri)
+            return contents to ArrayList(Toast.shown)
+        }
+        val loadError = null to listOf(R.string.toast_file_load_error)
+        val stderr = System.err
+        val printed = java.io.ByteArrayOutputStream()
+        System.setErr(java.io.PrintStream(printed, true))
+        try {
+            // Unreadable documents: an IOException (no URI) and a provider RuntimeException.
+            serve(4, 3, Bitmap(4, 3))
+            expect(scan(null) == loadError, { "missing document" })
+            resolver.failure = SecurityException("revoked grant")
+            expect(scan() == loadError, { "provider failure" })
+            resolver.failure = null
+            expect(decodes.isEmpty(), { "an unreadable document reached the decoder" })
+
+            // Bounds are checked before the full decode: undecodable, empty and oversized images.
+            for ((width, height) in listOf(-1 to -1, 0 to 3, InputPolicy.MAX_IMAGE_DIMENSION + 1 to 3, 3000 to 3000)) {
+                serve(width, height, Bitmap(4, 3))
+                expect(scan() == loadError, { "bounds ${width}x$height were accepted" })
+                expect(decodes == listOf(true), { "the full decode ran after rejected bounds ${width}x$height" })
+            }
+            // The full decode may still fail, or disagree with the bounds; the bitmap is recycled.
+            serve(4, 3, null)
+            expect(scan() == loadError && decodes == listOf(true, false), { "a failed full decode" })
+            val shrunk = Bitmap(0, 3)
+            serve(4, 3, shrunk)
+            expect(scan() == loadError && shrunk.isRecycled(), { "an invalid decoded bitmap was kept" })
+            expect(QRCodeReader.calls.isEmpty(), { "a rejected image reached the QR reader" })
+
+            // First pass: ARGB_8888 pixels copied row by row, the bitmap recycled, QR-only hints.
+            val pixels = IntArray(12) { it * 7 + 1 }
+            val bitmap = Bitmap(4, 3, pixels)
+            serve(4, 3, bitmap)
+            QRCodeReader.script.add(com.google.zxing.Result("otpauth://totp/synthetic?secret=GEZDGNBVGY3TQOJQ"))
+            expect(scan() == ("otpauth://totp/synthetic?secret=GEZDGNBVGY3TQOJQ" to emptyList<Int>()), { "first pass" })
+            expect(bitmap.isRecycled() && fullDecodeConfig == Bitmap.Config.ARGB_8888, { "decode config or recycling" })
+            expect(QRCodeReader.calls.size == 1, { "a successful first pass was retried" })
+            val (decoded, firstHints) = QRCodeReader.calls[0]
+            val source = decoded.binarizerForChecks().getLuminanceSource() as RGBLuminanceSource
+            expect(source.getWidth() == 4 && source.getHeight() == 3 && source.pixels.contentEquals(pixels),
+                    { "the luminance source does not carry the bitmap's pixels" })
+            expect(firstHints == mapOf(DecodeHintType.POSSIBLE_FORMATS to listOf(BarcodeFormat.QR_CODE)),
+                    { "first-pass hints $firstHints" })
+
+            // Second pass with TRY_HARDER on the same binary bitmap, after a failure or a textless result.
+            for (first in listOf<Any>(NotFoundException.getNotFoundInstance(), com.google.zxing.Result(null))) {
+                serve(4, 3, Bitmap(4, 3, IntArray(12)))
+                QRCodeReader.script.add(first)
+                QRCodeReader.script.add(com.google.zxing.Result("second"))
+                expect(scan() == ("second" to emptyList<Int>()), { "retry after $first" })
+                expect(QRCodeReader.calls.size == 2 && QRCodeReader.calls[0].first === QRCodeReader.calls[1].first,
+                        { "the retry decoded a different bitmap" })
+                expect(QRCodeReader.calls[1].second == mapOf(DecodeHintType.POSSIBLE_FORMATS to listOf(BarcodeFormat.QR_CODE),
+                        DecodeHintType.TRY_HARDER to true), { "retry hints ${QRCodeReader.calls[1].second}" })
+            }
+
+            // Both passes fail: the last ReaderException decides the message; none means "not found".
+            val checksum = ChecksumException.getChecksumInstance()
+            val format = FormatException.getFormatInstance()
+            val notFound = NotFoundException.getNotFoundInstance()
+            for ((outcomes, message) in listOf(
+                    listOf<Any>(checksum, format) to R.string.toast_qr_format_error,
+                    listOf<Any>(format, checksum) to R.string.toast_qr_checksum_exception,
+                    listOf<Any>(notFound, notFound) to R.string.toast_qr_error,
+                    listOf<Any>(checksum, com.google.zxing.Result(null)) to R.string.toast_qr_checksum_exception,
+                    listOf<Any>(com.google.zxing.Result(null), com.google.zxing.Result(null)) to R.string.toast_qr_error)) {
+                serve(4, 3, Bitmap(4, 3, IntArray(12)))
+                QRCodeReader.script.addAll(outcomes)
+                expect(scan() == (null to listOf(message)), { "failure message for $outcomes" })
+            }
+            expect(R.string.toast_qr_error != R.string.toast_qr_format_error, { "resource stand-ins are not distinct" })
+            // The Java printed each reported failure's stack trace; that is kept.
+            expect(printed.toString().contains("com.google.zxing.FormatException") &&
+                    printed.toString().contains("com.google.zxing.NotFoundException"), { "stack traces no longer printed" })
+        } finally {
+            System.setErr(stderr)
+            BitmapFactory.decoder = null
+            QRCodeReader.script.clear()
+            QRCodeReader.calls.clear()
+            Toast.shown.clear()
+        }
+    }
+
+    check("the notification permission request is gated on Android 13 and a missing grant") {
+        class FakeActivity(private val granted: Boolean) : android.app.Activity() {
+            override fun checkSelfPermission(permission: String): Int =
+                if (granted && permission == android.Manifest.permission.POST_NOTIFICATIONS) PackageManager.PERMISSION_GRANTED
+                else PackageManager.PERMISSION_DENIED
+        }
+        class FakeFragment(private val host: android.app.Activity?) : android.app.Fragment() {
+            override fun getActivity(): android.app.Activity? = host
+        }
+        val sdk = android.os.Build.VERSION.SDK_INT
+        try {
+            android.os.Build.VERSION.SDK_INT = 32
+            val beforeTiramisu = FakeFragment(FakeActivity(granted = false))
+            NotificationHelper.requestNotificationPermission(beforeTiramisu)
+            expect(beforeTiramisu.requested.isEmpty(), { "asked for a runtime permission before Android 13" })
+
+            android.os.Build.VERSION.SDK_INT = 33
+            val missing = FakeFragment(FakeActivity(granted = false))
+            NotificationHelper.requestNotificationPermission(missing)
+            expect(missing.requested == listOf(listOf("android.permission.POST_NOTIFICATIONS") to 1),
+                    { "request ${missing.requested}" })
+            val granted = FakeFragment(FakeActivity(granted = true))
+            NotificationHelper.requestNotificationPermission(granted)
+            expect(granted.requested.isEmpty(), { "asked again although granted" })
+            val detached = FakeFragment(null)
+            NotificationHelper.requestNotificationPermission(detached)
+            expect(detached.requested.isEmpty(), { "a detached fragment asked" })
+        } finally {
+            android.os.Build.VERSION.SDK_INT = sdk
+        }
+    }
+
+    check("the QR and notification helpers keep their static Java surface") {
+        val qr = ScanQRCodeFromFile::class.java
+        expectPublicFieldValue(qr, "INSTANCE", ScanQRCodeFromFile, qr, true)
+        expect(publicMethods(qr) == listOf("static String scanQRImage(Context,Uri)"), { "QR surface ${publicMethods(qr)}" })
+        // The hint maps are built once: QR only, and the retry map is a copy that adds TRY_HARDER.
+        fun hints(name: String): Map<*, *> = field(qr, name)!!.let {
+            it.isAccessible = true
+            it.get(null) as Map<*, *>
+        }
+        val normal = hints("HINTS")
+        val harder = hints("HINTS_HARDER")
+        expect(normal is java.util.EnumMap<*, *> && harder is java.util.EnumMap<*, *> && normal !== harder,
+                { "hint maps are not separate EnumMaps" })
+        expect(normal[DecodeHintType.POSSIBLE_FORMATS] is java.util.Vector<*>, { "barcode formats container changed" })
+        expect(normal == mapOf(DecodeHintType.POSSIBLE_FORMATS to listOf(BarcodeFormat.QR_CODE)), { "normal hints $normal" })
+        expect(harder == mapOf(DecodeHintType.POSSIBLE_FORMATS to listOf(BarcodeFormat.QR_CODE),
+                DecodeHintType.TRY_HARDER to true), { "harder hints $harder" })
+
+        // NotificationHelper's members take the Java Constants.NotificationChannel, which has no class
+        // file here, so only its fields can be reflected; the rest is pinned by the Python guards.
+        val notifications = NotificationHelper::class.java
+        expectPublicFieldValue(notifications, "INSTANCE", NotificationHelper, notifications, true)
+        val permission = field(notifications, "POST_NOTIFICATIONS_PERMISSION")!!
+        permission.isAccessible = true
+        expect(Modifier.isPrivate(permission.modifiers) && permission.get(null) == "android.permission.POST_NOTIFICATIONS",
+                { "permission constant changed" })
     }
 
     check("bounded document reads reject oversize input and keep the caller's stream") {

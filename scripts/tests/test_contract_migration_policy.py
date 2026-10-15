@@ -41,17 +41,28 @@ class ContractMigrationSourceTest(unittest.TestCase):
         # The task/vault conversions live in Kotlin now, so both trees must stay scanned.
         for tree in (JAVA, KOTLIN):
             for file in tree.rglob("*.java" if tree == JAVA else "*.kt"):
-                if file.name == "DatabaseHelper.java":
-                    continue
+                if file.name in ("DatabaseHelper.java", "DatabaseHelper.kt"):
+                    continue  # the repository definition itself, not a caller
                 for old_api in forbidden:
                     self.assertNotIn(old_api, file.read_text(), str(file))
 
     def test_uncertain_commit_and_recovery_remain_explicit(self):
         contract = (KOTLIN / "Utilities/VaultContracts.kt").read_text()
-        database = (JAVA / "Utilities/DatabaseHelper.java").read_text()
+        # The repository moved to Kotlin in the eleventh batch; the transaction guards below are the
+        # same ones the Java held (the `!id.equals(marker)` test is Kotlin's `id != marker`).
+        database = (KOTLIN / "Utilities/DatabaseHelper.kt").read_text()
         self.assertIn("UNKNOWN, COMMITTED", contract)
         self.assertIn("if (success) COMMITTED else UNKNOWN", contract)
-        self.assertIn("decision == VaultCommitDecision.CANCELED && !id.equals(marker)", database)
+        self.assertIn("decision == VaultCommitDecision.CANCELED && id != marker", database)
+        self.assertIn("decision != VaultCommitDecision.COMMITTED || id != marker", database)
+        # Both ambiguous paths (unreadable marker, uncommitted decision) poison the process.
+        self.assertEqual(2, database.count("transactionPoisoned = true"), "poison paths changed")
+        self.assertEqual(1, database.count("if (transactionPoisoned) return false"), "poison check changed")
         self.assertIn("recoveryRequired(VaultCommitState.COMMITTED)", database)
         self.assertIn("VaultSession.fail(SessionFailure.RECOVERY_REQUIRED)", database)
-        self.assertIn("transactionPoisoned = true", database)
+        # The staged write keeps the 36-byte UUID prefix and its minimum length check.
+        self.assertIn("if (staged.size < 36 + 28) return false", database)
+        self.assertIn("Arrays.copyOfRange(staged, 36, staged.size)", database)
+        # Refuse to encrypt without a key, and keep writes bounded before encryption.
+        self.assertIn('if (key == null) throw IllegalArgumentException("Missing vault key")', database)
+        self.assertIn("plain.size > BoundedInputReader.MAX_DOCUMENT_BYTES - 64", database)

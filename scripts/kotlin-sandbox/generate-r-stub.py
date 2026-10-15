@@ -3,7 +3,10 @@
 
 `scripts/kotlin-sandbox/run.sh` type-checks Kotlin sources against platform stubs and real Java
 resolution sources. Several of those sources reference generated resource ids (`R.string.*`,
-`R.drawable.*`, ...). The stub exists only so those references resolve; the id values are inert.
+`R.drawable.*`, ...). The stub exists so those references resolve. Scalar ids are distinct and
+deterministic (an aapt-like 0x7fTTEEEE layout: type byte from the sorted type names, entry index
+from the sorted names), so checks can tell one resource from another, e.g. which toast was shown.
+They are NOT aapt's values: nothing may depend on a specific number, only on (in)equality.
 
 This script recomputes the exact id set from the same source lists run.sh uses, so the checked-in
 stub cannot drift behind (or silently grow beyond) what the sandbox actually compiles. It is a
@@ -73,14 +76,15 @@ def render(groups):
     lines = [
         "// Sandbox-only stand-in for the generated resource class.",
         "// Regenerate with scripts/kotlin-sandbox/generate-r-stub.py after changing run.sh's",
-        "// source lists; the id values are inert, only the references need to resolve.",
+        "// source lists. Ids are distinct stand-ins (0x7fTTEEEE), not aapt's resource ids.",
         "package org.shadowice.flocke.andotp",
         "",
         "object R {",
     ]
+    scalar_types = [group for group in sorted(groups) if group != "styleable"]
     for group in sorted(groups):
         lines.append(f"    object {group} {{")
-        for name in sorted(groups[group]):
+        for entry, name in enumerate(sorted(groups[group])):
             if group == "styleable":
                 if name in declarations:
                     slots = ", ".join(str(i) for i in range(len(declarations[name])))
@@ -90,7 +94,8 @@ def render(groups):
                 else:
                     raise SystemExit(f"unknown styleable reference: {name}")
             else:
-                lines.append(f"        const val {name} = 0")
+                type_id = scalar_types.index(group) + 1
+                lines.append(f"        const val {name} = 0x7f{type_id:02x}{entry:04x}")
         lines.append("    }")
     lines.append("}")
     lines.append("")

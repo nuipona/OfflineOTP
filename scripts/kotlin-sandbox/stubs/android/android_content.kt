@@ -13,29 +13,38 @@ open class Context {
     val theme: Resources.Theme get() = Resources.Theme()
     val resources: Resources get() = Resources()
     fun getString(resId: Int): String = "stub"
+    /** Resolves to a recognisable placeholder so the checks can tell which resource was read. */
+    fun getText(resId: Int): CharSequence = "text:$resId"
+    /** `open` so a fake activity can grant or deny; the default denies, like an ungranted app. */
+    open fun checkSelfPermission(permission: String): Int = android.content.pm.PackageManager.PERMISSION_DENIED
     /** `open` so checks can return a recording service instead of the null default. */
     open fun getSystemService(name: String): Any? = null
     /** The task classes keep only the application context; the checks substitute their own. */
     open fun getApplicationContext(): Context = this
     fun getFilesDir(): java.io.File = java.io.File(".")
-    fun getContentResolver(): ContentResolver = ContentResolver()
+    /** `open` so the storage checks can substitute a recording resolver for the inert default. */
+    open fun getContentResolver(): ContentResolver = ContentResolver()
+    /** `open` so the storage checks can supply their own private cache directory. */
+    open fun getCacheDir(): java.io.File = java.io.File(".")
 
     companion object {
         const val CLIPBOARD_SERVICE = "clipboard"
         const val INPUT_METHOD_SERVICE = "input_method"
+        const val NOTIFICATION_SERVICE = "notification"
     }
 }
 
 /**
- * Field/type-only stand-in for the resolver surface the resolved Java sources mention. It only
- * needs to type-check; the sandbox never executes a document provider through it.
+ * Resolver surface used by the storage helper. The defaults are inert (`null`, like a provider that
+ * returns nothing); the storage checks subclass it with a recording fake that serves their own
+ * documents. No content provider, permission or URI-grant behaviour of the platform is modelled.
  */
-class ContentResolver {
-    fun openFileDescriptor(uri: Uri?, mode: String?): android.os.ParcelFileDescriptor? = null
-    fun query(uri: Uri?, projection: Array<String>?, selection: String?, selectionArgs: Array<String>?, sortOrder: String?): android.database.Cursor? = null
-    fun openInputStream(uri: Uri?): java.io.InputStream? = null
-    fun openOutputStream(uri: Uri?): java.io.OutputStream? = null
-    fun getType(uri: Uri?): String? = null
+open class ContentResolver {
+    open fun openFileDescriptor(uri: Uri?, mode: String?): android.os.ParcelFileDescriptor? = null
+    open fun query(uri: Uri?, projection: Array<String>?, selection: String?, selectionArgs: Array<String>?, sortOrder: String?): android.database.Cursor? = null
+    open fun openInputStream(uri: Uri?): java.io.InputStream? = null
+    open fun openOutputStream(uri: Uri?): java.io.OutputStream? = null
+    open fun getType(uri: Uri?): String? = null
 }
 
 /** Field/type-only stand-in: the Java settings/database sources read and write through this. */

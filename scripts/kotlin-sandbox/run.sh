@@ -39,7 +39,7 @@ fi
 
 # Converted platform-free and low-platform utilities covered by this check. Every entry is
 # compiled and its Java-visible shapes are asserted in Checks.kt. The task subclasses resolve the
-# real Java settings/database/crypto helpers through JAVA_SOURCES below. Files that still depend
+# real Java settings/crypto helpers through JAVA_SOURCES below. Files that still depend
 # on the full Android/AndroidX graph (dialogs, adapters, preferences, activities) are deliberately
 # absent: see README.md for the list and the reason.
 APP_SOURCES=(
@@ -54,6 +54,11 @@ APP_SOURCES=(
     "$KOTLIN_APP/Database/EntryJson.kt"
     "$KOTLIN_APP/Database/Entry.kt"
     "$KOTLIN_APP/Database/EntryList.kt"
+    "$KOTLIN_APP/Utilities/DatabaseHelper.kt"
+    "$KOTLIN_APP/Utilities/StorageAccessHelper.kt"
+    "$KOTLIN_APP/Utilities/BackupHelper.kt"
+    "$KOTLIN_APP/Utilities/NotificationHelper.kt"
+    "$KOTLIN_APP/Utilities/ScanQRCodeFromFile.kt"
     "$KOTLIN_APP/Utilities/InputPolicy.kt"
     "$KOTLIN_APP/Utilities/OtpParseResult.kt"
     "$KOTLIN_APP/Utilities/OtpUriParser.kt"
@@ -99,7 +104,12 @@ STUBS=("$SANDBOX"/stubs/android/*.kt
     "$SANDBOX"/stubs/androidx/documentfile/provider/*.kt
     "$SANDBOX"/stubs/androidx/appcompat/app/*.kt
     "$SANDBOX"/stubs/androidx/appcompat/content/res/*.kt
+    "$SANDBOX"/stubs/androidx/core/app/*.kt
+    "$SANDBOX"/stubs/androidx/core/content/*.kt
     "$SANDBOX"/stubs/com/google/android/material/textfield/*.kt
+    "$SANDBOX"/stubs/com/google/zxing/*.kt
+    "$SANDBOX"/stubs/com/google/zxing/common/*.kt
+    "$SANDBOX"/stubs/com/google/zxing/qrcode/*.kt
     "$SANDBOX/stubs/org/shadowice/flocke/andotp/R.kt"
     "$SANDBOX"/stubs/org/json/*.kt
     "$SANDBOX"/stubs/org/apache/commons/codec/binary/*.kt
@@ -108,15 +118,12 @@ STUBS=("$SANDBOX"/stubs/android/*.kt
 # Real Java sources, used for resolution only: kotlinc reads them so the Kotlin code is checked
 # against the actual declarations, and no Java class file is produced or verified here. Listed
 # explicitly instead of by directory so that adding one is a deliberate choice. The task
-# subclasses are compiled against the real Settings/DatabaseHelper/EncryptionHelper/KeyStore/
-# Entry declarations rather than stub copies of them.
+# subclasses, the vault repository and the backup helpers are compiled against the real
+# Settings/EncryptionHelper/KeyStoreHelper/FileHelper declarations rather than stub copies of them.
 JAVA_SOURCES=(
     "$ROOT/app/src/main/java/org/shadowice/flocke/andotp/Utilities/Constants.java"
     "$ROOT/app/src/main/java/org/shadowice/flocke/andotp/Utilities/Settings.java"
     "$ROOT/app/src/main/java/org/shadowice/flocke/andotp/Utilities/EncryptionHelper.java"
-    "$ROOT/app/src/main/java/org/shadowice/flocke/andotp/Utilities/BackupHelper.java"
-    "$ROOT/app/src/main/java/org/shadowice/flocke/andotp/Utilities/StorageAccessHelper.java"
-    "$ROOT/app/src/main/java/org/shadowice/flocke/andotp/Utilities/DatabaseHelper.java"
     "$ROOT/app/src/main/java/org/shadowice/flocke/andotp/Utilities/KeyStoreHelper.java"
     "$ROOT/app/src/main/java/org/shadowice/flocke/andotp/Utilities/FileHelper.java"
 )

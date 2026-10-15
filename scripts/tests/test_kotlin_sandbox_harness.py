@@ -50,11 +50,20 @@ class KotlinSandboxHarnessTest(unittest.TestCase):
         # the real declarations (including the package-private crypto constant) instead of a copy.
         self.assertIn("$ROOT/app/src/main/java/org/shadowice/flocke/andotp/Utilities/Constants.java", script)
         self.assertIn('"${JAVA_SOURCES[@]}"', script)
-        # The task subclasses resolve the real settings/database/crypto helpers, not stubs of them.
+        # The task subclasses resolve the real settings/crypto helpers, not stubs of them.
         for resolved in ("Utilities/Settings.java", "Utilities/EncryptionHelper.java",
-                         "Utilities/DatabaseHelper.java", "Utilities/KeyStoreHelper.java",
-                         "Utilities/BackupHelper.java", "Utilities/StorageAccessHelper.java"):
+                         "Utilities/KeyStoreHelper.java", "Utilities/FileHelper.java"):
             self.assertIn(f"$ROOT/app/src/main/java/org/shadowice/flocke/andotp/{resolved}", script)
+        # The document/backup helpers are Kotlin since the twelfth batch: compiled, never resolved.
+        for converted in ("StorageAccessHelper", "BackupHelper"):
+            self.assertIn(f"$KOTLIN_APP/Utilities/{converted}.kt", script)
+            self.assertNotIn(f"Utilities/{converted}.java", script)
+            self.assertFalse((ROOT / f"app/src/main/java/org/shadowice/flocke/andotp/Utilities/{converted}.java").exists())
+        # The vault repository is Kotlin since the eleventh batch, so it is compiled (not resolved)
+        # and resolves the same Java helpers it reads (FileHelper/Constants/EncryptionHelper).
+        self.assertIn("$KOTLIN_APP/Utilities/DatabaseHelper.kt", script)
+        self.assertFalse((ROOT / "app/src/main/java/org/shadowice/flocke/andotp/Utilities/DatabaseHelper.java").exists())
+        self.assertNotIn("Utilities/DatabaseHelper.java", script)
         # The model and thumbnail pair are compiled as real Kotlin, not stubbed.
         for converted in ("EntryThumbnail", "LetterBitmap"):
             self.assertIn(f"$KOTLIN_APP/Utilities/{converted}.kt", script)
