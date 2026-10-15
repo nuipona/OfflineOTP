@@ -54,6 +54,7 @@ APP_SOURCES=(
     "$KOTLIN_APP/Database/EntryJson.kt"
     "$KOTLIN_APP/Database/Entry.kt"
     "$KOTLIN_APP/Database/EntryList.kt"
+    "$KOTLIN_APP/Utilities/DatabaseHelper.kt"
     "$KOTLIN_APP/Utilities/InputPolicy.kt"
     "$KOTLIN_APP/Utilities/OtpParseResult.kt"
     "$KOTLIN_APP/Utilities/OtpUriParser.kt"
@@ -116,7 +117,6 @@ JAVA_SOURCES=(
     "$ROOT/app/src/main/java/org/shadowice/flocke/andotp/Utilities/EncryptionHelper.java"
     "$ROOT/app/src/main/java/org/shadowice/flocke/andotp/Utilities/BackupHelper.java"
     "$ROOT/app/src/main/java/org/shadowice/flocke/andotp/Utilities/StorageAccessHelper.java"
-    "$ROOT/app/src/main/java/org/shadowice/flocke/andotp/Utilities/DatabaseHelper.java"
     "$ROOT/app/src/main/java/org/shadowice/flocke/andotp/Utilities/KeyStoreHelper.java"
     "$ROOT/app/src/main/java/org/shadowice/flocke/andotp/Utilities/FileHelper.java"
 )

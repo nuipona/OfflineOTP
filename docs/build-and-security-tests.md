@@ -45,7 +45,11 @@ fetches both from package mirrors (SHA-256 pinned, unpacked outside the reposito
 `bash scripts/kotlin-sandbox/run.sh` compiles the converted platform-free/low-platform Kotlin sources
 against hand-written platform stubs and runs behavior/API-shape checks on a desktop JVM. Read
 [its README](../scripts/kotlin-sandbox/README.md) first: a green run there is not the Gradle, lint,
-packaging or device result, and the stub Android surface is not the platform.
+packaging or device result, and the stub Android surface is not the platform. For the vault
+repository it executes only the outcome mapping, the document boundary (including a stored-document
+round trip over real entries) and the poisoned-transaction short-circuits; the file transaction,
+promotion and backup/wipe paths stay with `VaultFailureSecurityTest` and
+`VaultRestoreOperationTest` below.
 
 With a disposable API 28 or 36 emulator already running:
 

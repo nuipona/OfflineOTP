@@ -93,7 +93,8 @@ class UiDecompositionSourceTest(unittest.TestCase):
                      "Tasks/PGPBackupTask", "Tasks/PGPRestoreTask", "Tasks/EncryptedBackupTask",
                      "Tasks/EncryptedRestoreTask", "Tasks/ChangeEncryptionTask",
                      "Tasks/ChangeCredentialsTask", "Tasks/FinishIntroTask",
-                     "Database/Entry", "Database/EntryJson", "Database/EntryJsonResult"):
+                     "Database/Entry", "Database/EntryJson", "Database/EntryJsonResult",
+                     "Utilities/DatabaseHelper"):
             self.assertTrue((KOTLIN / (stem + ".kt")).is_file())
             self.assertFalse((JAVA / (stem + ".java")).exists())
         timer = (KOTLIN / "Utilities/ScreenTimerController.kt").read_text()
@@ -245,6 +246,82 @@ class UiDecompositionSourceTest(unittest.TestCase):
         self.assertIn("currentOTP = TokenCalculator.HOTP(seed, counter, digits, algorithm)", update)
         self.assertIn("last_update = counter", update)
         self.assertIn("setColor(COLOR_DEFAULT)", update)
+
+    def test_converted_vault_repository_keeps_the_transaction_and_its_java_surface(self):
+        """The vault file transaction runs on a device only: FileHelper/AtomicFile, SharedPreferences
+        and EncryptionHelper have no class files in the sandbox, so its ordering, its fail-closed
+        mappings and its Java-visible surface are pinned here (the outcome mapping itself is also
+        executed in the sandbox check for the errors that need no I/O)."""
+        helper = (KOTLIN / "Utilities/DatabaseHelper.kt").read_text()
+
+        # A static-only Java class becomes an object with every former static kept callable.
+        self.assertIn("object DatabaseHelper {", helper)
+        self.assertIn("@JvmField\n    val DatabaseFileLock: Any = VaultSession.MutationLock", helper)
+        self.assertIn("const val TRANSACTION_ID = \"vault_transaction_id\"", helper)
+        self.assertIn("const val PENDING_FILE = \"secrets.pending\"", helper)
+        self.assertEqual(14, helper.count("@JvmStatic\n    fun "),
+                         "a former static member lost @JvmStatic")
+        for member in ("recoverPendingDatabase", "readVault", "loadDatabaseResult", "loadDatabase",
+                       "saveVault", "saveDatabase", "changeEncryption", "changeVaultEncryption",
+                       "canInitialize", "backupDatabase", "restoreDatabaseBackup", "wipeDatabase",
+                       "entriesToString", "stringToEntries"):
+            self.assertRegex(helper, rf"@JvmStatic\n    fun {member}\(", f"{member} is no longer @JvmStatic")
+        # Both metadata callbacks stay SAM interfaces for the Java lambdas that implement them.
+        self.assertIn("fun interface SettingsCommit {", helper)
+        self.assertIn("fun interface VaultSettingsCommit {", helper)
+        # The non-public constructor is not widened into a Java-visible one, and both legacy
+        # `status` members stay public final fields (Java reads `loadDatabaseResult(...).status`).
+        self.assertIn("class VaultException private constructor(@JvmField val status: Status)", helper)
+        self.assertIn("class LoadResult private constructor(private val result: VaultReadResult)", helper)
+        self.assertIn("@JvmField\n        val status: Status = statusOf(", helper)
+        # A null entry list stays a caller error reported as Rejected(INVALID_INPUT) after the read
+        # (the Java reached entriesToString's null check), not a Kotlin parameter-check NPE.
+        for signature in ("fun saveVault(context: Context, entries: ArrayList<Entry>?, key: SecretKey?)",
+                          "fun saveDatabase(context: Context, entries: ArrayList<Entry>?, key: SecretKey?)",
+                          "fun encryptedEntries(entries: ArrayList<Entry>?, key: SecretKey?)",
+                          "fun writeEntries(context: Context, entries: ArrayList<Entry>?, key: SecretKey?)",
+                          "fun entriesToString(entries: ArrayList<Entry>?)",
+                          "fun stringToEntries(data: String?)"):
+            self.assertIn(signature, helper)
+
+        # Read outcomes keep their order of precedence: a missing file outranks a missing key, and
+        # the authentication failure is caught before the broader IO/corrupt arms.
+        read = helper[helper.index("fun readVault("):helper.index("fun loadDatabaseResult(")]
+        self.assertLess(read.index("unavailable(VaultReadError.MISSING)"),
+                        read.index("unavailable(VaultReadError.MISSING_KEY)"))
+        self.assertLess(read.index("catch (error: BadPaddingException)"),
+                        read.index("catch (error: IOException)"))
+        self.assertLess(read.index("catch (error: IOException)"),
+                        read.index("catch (error: Exception)"))
+        self.assertIn("catch (error: Exception) {\n                return unavailable(VaultReadError.CORRUPT)",
+                      read)
+        # Decrypted plaintext is wiped on every path, and no diagnostic carries key or seed text.
+        self.assertIn("if (plain != null) Arrays.fill(plain, 0.toByte())", read)
+        for forbidden in ("\"Invalid entry JSON: \" + result", "Base32", "$key", "${'$'}plain"):
+            self.assertNotIn(forbidden, helper)
+        self.assertIn('IllegalStateException("Vault unavailable: $status")', helper)
+
+        # Recovery is quiescent after an ambiguous commit and never promotes an uncommitted stage.
+        self.assertIn("if (transactionPoisoned) return false", helper)
+        self.assertIn("transactionPoisoned = false", helper)  # wipeDatabase clears it
+        recover = helper[helper.index("fun recoverPendingDatabase("):helper.index("fun readVault(")]
+        self.assertLess(recover.index("FileHelper.readFileToBytes(pending)"), recover.index("if (id == committed)"))
+        self.assertLess(recover.index("if (id == committed)"), recover.index("FileHelper.delete(pending)"))
+        # Wiping is an explicit, session-locking, serialized destructive operation.
+        wipe = helper[helper.index("fun wipeDatabase("):helper.index("fun entriesToString(")]
+        self.assertIn("VaultSession.lock(SessionLockReason.RESET)", wipe)
+        self.assertLess(wipe.index("VaultSession.lock("), wipe.index("FileHelper.delete("))
+        for name in ("Constants.FILENAME_DATABASE", "Constants.FILENAME_DATABASE_BACKUP", "PENDING_FILE"):
+            self.assertIn(name, wipe)
+        # Entry ownership is released on every failure path: the failed-backup branch, the
+        # change-encryption finally block, and the all-or-nothing document parser.
+        self.assertEqual(3, helper.count("for (entry in entries) entry.destroy()"),
+                         "an entry cleanup path disappeared")
+        self.assertIn("} finally {\n                for (entry in entries) entry.destroy()", helper)
+        parse = helper[helper.index("fun stringToEntries("):]
+        self.assertIn("for (entry in entries) entry.destroy()", parse)
+        self.assertIn("throw VaultException.create(Status.CORRUPT)", parse)
+        self.assertNotIn("!!", helper)
 
     def test_converted_io_and_otp_utilities_keep_java_visible_shapes(self):
         reader = (KOTLIN / "Utilities/BoundedInputReader.kt").read_text()

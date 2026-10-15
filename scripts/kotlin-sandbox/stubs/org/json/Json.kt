@@ -185,6 +185,24 @@ internal class JSONReader(private val text: String) {
         return value
     }
 
+    /** [JSONTokener.nextValue]: one value from the current position, no whole-document check. */
+    internal fun readValueForTokener(): Any? = readValue()
+
+    /**
+     * [JSONTokener.nextClean]: consumes and returns the next non-whitespace character, or NUL at the
+     * end of the input. The platform class would also skip comments here; the vault parser rejects
+     * comment syntax before the tokener runs (see [org.shadowice.flocke.andotp.Utilities.InputPolicy.jsonDepth]).
+     */
+    internal fun nextCleanForTokener(): Char {
+        while (position < text.length) {
+            val c = text[position]
+            position++
+            if (c == '\t' || c == ' ' || c == '\n' || c == '\r') continue
+            return c
+        }
+        return 0.toChar()
+    }
+
     private fun readValue(): Any? {
         skipWhitespace()
         if (position >= text.length) fail("Unexpected end of input")
@@ -309,6 +327,24 @@ internal class JSONReader(private val text: String) {
     }
 
     private fun fail(message: String): Nothing = throw JSONException("$message at $position")
+}
+
+/**
+ * Stand-in for the platform tokener over the same reader: `nextValue()` (values converted to
+ * [JSONObject]/[JSONArray] as the platform does) and `nextClean()`. Only the two entry points the
+ * vault document parser uses exist here; comments, `nextString`, `back`, `skipTo`, `more` and the
+ * remaining tokener API are not implemented. The vault document path runs through it in the
+ * sandbox (over real `Entry` objects since the thumbnail catalogue is Kotlin). The platform
+ * tokener's leniency is not replicated: single quotes and comments never reach it (the vault parser
+ * rejects them first in `InputPolicy.jsonDepth`, which *is* executed here), while other platform
+ * leniency such as unquoted names or values is strict in this stand-in and only a device shows it.
+ */
+class JSONTokener(json: String?) {
+    private val reader = JSONReader(json ?: throw JSONException("Null input"))
+
+    fun nextValue(): Any? = converted(reader.readValueForTokener())
+
+    fun nextClean(): Char = reader.nextCleanForTokener()
 }
 
 private fun jsonObject(json: String?): Map<String, Any?> {

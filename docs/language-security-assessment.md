@@ -24,7 +24,7 @@ This is **static source analysis, not a penetration test or a security certifica
 
 | Area | Observed state | Implication |
 | --- | --- | --- |
-| Application language | 40 main-source Java files, about 9,900 lines including comments/blank lines, plus 45 converted Kotlin files (about 4,000 lines) and two flavor-specific Java files; 13 Java instrumentation test files | A mixed Java/Kotlin migration is feasible; there is no in-repository C/C++ memory-unsafe core to replace. Counts are a 2026-10-15 snapshot, updated after the entry batch, not a target |
+| Application language | 32 main-source Java files, about 8,560 lines including comments/blank lines, plus 53 converted Kotlin files (about 5,350 lines) and two flavor-specific Java files; 17 Java instrumentation test files | A mixed Java/Kotlin migration is feasible; there is no in-repository C/C++ memory-unsafe core to replace. Counts are a 2026-10-15 snapshot, updated after the vault-repository batch, not a target |
 | Native/other runtimes | Kotlin (JVM) sources are checked in under `app/src/main/kotlin`; no Rust, C, or C++ implementation | Rust would introduce JNI, native packaging and a second toolchain rather than remove existing native exposure |
 | Build | Three Groovy Gradle files; Gradle 8.13 wrapper; Android Gradle Plugin 8.13.2; Kotlin plugin 2.3.20 pinned with `jvmTarget` 1.8 | Kotlin is added; keep plugin/AGP/Gradle compatibility verified, and note that no Gradle build has been executed in this environment |
 | Android contract | `minSdkVersion 28`, `targetSdkVersion 35`, `compileSdk 36`; Java source/target 8 and core-library desugaring | Declared support begins at Android 9, not the older Android versions supported by historical upstream releases |
@@ -98,7 +98,7 @@ Evidence: [StorageAccessHelper, lines 63–78](../app/src/main/java/org/shadowic
 
 **Action:** Return explicit `Missing`, `Success`, `WrongKey/AuthenticationFailure`, `Corrupt`, and `IoFailure` outcomes. Treat missing data as first-run only under an explicit initialization policy. Never mutate/backup a failed load. Parse imports transactionally and report rejected entries explicitly. Use atomic private-file replacement and consistent synchronization across save, migration, backup and wipe; verify rollback before discarding the old data/key. SAF providers need a separate safe-write policy because rename/atomicity support varies.
 
-Evidence: [DatabaseHelper, lines 106–181](../app/src/main/java/org/shadowice/flocke/andotp/Utilities/DatabaseHelper.java); [FileHelper, lines 51–55](../app/src/main/java/org/shadowice/flocke/andotp/Utilities/FileHelper.java); [EncryptionHelper.tryEncryptionChange](../app/src/main/java/org/shadowice/flocke/andotp/Utilities/EncryptionHelper.java); [EncryptedBackupWorker, lines 49–57](../app/src/main/java/org/shadowice/flocke/andotp/Tasks/EncryptedBackupWorker.java).
+Evidence: [DatabaseHelper, readVault and changeVaultEncryption](../app/src/main/kotlin/org/shadowice/flocke/andotp/Utilities/DatabaseHelper.kt) (converted to Kotlin in the eleventh batch; the typed outcomes and the transaction are the ones described in the vault-hardening record); [FileHelper, lines 51–55](../app/src/main/java/org/shadowice/flocke/andotp/Utilities/FileHelper.java); [EncryptionHelper.tryEncryptionChange](../app/src/main/java/org/shadowice/flocke/andotp/Utilities/EncryptionHelper.java); [EncryptedBackupWorker, lines 49–57](../app/src/main/java/org/shadowice/flocke/andotp/Tasks/EncryptedBackupWorker.java).
 
 ### E. Make locked state a real key-lifetime boundary — high priority
 

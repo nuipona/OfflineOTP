@@ -153,8 +153,25 @@ Tenth batch (number preference and hideable notice):
   persistence calls rather than claim real PreferenceManager disk I/O, and do not show an unsuppressed
   dialog window. They still need compilation/execution on the Android gates.
 
-No activity, entry-card list adapter/view holder, fragment, credential preference, receiver, worker,
-larger dialog renderer or persistence implementation is converted; the task runner and its subclasses are, and so is the entry model above. No coroutine, Compose, new
+Eleventh batch (the vault repository — the assessment's second conversion target):
+
+- `Utilities/DatabaseHelper.kt` (replacing `DatabaseHelper.java`): the serialized vault file
+  transaction — recovery of a staged write, the authenticated read, the bounded write, the staged
+  encryption migration, backup/restore/wipe and the entry-document writer/parser. The typed
+  outcomes (`VaultReadResult`, `VaultWriteResult`, `VaultCommitDecision`) and the session already
+  existed in `VaultContracts.kt`/`VaultSession.kt`; this batch moves the repository that produces
+  them. Every member was `static` in Java, so the conversion is the documented `object` delta with
+  `@JvmStatic` forwarders; the Java-visible names, the nested `Status`/`LoadResult`/`VaultException`
+  types (including both public `status` fields) and both callback interfaces are unchanged.
+- This batch was first prepared on top of the seventh batch (as PR #9) and is rebased here onto the
+  thumbnail/adapter/preference batches; the repository source it converts is the same
+  `DatabaseHelper.java` those batches left untouched.
+
+No activity, entry-card list adapter/view holder, fragment, credential preference, receiver, worker
+or larger dialog renderer is converted; the task runner and its subclasses are, and so are the entry
+model and the vault repository above. The repository's own storage primitives
+(`Utilities/FileHelper.java`) and the Android file/preference surface it uses stay Java and are
+resolved by the sandbox rather than converted. No coroutine, Compose, new
 dependency, SDK/bytecode target, storage format or crypto change is included.
 
 **Source conversion is implemented; Gradle and device acceptance is still pending.** What *has* been
@@ -435,6 +452,69 @@ the same exception type and the same messages' shape.
   already produces.
 - `Entry` is `open`, not final: it was extendable Java, and `EntryList`/the views hold it as a model.
 
+### Vault repository
+
+The repository is the only owner of the vault file transaction, and it stays exactly that. Only the
+language changed: every method, the nested types and the callback interfaces keep their Java
+signatures, and the ordering below is the ordering the hardened Java had.
+
+- **Reads distinguish absence from failure**, in this precedence: a poisoned/unrecoverable process
+  (`RECOVERY_REQUIRED`) before the file check, `MISSING` before `MISSING_KEY` (a missing vault is
+  first-run, not a key problem), then `AUTHENTICATION_FAILED` for a `BadPaddingException` caught
+  *before* the broader `IOException` and `Exception` arms that map to `IO_FAILURE` and `CORRUPT`. A
+  reordering of those catches would silently relabel a decryption failure, so the source guard pins
+  the order. Decrypted plaintext is wiped in the `finally` on every path, including the success one.
+- **`LoadResult` keeps the legacy mapping** `VaultReadError -> Status` with one arm per error, so a
+  future error constant cannot turn into an `IllegalArgumentException` inside a constructor (the
+  Java's `Status.valueOf(error.name())` would do exactly that for any constant without a same-named
+  `Status`; it special-cased `RECOVERY_REQUIRED` before reaching it). `RECOVERY_REQUIRED`
+  still maps to `IO_FAILURE`: the legacy status set has no recovery value, and
+  `VaultFailureSecurityTest.failedPreferenceCommitBlocksWritesUntilRestartOrExplicitWipe` asserts
+  that status after wiping a failed preference commit. `LoadResult` stays a one-use view over the
+  typed read result — `requireEntries()` transfers entry ownership once and throws `VaultException`
+  otherwise, `close()` destroys only untransferred entries.
+- **The staged migration is unchanged**: ciphertext is staged with a 36-byte UUID prefix, the
+  metadata commit is asked for a decision, the marker preference is read back, `CANCELED` is only
+  accepted *before* any metadata mutation, and an `UNKNOWN`/uncommitted marker poisons the process
+  (`transactionPoisoned`) so every later recovery and write fails closed until an explicit wipe or
+  restart. A committed-but-unpromoted stage is reported as `RecoveryRequired(COMMITTED)`, never as a
+  rollback. All entry ownership held by the transaction (the failed-backup branch and the `finally`)
+  is destroyed.
+- **Bounded and fail-closed documents**: `entriesToString` refuses null/oversized input as a caller
+  error (`IllegalArgumentException`) and reports a corrupt vault for per-entry failures; the parser
+  rejects a document over `MAX_DOCUMENT_BYTES`, runs `InputPolicy.jsonDepth` before the platform
+  tokener, requires the whole value to be a JSON array with nothing but whitespace after it, and
+  destroys every partially parsed entry before reporting `CORRUPT`. A malformed document is never a
+  short or empty list.
+- **Visibility of the two constants**: `TRANSACTION_ID` and `PENDING_FILE` were package-private
+  fields in Java (`static final String` with no modifier). Kotlin has no package-private visibility,
+  so they are `const val` — same names, same values, read by the same-package `Settings` and by the
+  instrumentation tests, but now also visible to out-of-package Java as two non-secret strings. The
+  anti-pattern that kept `Constants`/`FileHelper` Java does not apply here: these are `String`
+  constants, not a class whose *type* would have to be published.
+- **Constructors that stay non-public**: `LoadResult` and `VaultException` had package-private /
+  private constructors in Java. Both are `private constructor` plus a `@JvmSynthetic internal`
+  factory (`LoadResult.create`, `VaultException.create`), so Java still cannot construct them while
+  this file can. The companions add a static `Companion` field with no Java-callable member, and
+  the private constructors get Kotlin's synthetic accessor; neither is usable from Java source.
+  No `!!` appears in the file.
+- **Fields stay fields**: `LoadResult.status` and `VaultException.status` were `public final`
+  fields in Java and are `@JvmField` here, so Java keeps reading `result.status`/`error.status`
+  rather than needing a `getStatus()` accessor. (PR #9's first draft had dropped `@JvmField` on the
+  exception; it was restored when the batch was rebased.)
+- **Nullability follows the Java checks**: `key`/`oldKey`/`newKey` stay nullable (missing keys are
+  explicit `MISSING_KEY` outcomes), and so does the entry list on the write path — the Java reached
+  `entriesToString`'s null check and reported a null list as `Rejected(INVALID_INPUT)` after the
+  read, so `saveVault`/`saveDatabase` keep accepting null instead of failing Kotlin's parameter
+  check. Parameters the Java dereferenced without a check are non-null and now **fail fast** at the
+  call: a null `context` throws before the lock is taken (the Java threw the same
+  `NullPointerException` at its first file lookup, or returned the fail-closed result unchanged in a
+  poisoned process), and a null `commit` callback for `changeEncryption`/
+  `changeVaultEncryption` is rejected before anything is staged. In the Java that null was only
+  dereferenced *inside* the staged transaction, where the catch turned it into `UNKNOWN` and
+  poisoned the process; failing before staging is the documented trade-off of this repository's
+  conversions. Every in-repository caller passes a non-null context and callback.
+
 ## Tests and acceptance
 
 Existing Java/Kotlin characterization tests remain in place and unchanged: the RFC vector tests in
@@ -459,15 +539,24 @@ semantics a mechanical conversion could drop (the HOTP/TOTP branch in `ownedSecr
 `app/src/androidTest/.../Database/EntryJsonTest.java`, characterizes the boundary on a device:
 stored-format equality for a round-tripped document, the malformed-field matrix, the seed ownership
 rules, the `Entry` adapter's round trip and failure messages, the URI parameter set, the token
-calculators and the manual-entry secret validator.
+calculators and the manual-entry secret validator. With the vault-repository batch the converted-stem
+list gains `Utilities/DatabaseHelper`, and a dedicated guard
+(`test_converted_vault_repository_keeps_the_transaction_and_its_java_surface`) pins the `object`
+shape with its fourteen `@JvmStatic` members, the lock/constant fields, both `@JvmField` status
+fields, the nullable write-path entry list, the read precedence and catch order, the plaintext wipe,
+the poison flag and recovery ordering, the session-locking wipe and the three entry-destroy paths;
+the contract-migration guard now reads the Kotlin repository for the staged-commit, poison, UUID
+prefix and write-bound invariants. The existing instrumentation suites that drive the repository
+(`VaultFailureSecurityTest`, `VaultRestoreOperationTest`, `CredentialLifecycleSecurityTest`,
+`IpcAuthorizationSecurityTest`, `ApplicationTest`) are unchanged and still need a device run.
 
 ### Executed here: partial sandbox compile/run check
 
 `scripts/kotlin-sandbox/` compiles the converted platform-free/low-platform sources against
 hand-written platform stubs and runs `Checks.kt` on a desktop JVM; `bootstrap-toolchain.sh` fetches
 a JDK and the Kotlin compiler from package mirrors when the machine has neither. Executed on
-2026-10-15 with **Kotlin 2.4.21 and Temurin 25.0.2** (`-jvm-target 1.8`), it reports 40 passing
-checks:
+2026-10-15 with **Kotlin 2.4.21 and Temurin 25.0.2** (`-jvm-target 1.8`), it reports 53 passing
+checks after the eleventh batch:
 
 - RFC 6238 TOTP vectors (SHA-1/256/512, six timestamps, eight digits) and RFC 4226 HOTP vectors.
 - TOTP/HOTP agreement with an independent HMAC implementation, including offsets and 1/30/60/86400 s periods.
@@ -495,18 +584,38 @@ checks:
   and a stale captured generation being cancelled before work begins.
 - `VaultSession` facade shapes (mutation lock field, static generation/listener forwarders) read
   live by the runner.
+- The vault outcome mapping and the fail-closed document boundary executed in the sandbox: every
+  `VaultReadError` maps to the same `Status` (including `RECOVERY_REQUIRED -> IO_FAILURE`),
+  `LoadResult` reports an empty vault as success and an unavailable one as `VaultException` with the
+  status-only message, and `stringToEntries` returns `CORRUPT` (never an empty list) for null, empty,
+  truncated, object-valued, trailing-content and single-quoted input while `"[]"` stays an empty
+  vault and `entriesToString(null)` stays a caller error. Both legacy `status` members are asserted
+  to be public final fields (no `getStatus()` accessor) and neither nested type has a Java-callable
+  constructor.
+- The repository's document path over **real entries** (possible since `Entry` and its thumbnail
+  catalogue are both Kotlin): the stored document parses into an entry and is written back
+  byte-for-byte, a valid entry followed by an empty, seedless, non-object or truncated one rejects the
+  whole document as `CORRUPT`, a destroyed entry cannot be written (`CORRUPT`) and the entry-count
+  bound stays a caller error.
+- The poisoned-transaction quiescence: with the private poison flag set by reflection (the ambiguous
+  commit that sets it needs storage), recovery, reads, the legacy load, both write adapters
+  (including a null entry list), both encryption-change adapters, initialization and restore all
+  return their fail-closed results **before** reaching `FileHelper` — which has no class file here,
+  so a dropped guard fails the check — a poisoned write fails the session, and no metadata commit
+  callback runs. The check clears the flag and re-locks the session afterwards.
 - The entry document boundary executed against functional `org.json`/`Base32`/`Hex` replicas: the
   stored field order and defaults (including a reserialization that equals the legacy string
   byte-for-byte), the malformed-field matrix with its closed error set, the `ValidatedEntry`
   one-use/redacted ownership, and the Base32/mOTP-hex secret rules.
-- The converted `Entry` class **reflected, not instantiated**: public and non-final class, the six
-  constructors including both `Exception`-declaring adapters, the `OTPType` constants, `COLOR_RED`,
-  thumbnail getter and `validateSecret` for Base32/mOTP secrets.
+- The converted `Entry` class reflected: public and non-final class, the six constructors including
+  both `Exception`-declaring adapters, the `OTPType` constants, `COLOR_RED`, thumbnail getter and
+  `validateSecret` for Base32/mOTP secrets. It is instantiated only through the vault document check
+  above (document adapter, validation, serialization, destroy); its token/URI members are not run.
 - Thumbnail enum lookups and Java-visible rendering/lookup/getter signatures. The 346 enum/resource
   mappings are also fingerprinted by a Python source guard; actual pixels are not sandbox-tested.
-- The ten converted task subclasses are **type-checked against the real Java declarations** they
-  call: `run.sh` passes `Settings.java`, `EncryptionHelper.java`, `BackupHelper.java`,
-  `StorageAccessHelper.java`, `DatabaseHelper.java`, `KeyStoreHelper.java` and `FileHelper.java`
+- The ten converted task subclasses and the converted repository are **type-checked against the real
+  Java declarations** they call: `run.sh` passes `Settings.java`, `EncryptionHelper.java`,
+  `BackupHelper.java`, `StorageAccessHelper.java`, `KeyStoreHelper.java` and `FileHelper.java`
   to `kotlinc` for resolution, so the
   Kotlin calls are verified against the actual parameter/return types instead of stub copies. Their
   bodies are not executed (the Java sources produce no class files on the desktop JVM), and
@@ -534,7 +643,9 @@ Both flavors must compile and pass host tests, focused lint and packaged-manifes
 28/36 instrumentation matrix, plus the independent release/reproducibility and dependency
 comparisons. Java-side compilation of the callers, `Handler`/`Looper` timing on a real main thread,
 `KeyEvent` delivery, `TypedValue.applyDimension` (the stub replicates the documented density formula),
-the real `View.postDelayed` scheduling, `Entry`'s thumbnail-dependent members and the real
+the real `View.postDelayed` scheduling, `Entry`'s thumbnail-dependent members, the vault file
+transaction itself (`FileHelper`/`AtomicFile`, `SharedPreferences`, `EncryptionHelper` and the
+staged-promotion choreography all need a device) and the real
 `org.json`/`commons-codec`/`android.net.Uri` behaviour beyond the documented replicated subsets are
 not covered by the sandbox check. See
 [build commands](build-and-security-tests.md). Remaining decomposition and UI conversion work is
@@ -553,6 +664,10 @@ tracked in the [decomposition plan](ui-decomposition-plan.md).
   point like the activities and receivers, not a task subclass over the runner. Component
   conversion is a separate decision from the task layer (see the sixth batch).
 
+`Utilities/DatabaseHelper` is no longer Java either: it is converted (eleventh batch), and the
+package-private-visibility rule above did not block it because the only package-private members were
+two `String` constants and a nested class whose constructor Java never called.
+
 The drag & drop trio, `UIHelper`, `ConfirmedPasswordTransformationHelper` and `BackupTaskResult`
 are no longer in this list: they are converted (see the fourth batch above). The task subclasses
 and their runner are converted too (fifth and sixth batches); the *workers*, receivers and other
@@ -560,6 +675,6 @@ components remain Java.
 
 The thumbnail pair has also left this list (eighth batch). The small visibility widenings are
 explicitly recorded above; these leaf renderers still need Android acceptance despite their sandbox
-compile. Latest local check after the tenth batch: 67 Python guards and 50 sandbox checks passed. The both-flavor Gradle
+compile. Latest local check after the eleventh batch: 68 Python guards and 53 sandbox checks passed. The both-flavor Gradle
 host/lint/instrumentation-APK build was attempted but stopped at the Gradle 8.13 distribution download
 (`SSLHandshakeException` from `services.gradle.org`); no Android acceptance result is claimed.
