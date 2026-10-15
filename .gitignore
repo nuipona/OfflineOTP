@@ -14,3 +14,9 @@ captures
 
 # OS files
 .DS_Store
+
+# Local validation tooling / reports
+.venv/
+__pycache__/
+reports/
+.cache/

@@ -6,13 +6,11 @@ import android.net.Uri;
 import androidx.annotation.NonNull;
 
 import org.shadowice.flocke.andotp.R;
-import org.shadowice.flocke.andotp.Utilities.Constants;
+import org.shadowice.flocke.andotp.Utilities.EncryptedBackupHeader;
 import org.shadowice.flocke.andotp.Utilities.EncryptionHelper;
 import org.shadowice.flocke.andotp.Utilities.StorageAccessHelper;
 
-import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
-import java.util.Arrays;
 
 import javax.crypto.SecretKey;
 
@@ -44,15 +42,11 @@ public class EncryptedRestoreTask extends GenericRestoreTask {
                 decryptedString = new String(decrypted, StandardCharsets.UTF_8);
             } else {
                 // Current format: [iteration count][salt][nonce + ciphertext]
-                byte[] iterBytes = Arrays.copyOfRange(data, 0, Constants.INT_LENGTH);
-                byte[] salt = Arrays.copyOfRange(data, Constants.INT_LENGTH, Constants.INT_LENGTH + Constants.ENCRYPTION_IV_LENGTH);
-                byte[] encrypted = Arrays.copyOfRange(data, Constants.INT_LENGTH + Constants.ENCRYPTION_IV_LENGTH, data.length);
+                EncryptedBackupHeader header = EncryptedBackupHeader.parse(data);
+                SecretKey key = EncryptionHelper.generateSymmetricKeyPBKDF2(
+                        password, header.getIterations(), header.getSalt());
 
-                int iter = ByteBuffer.wrap(iterBytes).getInt();
-
-                SecretKey key = EncryptionHelper.generateSymmetricKeyPBKDF2(password, iter, salt);
-
-                byte[] decrypted = EncryptionHelper.decrypt(key, encrypted);
+                byte[] decrypted = EncryptionHelper.decrypt(key, header.getEncrypted());
                 decryptedString = new String(decrypted, StandardCharsets.UTF_8);
             }
         } catch (Exception e) {

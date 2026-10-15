@@ -31,9 +31,6 @@ import android.content.Intent;
 import android.content.SharedPreferences;
 import android.content.res.Configuration;
 import android.os.Bundle;
-import android.os.CountDownTimer;
-import android.os.Handler;
-import android.os.Looper;
 import android.preference.PreferenceManager;
 
 import androidx.annotation.NonNull;
@@ -73,6 +70,15 @@ import org.shadowice.flocke.andotp.Dialogs.HideableDialog;
 import org.shadowice.flocke.andotp.R;
 import org.shadowice.flocke.andotp.Utilities.Constants;
 import org.shadowice.flocke.andotp.Utilities.EncryptionHelper;
+import org.shadowice.flocke.andotp.Utilities.DatabaseHelper;
+import org.shadowice.flocke.andotp.Utilities.VaultReadResult;
+import org.shadowice.flocke.andotp.Utilities.VaultWriteResult;
+import org.shadowice.flocke.andotp.Utilities.VaultCommitDecision;
+import org.shadowice.flocke.andotp.Utilities.VaultSession;
+import org.shadowice.flocke.andotp.Utilities.SessionCommandResult;
+import org.shadowice.flocke.andotp.Utilities.SessionFailure;
+import org.shadowice.flocke.andotp.Utilities.SessionLockReason;
+import java.util.Arrays;
 import org.shadowice.flocke.andotp.Utilities.KeyStoreHelper;
 import org.shadowice.flocke.andotp.Utilities.NotificationHelper;
 import org.shadowice.flocke.andotp.Utilities.ScanQRCodeFromFile;
@@ -81,6 +87,8 @@ import org.shadowice.flocke.andotp.View.EntriesCardAdapter;
 import org.shadowice.flocke.andotp.View.ItemTouchHelper.SimpleItemTouchHelperCallback;
 import org.shadowice.flocke.andotp.Dialogs.ManualEntryDialog;
 import org.shadowice.flocke.andotp.View.TagsAdapter;
+import org.shadowice.flocke.andotp.Utilities.ScreenTimerController;
+import org.shadowice.flocke.andotp.Utilities.HandlerTimerScheduler;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -108,13 +116,14 @@ public class MainActivity extends BaseActivity
 
     private EncryptionType encryptionType = EncryptionType.KEYSTORE;
     private boolean requireAuthentication = false;
+    private boolean authenticationPending;
+    private long authenticationGeneration;
+    private final ProcessLifecycleObserver processObserver = new ProcessLifecycleObserver();
 
     private boolean recreateActivity = false;
-    private boolean cacheEncKey = false;
     private boolean focusSearchOnCreate = false;
 
-    private Handler handler;
-    private Runnable handlerTask;
+    private ScreenTimerController screenTimers;
 
     private DrawerLayout tagsDrawerLayout;
     private ListView tagsDrawerListView;
@@ -122,7 +131,6 @@ public class MainActivity extends BaseActivity
     private ActionBarDrawerToggle tagsToggle;
     private String filterString;
 
-    private CountDownTimer countDownTimer;
     private ProgressBar progressBar;
     private TextView emptyListView;
 
@@ -134,32 +142,55 @@ public class MainActivity extends BaseActivity
                 .initiateScan();
     }
 
+    private long introGeneration;
+
     private void showFirstTimeWarning() {
+        introGeneration = VaultSession.generation();
         Intent introIntent = new Intent(this, IntroScreenActivity.class);
         startActivityForResult(introIntent, Constants.INTENT_MAIN_INTRO);
     }
 
     /** Starts the configured authentication flow, showing {@code messageId} as prompt. */
     public void authenticate(int messageId) {
+        if (authenticationPending) return;
+        long attempt = VaultSession.beginUnlock().getGeneration();
+        requireAuthentication = false;
+        authenticationPending = true;
+        authenticationGeneration = attempt;
         AuthMethod authMethod = settings.getAuthMethod();
-
         if (authMethod == AuthMethod.DEVICE) {
-            KeyguardManager km = (KeyguardManager) getSystemService(KEYGUARD_SERVICE);
-
-            assert km != null;      // The KEYGUARD_SERVICE should always be available
-            if (km.isKeyguardSecure()) {
-                Intent authIntent = km.createConfirmDeviceCredentialIntent(getString(R.string.dialog_title_auth), getString(R.string.dialog_msg_auth));
-                startActivityForResult(authIntent, Constants.INTENT_MAIN_AUTHENTICATE);
-            }
+            KeyguardManager manager = (KeyguardManager) getSystemService(KEYGUARD_SERVICE);
+            if (manager == null || !manager.isKeyguardSecure()) { vaultUnavailable(); return; }
+            Intent challenge = manager.createConfirmDeviceCredentialIntent(getString(R.string.dialog_title_auth), getString(R.string.dialog_msg_auth));
+            if (challenge == null) { vaultUnavailable(); return; }
+            startActivityForResult(challenge, Constants.INTENT_MAIN_AUTHENTICATE);
         } else if (authMethod == AuthMethod.PASSWORD || authMethod == AuthMethod.PIN) {
-            Intent authIntent = new Intent(this, AuthenticateActivity.class);
-            authIntent.putExtra(Constants.EXTRA_AUTH_MESSAGE, messageId);
-            startActivityForResult(authIntent, Constants.INTENT_MAIN_AUTHENTICATE);
-        }
+            Intent challenge = new Intent(this, AuthenticateActivity.class);
+            challenge.putExtra(Constants.EXTRA_AUTH_MESSAGE, messageId);
+            startActivityForResult(challenge, Constants.INTENT_MAIN_AUTHENTICATE);
+        } else { vaultUnavailable(); }
+    }
+
+    private void vaultUnavailable() {
+        authenticationPending = false;
+        VaultSession.fail(SessionFailure.VAULT_UNAVAILABLE);
+        new AlertDialog.Builder(this).setTitle(R.string.security_vault_error_title)
+                .setMessage(R.string.security_vault_error).setCancelable(false)
+                .setPositiveButton(android.R.string.ok, (dialog, which) -> finishAndRemoveTask()).show();
+    }
+
+    @Override protected void onVaultLocked() {
+        authenticationPending = false;
+        requireAuthentication = true;
+        if (adapter != null) adapter.lockEntries();
+        if (screenTimers != null) screenTimers.pause();
+        View cards = findViewById(R.id.cardList);
+        if (cards != null) cards.setVisibility(View.INVISIBLE);
     }
 
     // Everything that should happen after the app is unlocked goes here
     private void afterAuthentication() {
+        if (VaultSession.getKey() == null || isFinishing()) return;
         checkAutomaticTime();
     }
 
@@ -179,7 +210,7 @@ public class MainActivity extends BaseActivity
 
     /** Loads the entries into the adapter and refreshes the tag drawer. */
     private void populateAdapter() {
-        adapter.loadEntries();
+        if (!adapter.loadEntries()) { vaultUnavailable(); return; }
         tagsDrawerAdapter.setTags(TagsAdapter.createTagsMap(adapter.getEntries(), settings));
         adapter.filterByTags(tagsDrawerAdapter.getActiveTags());
     }
@@ -211,15 +242,13 @@ public class MainActivity extends BaseActivity
 
         encryptionType = settings.getEncryption();
 
-        if (settings.getAuthMethod() != AuthMethod.NONE && savedInstanceState == null)
-            requireAuthentication = true;
+        // Activity state is not proof of an unlock; process death/recreation must reauthenticate.
+        VaultSession.lock();
+        requireAuthentication = settings.getAuthMethod() != AuthMethod.NONE || encryptionType == EncryptionType.PASSWORD;
 
-        setBroadcastCallback(() -> {
-            if (settings.getRelockOnScreenOff() && settings.getAuthMethod() != AuthMethod.NONE)
-                requireAuthentication = true;
-        });
+        setBroadcastCallback(() -> { if (settings.getRelockOnScreenOff()) onVaultLocked(); });
 
-        ProcessLifecycleOwner.get().getLifecycle().addObserver(new ProcessLifecycleObserver());
+        ProcessLifecycleOwner.get().getLifecycle().addObserver(processObserver);
 
         if (!settings.getFirstTimeWarningShown())
             showFirstTimeWarning();
@@ -232,6 +261,7 @@ public class MainActivity extends BaseActivity
         speedDial.getMainFab().setContentDescription(getString(R.string.button_add));
 
         speedDial.setOnActionSelectedListener(speedDialActionItem -> {
+            if (VaultSession.getKey() == null) return false;
             int actionId = speedDialActionItem.getId();
 
             if (actionId == R.id.fabScanQR)
@@ -309,14 +339,6 @@ public class MainActivity extends BaseActivity
             }
         });
 
-        if (savedInstanceState != null) {
-            byte[] encKey = savedInstanceState.getByteArray("encKey");
-            if (encKey != null) {
-                adapter.setEncryptionKey(EncryptionHelper.generateSymmetricKey(encKey));
-                requireAuthentication = false;
-            }
-        }
-
         recList.setAdapter(adapter);
 
         touchHelperCallback = new SimpleItemTouchHelperCallback(adapter);
@@ -344,26 +366,8 @@ public class MainActivity extends BaseActivity
             }
         });
 
-        handler = new Handler(Looper.getMainLooper());
-        handlerTask = new Runnable()
-        {
-            @Override
-            public void run() {
-                if (!settings.isHideGlobalTimeoutEnabled()) {
-                    int progress = (int) (TokenCalculator.TOTP_DEFAULT_PERIOD - (System.currentTimeMillis() / 1000) % TokenCalculator.TOTP_DEFAULT_PERIOD);
-                    progressBar.setProgress(progress * 100);
-
-                    ObjectAnimator animation = ObjectAnimator.ofInt(progressBar, "progress", (progress - 1) * 100);
-                    animation.setDuration(animatorDuration);
-                    animation.setInterpolator(new LinearInterpolator());
-                    animation.start();
-                }
-
-                adapter.updateTimeBasedTokens();
-
-                handler.postDelayed(this, 1000);
-            }
-        };
+        screenTimers = new ScreenTimerController(new HandlerTimerScheduler(), this::renderTokenTick,
+                () -> authenticate(R.string.auth_msg_authenticate));
 
         setupDrawer();
 
@@ -395,10 +399,15 @@ public class MainActivity extends BaseActivity
                 case Intent.ACTION_VIEW:
                     try {
                         Entry entry = new Entry(callingIntent.getDataString());
-                        entry.updateOTP(false);
-                        entry.setLastUsed(System.currentTimeMillis());
-                        adapter.addEntry(entry);
-                        Toast.makeText(this, R.string.toast_intent_creation_succeeded, Toast.LENGTH_LONG).show();
+                        long epoch = VaultSession.generation();
+                        new AlertDialog.Builder(this).setTitle(R.string.security_import_title)
+                                .setMessage(entry.getIssuer() + "\n" + entry.getLabel())
+                                .setPositiveButton(android.R.string.ok, (dialog, which) -> {
+                                    if (!VaultSession.isCurrent(epoch) || VaultSession.getKey() == null) { entry.destroy(); return; }
+                                    try { entry.updateOTP(false); entry.setLastUsed(System.currentTimeMillis()); adapter.addEntry(entry); refreshTags(); }
+                                    catch (RuntimeException error) { entry.destroy(); Toast.makeText(this, R.string.toast_intent_creation_failed, Toast.LENGTH_LONG).show(); }
+                                }).setNegativeButton(android.R.string.cancel, (dialog, which) -> entry.destroy())
+                                .setOnCancelListener(dialog -> entry.destroy()).show();
                     } catch (Exception e) {
                         Toast.makeText(this, R.string.toast_intent_creation_failed, Toast.LENGTH_LONG).show();
                     }
@@ -415,35 +424,31 @@ public class MainActivity extends BaseActivity
 
     // Controls for the updater background task
     public void stopUpdater() {
-        handler.removeCallbacks(handlerTask);
+        if (screenTimers != null) screenTimers.stopTicks();
     }
 
     public void startUpdater() {
-        handler.post(handlerTask);
+        if (screenTimers != null) screenTimers.startTicks();
     }
 
     @Override
     public void onResume() {
         super.onResume();
 
+        if (isFinishing() || authenticationPending) return;
+        if (!settings.getFirstTimeWarningShown()) return;
         if (requireAuthentication) {
-            if (settings.getAuthMethod() != AuthMethod.NONE) {
-                requireAuthentication = false;
+            if (settings.getAuthMethod() != AuthMethod.NONE || settings.getEncryption() == EncryptionType.PASSWORD) {
                 authenticate(R.string.auth_msg_authenticate);
+                return;
             }
-        } else {
-            if (settings.getFirstTimeWarningShown()) {
-                if (adapter.getEncryptionKey() == null) {
-                    updateEncryption(null);
-                } else {
-                    populateAdapter();
-                }
-                checkIntent();
-            }
-
-            if (setCountDownTimerNow())
-                countDownTimer.start();
+            requireAuthentication = false;
         }
+        if (adapter.getEncryptionKey() == null) updateEncryption(null);
+        else populateAdapter();
+        if (authenticationPending || adapter.getEncryptionKey() == null || isFinishing()) return;
+        checkIntent();
+        restartInactivityTimer();
 
         if (filterString != null) {
             // Keep the search filter applied after a resume
@@ -464,8 +469,7 @@ public class MainActivity extends BaseActivity
         super.onPause();
         stopUpdater();
 
-        if (countDownTimer != null)
-            countDownTimer.cancel();
+        if (screenTimers != null) screenTimers.pause();
     }
 
     @Override
@@ -473,10 +477,7 @@ public class MainActivity extends BaseActivity
         super.onSaveInstanceState(outState);
         outState.putString("filterString", filterString);
 
-        if (cacheEncKey) {
-            outState.putByteArray("encKey", adapter.getEncryptionKey().getEncoded());
-            cacheEncKey = false;
-        }
+
     }
 
     public void onSharedPreferenceChanged(SharedPreferences prefs, String key) {
@@ -521,35 +522,31 @@ public class MainActivity extends BaseActivity
                 addQRCode(result.getContents());
             }
         } else if (requestCode == Constants.INTENT_MAIN_BACKUP && resultCode == RESULT_OK) {
-            if (intent.getBooleanExtra("reload", false)) {
+            if (intent != null && intent.getBooleanExtra("reload", false)) {
                 adapter.loadEntries();
                 refreshTags();
             }
         } else if (requestCode == Constants.INTENT_MAIN_SETTINGS && resultCode == RESULT_OK) {
-            boolean encryptionChanged = intent.getBooleanExtra(Constants.EXTRA_SETTINGS_ENCRYPTION_CHANGED, false);
-            byte[] newKey = intent.getByteArrayExtra(Constants.EXTRA_SETTINGS_ENCRYPTION_KEY);
-
-            if (encryptionChanged)
-                updateEncryption(newKey);
+            boolean encryptionChanged = intent != null && intent.getBooleanExtra(Constants.EXTRA_SETTINGS_ENCRYPTION_CHANGED, false);
+            if (encryptionChanged) {
+                SecretKey key = VaultSession.getKey();
+                if (key != null) adapter.setEncryptionKey(key);
+                else requireAuthentication = true;
+            }
 
             if (recreateActivity) {
-                cacheEncKey = true;
                 recreate();
             }
         } else if (requestCode == Constants.INTENT_MAIN_AUTHENTICATE) {
-            if (resultCode != RESULT_OK) {
+            if (resultCode != RESULT_OK || !authenticationPending || !VaultSession.isCurrent(authenticationGeneration)) {
                 Toast.makeText(getBaseContext(), R.string.toast_auth_failed_fatal, Toast.LENGTH_LONG).show();
                 finishAndRemoveTask();
             } else {
+                authenticationPending = false;
                 requireAuthentication = false;
-
-                byte[] authKey = null;
-
-                if (intent != null)
-                    authKey = intent.getByteArrayExtra(Constants.EXTRA_AUTH_PASSWORD_KEY);
-
-                updateEncryption(authKey);
-
+                byte[] authKey = VaultSession.takeDerivedKey(authenticationGeneration);
+                try { updateEncryption(authKey, authenticationGeneration); }
+                finally { if (authKey != null) Arrays.fill(authKey, (byte) 0); }
                 afterAuthentication();
             }
         } else if (requestCode == Constants.INTENT_MAIN_QR_OPEN_IMAGE && resultCode == RESULT_OK) {
@@ -565,8 +562,9 @@ public class MainActivity extends BaseActivity
             if (setupFinished) {
                 requireAuthentication = false;
 
-                byte [] encryptionKey = intent.getByteArrayExtra(Constants.EXTRA_INTRO_ENCRYPTION_KEY);
-                updateEncryption(encryptionKey);
+                byte[] key = VaultSession.takeDerivedKey(introGeneration);
+                try { updateEncryption(key, introGeneration); }
+                finally { if (key != null) Arrays.fill(key, (byte) 0); }
 
                 afterAuthentication();
             } else {
@@ -577,24 +575,37 @@ public class MainActivity extends BaseActivity
 
     /** (Re)creates the adapter's encryption key and reloads the entries. */
     private void updateEncryption(byte[] newKey) {
-        SecretKey encryptionKey = null;
+        updateEncryption(newKey, VaultSession.generation());
+    }
 
-        encryptionType = settings.getEncryption();
+    private void updateEncryption(byte[] newKey, long expectedGeneration) {
+        synchronized (DatabaseHelper.DatabaseFileLock) {
+            if (!VaultSession.isCurrent(expectedGeneration)) { vaultUnavailable(); return; }
+            SecretKey encryptionKey = null;
 
-        if (encryptionType == EncryptionType.KEYSTORE) {
-            encryptionKey = KeyStoreHelper.loadEncryptionKeyFromKeyStore(this, false);
-        } else if (encryptionType == EncryptionType.PASSWORD) {
-            if (newKey != null && newKey.length > 0) {
-                encryptionKey = EncryptionHelper.generateSymmetricKey(newKey);
-            } else {
-                authenticate(R.string.auth_msg_confirm_encryption);
+            encryptionType = settings.getEncryption();
+
+            if (encryptionType == EncryptionType.KEYSTORE) {
+                encryptionKey = KeyStoreHelper.loadEncryptionKeyFromKeyStore(this, false);
+            } else if (encryptionType == EncryptionType.PASSWORD) {
+                if (newKey != null && newKey.length > 0) {
+                    encryptionKey = EncryptionHelper.generateSymmetricKey(newKey);
+                } else {
+                    authenticate(R.string.auth_msg_confirm_encryption);
+                }
             }
-        }
 
-        if (encryptionKey != null)
+            if (encryptionKey == null) {
+                if (!authenticationPending) vaultUnavailable();
+                return;
+            }
+            VaultReadResult loaded = DatabaseHelper.readVault(this, encryptionKey);
+            if (!(loaded instanceof VaultReadResult.Loaded)) { vaultUnavailable(); return; }
+            ((VaultReadResult.Loaded) loaded).close();
+            if (!(VaultSession.activate(encryptionKey, expectedGeneration) instanceof SessionCommandResult.Applied)) { vaultUnavailable(); return; }
             adapter.setEncryptionKey(encryptionKey);
-
-        populateAdapter();
+            populateAdapter();
+        }
     }
 
     // Options menu
@@ -696,12 +707,11 @@ public class MainActivity extends BaseActivity
 
         if (id == R.id.action_backup) {
             Intent backupIntent = new Intent(this, BackupActivity.class);
-            backupIntent.putExtra(Constants.EXTRA_BACKUP_ENCRYPTION_KEY, adapter.getEncryptionKey().getEncoded());
+            if (VaultSession.getKey() == null) return true;
             startActivityForResult(backupIntent, Constants.INTENT_MAIN_BACKUP);
         } else if (id == R.id.action_settings) {
             Intent settingsIntent = new Intent(this, SettingsActivity.class);
-            if (adapter.getEncryptionKey() != null)
-                settingsIntent.putExtra(Constants.EXTRA_SETTINGS_ENCRYPTION_KEY, adapter.getEncryptionKey().getEncoded());
+            if (VaultSession.getKey() == null) return true;
             startActivityForResult(settingsIntent, Constants.INTENT_MAIN_SETTINGS);
         } else if (id == R.id.action_about){
             Intent aboutIntent = new Intent(this, AboutActivity.class);
@@ -899,37 +909,30 @@ public class MainActivity extends BaseActivity
     }
 
     @Override
-    public void onUserInteraction(){
+    public void onUserInteraction() {
         super.onUserInteraction();
-
-        // Restart the blackout timer
-        if (countDownTimer != null)
-            countDownTimer.cancel();
-
-        if (setCountDownTimerNow())
-            countDownTimer.start();
+        restartInactivityTimer();
     }
 
-    /** (Re)creates the inactivity timer; returns false when no timer is needed. */
-    private boolean setCountDownTimerNow() {
-        int secondsToBlackout = 1000 * settings.getAuthInactivityDelay();
+    /** The screen translates preferences to policy; the timer owns only scheduling. */
+    private void restartInactivityTimer() {
+        if (screenTimers == null) return;
+        long delay = settings.getAuthMethod() == AuthMethod.NONE || !settings.getAuthInactivity()
+                ? 0 : 1000L * settings.getAuthInactivityDelay();
+        screenTimers.restartInactivity(delay);
+    }
 
-        if (settings.getAuthMethod() == AuthMethod.NONE || !settings.getAuthInactivity() || secondsToBlackout == 0)
-            return false;
-
-        countDownTimer = new CountDownTimer(secondsToBlackout, 1000) {
-            @Override
-            public void onTick(long millisUntilFinished) {
-            }
-
-            @Override
-            public void onFinish() {
-                authenticate(R.string.auth_msg_authenticate);
-                this.cancel();
-            }
-        };
-
-        return true;
+    /** Rendering stays in the Activity; scheduling and teardown do not. */
+    private void renderTokenTick() {
+        if (!settings.isHideGlobalTimeoutEnabled()) {
+            int progress = (int) (TokenCalculator.TOTP_DEFAULT_PERIOD - (System.currentTimeMillis() / 1000) % TokenCalculator.TOTP_DEFAULT_PERIOD);
+            progressBar.setProgress(progress * 100);
+            ObjectAnimator animation = ObjectAnimator.ofInt(progressBar, "progress", (progress - 1) * 100);
+            animation.setDuration(animatorDuration);
+            animation.setInterpolator(new LinearInterpolator());
+            animation.start();
+        }
+        adapter.updateTimeBasedTokens();
     }
 
     @SuppressWarnings("SameParameterValue")
@@ -959,8 +962,8 @@ public class MainActivity extends BaseActivity
     private class ProcessLifecycleObserver implements DefaultLifecycleObserver {
         @Override
         public void onStop(@NonNull LifecycleOwner owner) {
-            if (MainActivity.this.settings.getRelockOnBackground())
-                MainActivity.this.requireAuthentication = true;
+            // No key is loaded while the system device-credential challenge is pending.
+            if (settings.getRelockOnBackground() && !(authenticationPending && settings.getAuthMethod() == AuthMethod.DEVICE)) VaultSession.lock(SessionLockReason.BACKGROUND);
         }
     }
 
@@ -986,6 +989,10 @@ public class MainActivity extends BaseActivity
     @Override
     protected void onDestroy() {
         settings.unregisterPreferenceChangeListener(this);
+        ProcessLifecycleOwner.get().getLifecycle().removeObserver(processObserver);
+        if (adapter != null) adapter.lockEntries();
+        if (screenTimers != null) screenTimers.close();
+        if (isFinishing()) VaultSession.lock();
         super.onDestroy();
     }
 

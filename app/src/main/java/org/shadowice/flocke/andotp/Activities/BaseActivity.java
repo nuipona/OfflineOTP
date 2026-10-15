@@ -27,22 +27,26 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.os.Bundle;
+import org.shadowice.flocke.andotp.Utilities.VaultSession;
 
 /** Base activity that reacts to screen-off events to lock or close the screen. */
 public abstract class BaseActivity extends ThemedActivity {
     private ScreenOffReceiver screenOffReceiver;
+    private final Runnable lockListener = () -> runOnUiThread(this::onVaultLocked);
     private BroadcastReceivedCallback broadcastReceivedCallback;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
 
+        VaultSession.addLockListener(lockListener);
         screenOffReceiver = new ScreenOffReceiver();
         registerReceiver(screenOffReceiver, screenOffReceiver.filter);
     }
 
     @Override
     protected void onDestroy() {
+        VaultSession.removeLockListener(lockListener);
         unregisterReceiver(screenOffReceiver);
         super.onDestroy();
     }
@@ -58,7 +62,8 @@ public abstract class BaseActivity extends ThemedActivity {
 
         @Override
         public void onReceive(Context context, Intent intent) {
-            if (intent.getAction().equals(Intent.ACTION_SCREEN_OFF)) {
+            if (intent != null && Intent.ACTION_SCREEN_OFF.equals(intent.getAction())) {
+                if (settings.getRelockOnScreenOff()) VaultSession.lock(org.shadowice.flocke.andotp.Utilities.SessionLockReason.SCREEN_OFF);
                 if (broadcastReceivedCallback != null) {
                     broadcastReceivedCallback.onReceivedScreenOff();
                 }
@@ -67,6 +72,21 @@ public abstract class BaseActivity extends ThemedActivity {
                 }
             }
         }
+    }
+
+    @Override public boolean dispatchTouchEvent(android.view.MotionEvent event) {
+        int obscured = android.view.MotionEvent.FLAG_WINDOW_IS_OBSCURED;
+        if (android.os.Build.VERSION.SDK_INT >= 29) obscured |= android.view.MotionEvent.FLAG_WINDOW_IS_PARTIALLY_OBSCURED;
+        return (event.getFlags() & obscured) == 0 && super.dispatchTouchEvent(event);
+    }
+
+    protected boolean requiresVaultSession() { return false; }
+
+    protected void onVaultLocked() { finish(); }
+
+    @Override public void onResume() {
+        super.onResume();
+        if (requiresVaultSession() && VaultSession.getKey() == null) finish();
     }
 
     /** True if this activity should be closed when the screen turns off. */

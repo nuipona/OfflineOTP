@@ -1,12 +1,20 @@
 // Top-level build file where you can add configuration options common to all sub-projects/modules.
 
 buildscript {
+    configurations.classpath {
+        resolutionStrategy.failOnDynamicVersions()
+        resolutionStrategy.failOnChangingVersions()
+        resolutionStrategy.activateDependencyLocking()
+    }
     repositories {
         google()
         mavenCentral()
     }
     dependencies {
         classpath 'com.android.tools.build:gradle:8.13.2'
+        classpath('org.jetbrains.kotlin:kotlin-gradle-plugin:2.3.20') {
+            version { strictly '2.3.20' }
+        }
         classpath 'com.mikepenz.aboutlibraries.plugin:aboutlibraries-plugin:14.2.1'
 
         // NOTE: Do not place your application dependencies here; they belong
@@ -18,9 +26,34 @@ allprojects {
     repositories {
         google()
         mavenCentral()
-        maven { url "https://jitpack.io" }
+        exclusiveContent {
+            forRepository { maven { url "https://jitpack.io" } }
+            filter {
+                includeGroup 'com.github.aakira'
+                includeGroup 'com.github.open-keychain.open-keychain'
+            }
+        }
     }
 }
+
+// Reject floating/changing dependencies instead of accepting a different graph silently.
+allprojects {
+    configurations.configureEach {
+        resolutionStrategy.failOnDynamicVersions()
+        resolutionStrategy.failOnChangingVersions()
+    }
+    dependencyLocking {
+        lockAllConfigurations()
+        // Gradle's default mode permits bootstrapping when lockfiles are absent.
+        // Reviewed lockfiles, once present, are enforced on normal builds.
+    }
+    tasks.withType(AbstractArchiveTask).configureEach {
+        preserveFileTimestamps = false
+        reproducibleFileOrder = true
+    }
+}
+
+apply from: 'gradle/dependency-inventory.gradle'
 
 task clean(type: Delete) {
     delete rootProject.buildDir

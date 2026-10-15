@@ -22,7 +22,6 @@
 
 package org.shadowice.flocke.andotp.Activities;
 
-import android.app.backup.BackupManager;
 import android.app.AlertDialog;
 import android.content.Intent;
 import android.content.SharedPreferences;
@@ -56,6 +55,10 @@ import org.shadowice.flocke.andotp.Utilities.BackupHelper;
 import org.shadowice.flocke.andotp.Utilities.Constants;
 import org.shadowice.flocke.andotp.Utilities.DatabaseHelper;
 import org.shadowice.flocke.andotp.Utilities.EncryptionHelper;
+import org.shadowice.flocke.andotp.Utilities.VaultSession;
+import org.shadowice.flocke.andotp.Utilities.VaultWriteResult;
+import org.shadowice.flocke.andotp.Utilities.VaultCommitDecision;
+import org.shadowice.flocke.andotp.Utilities.SessionCommandResult;
 import org.shadowice.flocke.andotp.Utilities.KeyStoreHelper;
 import org.shadowice.flocke.andotp.Utilities.NotificationHelper;
 import org.shadowice.flocke.andotp.Utilities.Settings;
@@ -76,6 +79,7 @@ public class SettingsActivity extends BackgroundTaskActivity<ChangeEncryptionTas
     private SharedPreferences prefs;
 
     private SecretKey encryptionKey = null;
+    private long authenticationGeneration = -1;
     private boolean encryptionChanged = false;
 
     private Snackbar inProgress = null;
@@ -94,19 +98,9 @@ public class SettingsActivity extends BackgroundTaskActivity<ChangeEncryptionTas
         ViewStub stub = findViewById(R.id.container_stub);
         stub.inflate();
 
-        Intent callingIntent = getIntent();
-        byte[] keyMaterial = callingIntent.getByteArrayExtra(Constants.EXTRA_SETTINGS_ENCRYPTION_KEY);
-        if (keyMaterial != null && keyMaterial.length > 0)
-            encryptionKey = EncryptionHelper.generateSymmetricKey(keyMaterial);
-
-        if (savedInstanceState != null) {
-            encryptionChanged = savedInstanceState.getBoolean(Constants.EXTRA_SETTINGS_ENCRYPTION_CHANGED, false);
-
-            byte[] encKey = savedInstanceState.getByteArray(Constants.EXTRA_SETTINGS_ENCRYPTION_KEY);
-            if (encKey != null) {
-                encryptionKey = EncryptionHelper.generateSymmetricKey(encKey);
-            }
-        }
+        encryptionKey = VaultSession.getKey();
+        if (encryptionKey == null) { finish(); return; }
+        if (savedInstanceState != null) encryptionChanged = savedInstanceState.getBoolean(Constants.EXTRA_SETTINGS_ENCRYPTION_CHANGED, false);
 
         fragment = new SettingsFragment();
         fragment.setEncryptionKey(encryptionKey);
@@ -125,7 +119,7 @@ public class SettingsActivity extends BackgroundTaskActivity<ChangeEncryptionTas
         super.onSaveInstanceState(outState);
 
         outState.putBoolean(Constants.EXTRA_SETTINGS_ENCRYPTION_CHANGED, encryptionChanged);
-        outState.putByteArray(Constants.EXTRA_SETTINGS_ENCRYPTION_KEY, encryptionKey.getEncoded());
+
     }
 
     /** Returns the (possibly changed) encryption key to MainActivity. */
@@ -133,8 +127,7 @@ public class SettingsActivity extends BackgroundTaskActivity<ChangeEncryptionTas
         Intent data = new Intent();
 
         data.putExtra(Constants.EXTRA_SETTINGS_ENCRYPTION_CHANGED, encryptionChanged);
-        if (encryptionKey != null)
-            data.putExtra(Constants.EXTRA_SETTINGS_ENCRYPTION_KEY, encryptionKey.getEncoded());
+
 
         setResult(RESULT_OK, data);
         finish();
@@ -157,8 +150,10 @@ public class SettingsActivity extends BackgroundTaskActivity<ChangeEncryptionTas
     }
 
     public void onSharedPreferenceChanged(SharedPreferences prefs, String key) {
-        BackupManager backupManager = new BackupManager(this);
-        backupManager.dataChanged();
+        if (isFinishing() || fragment == null) return;
+        if (key.equals(getString(R.string.settings_key_backup_broadcasts)) && !settings.isEncryptedBackupBroadcastEnabled()) {
+            androidx.work.WorkManager.getInstance(this).cancelUniqueWork(org.shadowice.flocke.andotp.Receivers.EncryptedBackupBroadcastReceiver.UNIQUE_WORK_NAME);
+        }
 
         if (key.equals(getString(R.string.settings_key_theme)) ||
                 key.equals(getString(R.string.settings_key_lang)) ||
@@ -183,7 +178,7 @@ public class SettingsActivity extends BackgroundTaskActivity<ChangeEncryptionTas
                 }
             } else {
                 if (fragment.useAndroidSync != null)
-                    fragment.useAndroidSync.setEnabled(true);
+                    fragment.useAndroidSync.setEnabled(false);
             }
         } else if(key.equals(getString(R.string.settings_key_enable_android_backup_service))) {
             Log.d(SettingsActivity.class.getSimpleName(), "onSharedPreferenceChanged called modifying settings_key_enable_android_backup_service service is now: " +
@@ -193,19 +188,31 @@ public class SettingsActivity extends BackgroundTaskActivity<ChangeEncryptionTas
             Snackbar.make(fragment.getView(), message, BaseTransientBottomBar.LENGTH_SHORT).show();
         }
 
-        fragment.updateAutoBackup();
+        if (fragment != null) fragment.updateAutoBackup();
+    }
+
+    @Override protected boolean requiresVaultSession() { return true; }
+
+    @Override protected void onVaultLocked() {
+        encryptionKey = null;
+        if (fragment != null) fragment.setEncryptionKey(null);
+        cancelBackgroundTask();
+        finish();
     }
 
     /** Generates a new KeyStore key after all keys were wiped. */
     private void generateNewEncryptionKey() {
         if (settings.getEncryption() == EncryptionType.KEYSTORE) {
-            encryptionKey = KeyStoreHelper.loadEncryptionKeyFromKeyStore(this, false);
+            encryptionKey = KeyStoreHelper.createEncryptionKey(this);
+            if (encryptionKey == null || !(DatabaseHelper.changeVaultEncryption(this, null, encryptionKey, true,
+                    id -> VaultCommitDecision.fromCommit(settings.commitVaultSettings(id, EncryptionType.KEYSTORE, null, null, true))) instanceof VaultWriteResult.Saved)) { finish(); return; }
             encryptionChanged = true;
         }
     }
 
     /** Asks for the password before switching to password encryption. */
     private void tryEncryptionChangeWithAuth(EncryptionType newEnc) {
+        authenticationGeneration = VaultSession.generation();
         Intent authIntent = new Intent(this, AuthenticateActivity.class);
         authIntent.putExtra(Constants.EXTRA_AUTH_NEW_ENCRYPTION, newEnc.name());
         authIntent.putExtra(Constants.EXTRA_AUTH_MESSAGE, R.string.auth_msg_confirm_encryption);
@@ -214,6 +221,8 @@ public class SettingsActivity extends BackgroundTaskActivity<ChangeEncryptionTas
 
     @Override
     public void onSuccessfulEncryptionChange(EncryptionType newEncryptionType, SecretKey newEncryptionKey) {
+        if (newEncryptionKey == null || isFinishing() || VaultSession.getKey() == null) return;
+        if (!(VaultSession.activate(newEncryptionKey, VaultSession.generation()) instanceof SessionCommandResult.Applied)) return;
         encryptionKey = newEncryptionKey;
         encryptionChanged = true;
 
@@ -278,25 +287,32 @@ public class SettingsActivity extends BackgroundTaskActivity<ChangeEncryptionTas
         super.onActivityResult(requestCode, resultCode, data);
 
         if (requestCode == Constants.INTENT_SETTINGS_AUTHENTICATE) {
-            if (resultCode == RESULT_OK) {
-                byte[] authKey = data.getByteArrayExtra(Constants.EXTRA_AUTH_PASSWORD_KEY);
+            if (resultCode == RESULT_OK && data != null && !isFinishing() && VaultSession.isCurrent(authenticationGeneration)) {
+                byte[] authKey = VaultSession.takeDerivedKey(authenticationGeneration);
                 String newEnc = data.getStringExtra(Constants.EXTRA_AUTH_NEW_ENCRYPTION);
 
                 if (authKey != null && authKey.length > 0 && newEnc != null && !newEnc.isEmpty()) {
                     EncryptionType newEncType = EncryptionType.valueOf(newEnc);
                     startEncryptionChangeTask(newEncType, authKey);
+                    java.util.Arrays.fill(authKey, (byte) 0);
                 } else {
+                    if (authKey != null) java.util.Arrays.fill(authKey, (byte) 0);
                     Snackbar.make(fragment.getView(), R.string.settings_toast_encryption_no_key, BaseTransientBottomBar.LENGTH_SHORT).show();
                 }
             } else {
                 Snackbar.make(fragment.getView(), R.string.settings_toast_encryption_auth_failed, BaseTransientBottomBar.LENGTH_SHORT).show();
             }
         } else if (requestCode == Constants.INTENT_SETTINGS_BACKUP_LOCATION && resultCode == RESULT_OK) {
-            Uri treeUri = data.getData();
-            if (treeUri != null) {
-                final int takeFlags = data.getFlags() & (Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_GRANT_WRITE_URI_PERMISSION);
-                getContentResolver().takePersistableUriPermission(treeUri, takeFlags);
-                settings.setBackupLocation(treeUri);
+            Uri treeUri = data == null ? null : data.getData();
+            if (treeUri != null && "content".equals(treeUri.getScheme())
+                    && treeUri.toString().length() <= org.shadowice.flocke.andotp.Utilities.InputPolicy.MAX_URI_CHARS) {
+                try {
+                    final int takeFlags = data.getFlags() & (Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_GRANT_WRITE_URI_PERMISSION);
+                    getContentResolver().takePersistableUriPermission(treeUri, takeFlags);
+                    settings.setBackupLocation(treeUri);
+                } catch (RuntimeException error) {
+                    Toast.makeText(this, R.string.backup_toast_location_access_failed, Toast.LENGTH_LONG).show();
+                }
             }
         } else {
             // Handled in OpenPgpKeyPreference
@@ -306,7 +322,9 @@ public class SettingsActivity extends BackgroundTaskActivity<ChangeEncryptionTas
 
     @Override
     protected void onDestroy() {
-        prefs.unregisterOnSharedPreferenceChangeListener(this);
+        if (prefs != null) prefs.unregisterOnSharedPreferenceChangeListener(this);
+        encryptionKey = null;
+        if (fragment != null) fragment.setEncryptionKey(null);
         prefs = null;
 
         super.onDestroy();
@@ -477,7 +495,8 @@ public class SettingsActivity extends BackgroundTaskActivity<ChangeEncryptionTas
             });
 
             useAndroidSync = (CheckBoxPreference) findPreference(getString(R.string.settings_key_enable_android_backup_service));
-            useAndroidSync.setEnabled(settings.getEncryption() == EncryptionType.PASSWORD);
+            useAndroidSync.setEnabled(false);
+            useAndroidSync.setSummary(R.string.security_platform_backup_disabled);
             if(!useAndroidSync.isEnabled())
                 useAndroidSync.setChecked(false);
 

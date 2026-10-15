@@ -200,30 +200,34 @@ public class ApplicationTest {
         keyStore.load(null);
         keyStore.deleteEntry("settings");
 
-        new File(context.getFilesDir() + "/" + Constants.FILENAME_DATABASE).delete();
+        DatabaseHelper.wipeDatabase(context);
         new File(context.getFilesDir() + "/" + Constants.FILENAME_ENCRYPTED_KEY).delete();
 
-        SecretKey encryptionKey = KeyStoreHelper.loadEncryptionKeyFromKeyStore(context, false);
+        SecretKey encryptionKey = KeyStoreHelper.createEncryptionKey(context);
+        assertTrue(DatabaseHelper.changeEncryption(context, null, encryptionKey, true,
+                id -> new org.shadowice.flocke.andotp.Utilities.Settings(context).commitVaultSettings(id, Constants.EncryptionType.KEYSTORE, Constants.AuthMethod.NONE, null, true)));
         ArrayList<Entry> b = DatabaseHelper.loadDatabase(context, encryptionKey);
         assertEquals(0, b.size());
 
         ArrayList<Entry> a = new ArrayList<>();
         Entry e = new Entry();
         e.setLabel("label");
+        e.setIssuer("", false);
         e.setSecret("secret".getBytes());
         a.add(e);
 
         e = new Entry();
         e.setLabel("label2");
+        e.setIssuer("", false);
         e.setSecret("secret2".getBytes());
         a.add(e);
 
-        DatabaseHelper.saveDatabase(context, a, encryptionKey);
+        assertTrue(DatabaseHelper.saveDatabase(context, a, encryptionKey));
         b = DatabaseHelper.loadDatabase(context, encryptionKey);
 
         assertEquals(a, b);
 
-        new File(context.getFilesDir() + "/" + Constants.FILENAME_DATABASE).delete();
+        DatabaseHelper.wipeDatabase(context);
         new File(context.getFilesDir() + "/" + Constants.FILENAME_ENCRYPTED_KEY).delete();
     }
 

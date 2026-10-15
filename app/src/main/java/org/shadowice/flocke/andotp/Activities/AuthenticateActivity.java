@@ -45,15 +45,18 @@ import android.widget.Toast;
 
 import org.shadowice.flocke.andotp.R;
 import org.shadowice.flocke.andotp.Tasks.AuthenticationTask;
-import org.shadowice.flocke.andotp.Tasks.AuthenticationTask.Result;
+import org.shadowice.flocke.andotp.Tasks.AuthenticationOutcome;
+import org.shadowice.flocke.andotp.Tasks.AuthenticationError;
 import org.shadowice.flocke.andotp.Utilities.Constants;
 import org.shadowice.flocke.andotp.Utilities.EditorActionHelper;
+import org.shadowice.flocke.andotp.Utilities.VaultSession;
+import java.util.Arrays;
 import org.shadowice.flocke.andotp.View.AutoFillable.AutoFillableTextInputEditText;
 
 import static org.shadowice.flocke.andotp.Utilities.Constants.AuthMethod;
 
 /** Asks for the password/PIN (or the device lock) and returns the derived database key. */
-public class AuthenticateActivity extends BackgroundTaskActivity<AuthenticationTask.Result>
+public class AuthenticateActivity extends BackgroundTaskActivity<AuthenticationOutcome>
         implements EditText.OnEditorActionListener, View.OnClickListener {
     private final AutoFillableTextInputEditText.AutoFillTextListener autoFillTextListener = text -> startAuthTask(text.toString());
 
@@ -86,11 +89,13 @@ public class AuthenticateActivity extends BackgroundTaskActivity<AuthenticationT
             int missingPwResId = (authMethod == AuthMethod.PASSWORD)
                     ? R.string.auth_toast_password_missing : R.string.auth_toast_pin_missing;
             Toast.makeText(this, missingPwResId, Toast.LENGTH_LONG).show();
-            finishWithResult(true, null);
+            finishWithResult(false, null);
+            return;
         }
         // If we're not using password or PIN as the auth method, we have nothing to authenticate here.
         if (authMethod != AuthMethod.PASSWORD && authMethod != AuthMethod.PIN) {
-            finishWithResult(true, null);
+            finishWithResult(false, null);
+            return;
         }
 
         setTitle(R.string.auth_activity_title);
@@ -144,6 +149,7 @@ public class AuthenticateActivity extends BackgroundTaskActivity<AuthenticationT
 
     private void initPasswordInputView(View v) {
         passwordInput = v.findViewById(R.id.passwordEdit);
+        passwordInput.setSaveEnabled(false);
         int inputType = (authMethod == AuthMethod.PASSWORD)
                 ? (InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_PASSWORD)
                 : (InputType.TYPE_CLASS_NUMBER | InputType.TYPE_NUMBER_VARIATION_PASSWORD);
@@ -173,6 +179,7 @@ public class AuthenticateActivity extends BackgroundTaskActivity<AuthenticationT
 
     @Override
     protected void setupUiForTaskState(boolean isTaskRunning) {
+        if (passwordLayout == null) return;
         passwordLayout.setEnabled(!isTaskRunning);
         passwordInput.setEnabled(!isTaskRunning);
         unlockButton.setEnabled(!isTaskRunning);
@@ -201,19 +208,37 @@ public class AuthenticateActivity extends BackgroundTaskActivity<AuthenticationT
     }
 
     @Override
-    void onTaskResult(Result result) {
-        if (result.authUpgradeFailed) {
-            Toast.makeText(this, R.string.settings_toast_auth_upgrade_failed, Toast.LENGTH_LONG).show();
+    protected void onTaskFailure(org.shadowice.flocke.andotp.Tasks.TaskFailure error) {
+        finishWithResult(false, null);
+    }
+
+    @Override
+    void onTaskResult(AuthenticationOutcome outcome) {
+        if (outcome instanceof AuthenticationOutcome.Rejected) {
+            if (((AuthenticationOutcome.Rejected) outcome).getError() == AuthenticationError.LEGACY_MIGRATION_FAILED)
+                Toast.makeText(this, R.string.settings_toast_auth_upgrade_failed, Toast.LENGTH_LONG).show();
+            finishWithResult(false, null);
+            return;
         }
-        finishWithResult(result.encryptionKey != null, result.encryptionKey);
+        AuthenticationOutcome.Verified verified = (AuthenticationOutcome.Verified) outcome;
+        try {
+            if (!VaultSession.isCurrent(verified.getGeneration())) finishWithResult(false, null);
+            else finishWithResult(true, verified.getKey().takeBytes(), verified.getGeneration());
+        } finally { verified.close(); }
     }
 
     private void finishWithResult(boolean success, byte[] encryptionKey) {
+        finishWithResult(success, encryptionKey, VaultSession.generation());
+    }
+
+    private void finishWithResult(boolean success, byte[] encryptionKey, long expected) {
         Intent data = new Intent();
         if (newEncryption != null && !newEncryption.isEmpty())
             data.putExtra(Constants.EXTRA_AUTH_NEW_ENCRYPTION, newEncryption);
-        if (encryptionKey != null)
-            data.putExtra(Constants.EXTRA_AUTH_PASSWORD_KEY, encryptionKey);
+        if (encryptionKey != null) {
+            success = success && VaultSession.offerDerivedKey(encryptionKey, expected);
+            Arrays.fill(encryptionKey, (byte) 0);
+        }
         if (success)
             setResult(RESULT_OK, data);
         finish();
@@ -228,15 +253,21 @@ public class AuthenticateActivity extends BackgroundTaskActivity<AuthenticationT
     @Override
     protected void onStart() {
         super.onStart();
-        if (settings.getAutoUnlockAfterAutofill()) {
+        if (passwordInput != null && settings.getAutoUnlockAfterAutofill()) {
             passwordInput.setAutoFillTextListener(autoFillTextListener);
         }
     }
 
     @Override
     protected void onStop() {
-        passwordInput.setAutoFillTextListener(null);
+        if (passwordInput != null) passwordInput.setAutoFillTextListener(null);
         super.onStop();
+    }
+
+    @Override protected void onVaultLocked() {
+        cancelBackgroundTask();
+        if (passwordInput != null) passwordInput.setText("");
+        finish();
     }
 
     @Override

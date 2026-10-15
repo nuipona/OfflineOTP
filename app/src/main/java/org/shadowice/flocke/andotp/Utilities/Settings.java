@@ -61,19 +61,17 @@ public class Settings {
         this.context = context;
         this.settings = PreferenceManager.getDefaultSharedPreferences(context);
 
-        migrateDeprecatedSettings();
+        if (DatabaseHelper.recoverPendingDatabase(context)) migrateDeprecatedSettings();
     }
 
     /** Migrates values that are stored under deprecated preference keys. */
     private void migrateDeprecatedSettings() {
         if (settings.contains(getResString(R.string.settings_key_auth_password))) {
-            setAuthCredentials(getString(R.string.settings_key_auth_password, ""));
-            remove(R.string.settings_key_auth_password);
+            if (setAuthCredentials(getString(R.string.settings_key_auth_password, "")) != null) remove(R.string.settings_key_auth_password);
         }
 
         if (settings.contains(getResString(R.string.settings_key_auth_pin))) {
-            setAuthCredentials(getString(R.string.settings_key_auth_pin, ""));
-            remove(R.string.settings_key_auth_pin);
+            if (setAuthCredentials(getString(R.string.settings_key_auth_pin, "")) != null) remove(R.string.settings_key_auth_pin);
         }
 
         // The theme mode key was misspelled as "perf_theme_mode" before; move the stored value over.
@@ -195,33 +193,43 @@ public class Settings {
     /** Resets all settings; with {@code keep_auth} the credentials and salt survive. */
     @SuppressWarnings("ApplySharedPref")
     public void clear(boolean keep_auth) {
-        AuthMethod authMethod = getAuthMethod();
-        String authCredentials = getAuthCredentials();
-        byte[] authSalt = getSalt();
-        int authIterations = getIterations();
+        synchronized (DatabaseHelper.DatabaseFileLock) {
+            if (!DatabaseHelper.recoverPendingDatabase(context)) return;
+            AuthMethod authMethod = getAuthMethod();
+            String authCredentials = getAuthCredentials();
+            String authSalt = getString(R.string.settings_key_auth_salt, "");
+            String legacyPassword = getOldCredentials(AuthMethod.PASSWORD);
+            String legacyPin = getOldCredentials(AuthMethod.PIN);
+            EncryptionType encryptionType = getEncryption();
+            int authIterations = getIterations();
 
-        boolean warningShown = getFirstTimeWarningShown();
+            boolean warningShown = getFirstTimeWarningShown();
 
-        SharedPreferences.Editor editor = settings.edit();
-        editor.clear();
+            SharedPreferences.Editor editor = settings.edit();
+            editor.clear();
 
-        editor.putBoolean(getResString(R.string.settings_key_security_backup_warning), warningShown);
+            editor.putBoolean(getResString(R.string.settings_key_security_backup_warning), warningShown);
 
-        if (keep_auth) {
-            editor.putString(getResString(R.string.settings_key_auth), authMethod.toString().toLowerCase());
+            if (keep_auth) {
+                editor.putString(getResString(R.string.settings_key_encryption), encryptionType.name().toLowerCase(Locale.ROOT));
+                editor.putString(getResString(R.string.settings_key_auth), authMethod.toString().toLowerCase());
 
-            if (! authCredentials.isEmpty()) {
-                editor.putString(getResString(R.string.settings_key_auth_credentials), authCredentials);
-                editor.putInt(getResString(R.string.settings_key_auth_iterations), authIterations);
+                if (! authCredentials.isEmpty()) {
+                    editor.putString(getResString(R.string.settings_key_auth_credentials), authCredentials);
+                    editor.putInt(getResString(R.string.settings_key_auth_iterations), authIterations);
 
-                String encodedSalt = Base64.encodeToString(authSalt, Base64.URL_SAFE);
-                editor.putString(getResString(R.string.settings_key_auth_salt), encodedSalt);
+                    editor.putString(getResString(R.string.settings_key_auth_salt), authSalt);
+                }
             }
+
+            if (keep_auth) {
+                if (!legacyPassword.isEmpty()) editor.putString(getResString(R.string.settings_key_auth_password_hash), legacyPassword);
+                if (!legacyPin.isEmpty()) editor.putString(getResString(R.string.settings_key_auth_pin_hash), legacyPin);
+            }
+            if (!editor.commit()) return;
+
+            PreferenceManager.setDefaultValues(context, R.xml.preferences, true);
         }
-
-        editor.commit();
-
-        PreferenceManager.setDefaultValues(context, R.xml.preferences, true);
     }
 
     /** Lets a listener react to changed preference values. */
@@ -272,26 +280,71 @@ public class Settings {
         return getString(R.string.settings_key_auth_credentials, "");
     }
 
-    /** Derives and stores the credentials; returns the new database key. */
-    public byte[] setAuthCredentials(String plainPassword) {
-        byte[] key = null;
-
-        try {
-            byte[] salt = getSalt();
-            int iterations = EncryptionHelper.benchmarkIterations(plainPassword, salt);
-
-            EncryptionHelper.PBKDF2Credentials credentials = EncryptionHelper.generatePBKDF2Credentials(plainPassword, salt, iterations);
-            String password = Base64.encodeToString(credentials.password, Base64.URL_SAFE);
-
-            setIterations(iterations);
-            setString(R.string.settings_key_auth_credentials, password);
-
-            key = credentials.key;
-        } catch (NoSuchAlgorithmException | InvalidKeySpecException e) {
-            e.printStackTrace();
+    public static final class PreparedCredentials {
+        public final byte[] key;
+        final String verifier;
+        final String salt;
+        final int iterations;
+        PreparedCredentials(byte[] key, String verifier, String salt, int iterations) {
+            this.key = key; this.verifier = verifier; this.salt = salt; this.iterations = iterations;
         }
+        public void destroy() { Arrays.fill(key, (byte) 0); }
+    }
 
-        return key;
+    /** Derive without changing the currently usable credentials. */
+    public PreparedCredentials prepareAuthCredentials(String password) throws NoSuchAlgorithmException, InvalidKeySpecException {
+        if (password == null || password.isEmpty() || password.length() > InputPolicy.MAX_TEXT_CHARS) throw new IllegalArgumentException("Invalid password length");
+        byte[] salt = EncryptionHelper.generateRandom(Constants.PBKDF2_SALT_LENGTH);
+        int iterations = EncryptionHelper.benchmarkIterations(password, salt);
+        EncryptionHelper.PBKDF2Credentials derived = EncryptionHelper.generatePBKDF2Credentials(password, salt, iterations);
+        try {
+            return new PreparedCredentials(derived.key, Base64.encodeToString(derived.password, Base64.URL_SAFE),
+                    Base64.encodeToString(salt, Base64.URL_SAFE), iterations);
+        } finally { Arrays.fill(derived.password, (byte) 0); }
+    }
+
+    /** One synchronous preference commit, paired with the staged vault transaction. */
+    public boolean commitVaultSettings(String transaction, EncryptionType type, AuthMethod auth,
+                                       PreparedCredentials credentials, boolean initialize) {
+        SharedPreferences.Editor editor = settings.edit();
+        if (transaction != null) editor.putString(DatabaseHelper.TRANSACTION_ID, transaction);
+        editor.putString(getResString(R.string.settings_key_encryption), type.name().toLowerCase(Locale.ROOT));
+        if (auth != null) editor.putString(getResString(R.string.settings_key_auth), auth.name().toLowerCase(Locale.ROOT));
+        if (credentials != null) {
+            editor.putString(getResString(R.string.settings_key_auth_credentials), credentials.verifier)
+                    .putString(getResString(R.string.settings_key_auth_salt), credentials.salt)
+                    .putInt(getResString(R.string.settings_key_auth_iterations), credentials.iterations)
+                    .remove(getResString(R.string.settings_key_auth_password_hash))
+                    .remove(getResString(R.string.settings_key_auth_pin_hash));
+        }
+        if (initialize) editor.putBoolean(getResString(R.string.settings_key_security_backup_warning), true);
+        editor.putBoolean(getResString(R.string.settings_key_enable_android_backup_service), false);
+        return editor.commit();
+    }
+
+    /** Legacy auth-only migration. Do not use this to change an encrypted vault's password. */
+    public byte[] setAuthCredentials(String plainPassword) {
+        return setAuthCredentials(plainPassword, () -> true);
+    }
+
+    public byte[] setAuthCredentials(String plainPassword, java.util.function.BooleanSupplier permitted) {
+        PreparedCredentials credentials = null;
+        try {
+            credentials = prepareAuthCredentials(plainPassword);
+            synchronized (DatabaseHelper.DatabaseFileLock) {
+                // Legacy verifier upgrades are auth-only. Never change a password vault's
+                // credentials without re-encrypting its authenticated ciphertext.
+                if (!permitted.getAsBoolean() || getEncryption() != EncryptionType.KEYSTORE) return null;
+                javax.crypto.SecretKey key = KeyStoreHelper.loadEncryptionKeyFromKeyStore(context, true);
+                VaultReadResult loaded = DatabaseHelper.readVault(context, key);
+                if (!(loaded instanceof VaultReadResult.Loaded)) return null;
+                ((VaultReadResult.Loaded) loaded).close();
+                if (!permitted.getAsBoolean()) return null;
+                if (commitVaultSettings(null, getEncryption(), null, credentials, false)) return credentials.key.clone();
+            }
+        } catch (Exception error) { /* Keep the old credentials on failure. */ }
+        finally { if (credentials != null) credentials.destroy(); }
+        return null;
     }
 
     public void setSalt(byte[] bytes) {
@@ -302,14 +355,8 @@ public class Settings {
     public byte[] getSalt() {
         String storedSalt = getString(R.string.settings_key_auth_salt, "");
 
-        if (storedSalt.isEmpty()) {
-            byte[] newSalt = EncryptionHelper.generateRandom(Constants.PBKDF2_SALT_LENGTH);
-            setSalt(newSalt);
-
-            return newSalt;
-        } else {
-            return Base64.decode(storedSalt, Base64.URL_SAFE);
-        }
+        if (storedSalt.isEmpty()) throw new IllegalStateException("Missing authentication salt");
+        return Base64.decode(storedSalt, Base64.URL_SAFE);
     }
 
     public int getIterations() {
@@ -469,20 +516,29 @@ public class Settings {
     /** Decrypts the stored backup password with the KeyStore key. */
     public String getBackupPasswordEnc() {
         String base64Password = getString(R.string.settings_key_backup_password_enc, "");
-        byte[] encPassword = Base64.decode(base64Password, Base64.URL_SAFE);
-
-        String password = "";
-
+        if (base64Password.isEmpty()) return "";
         try {
-            KeyPair key = KeyStoreHelper.loadOrGenerateAsymmetricKeyPair(context, Constants.KEYSTORE_ALIAS_PASSWORD);
+            byte[] encPassword = Base64.decode(base64Password, Base64.URL_SAFE);
+            KeyPair key = KeyStoreHelper.loadAsymmetricKeyPair(context, Constants.KEYSTORE_ALIAS_PASSWORD);
+            if (key == null) return "";
+            byte[] plain = EncryptionHelper.decrypt(key.getPrivate(), encPassword);
+            try { return new String(plain, StandardCharsets.UTF_8); }
+            finally { Arrays.fill(plain, (byte) 0); }
+        } catch (Exception error) { return ""; }
+    }
 
-            if (key != null)
-                password = new String(EncryptionHelper.decrypt(key.getPrivate(), encPassword), StandardCharsets.UTF_8);
-        } catch (Exception e) {
-            e.printStackTrace();
+    public boolean tryAcquireBroadcastBackupSlot() {
+        synchronized (DatabaseHelper.DatabaseFileLock) {
+            long now = android.os.SystemClock.elapsedRealtime();
+            long last = settings.getLong("last_broadcast_backup_elapsed", -60000);
+            if (now >= last && now - last < 60000) return false;
+            return settings.edit().putLong("last_broadcast_backup_elapsed", now).commit();
         }
+    }
 
-        return password;
+    public void disableAutomaticBackups() {
+        settings.edit().putStringSet(getResString(R.string.settings_key_backup_broadcasts), Collections.emptySet())
+                .putString(getResString(R.string.settings_key_auto_backup_password_enc), "off").commit();
     }
 
     public Set<String> getBackupBroadcasts() {
@@ -591,11 +647,11 @@ public class Settings {
     }
 
     public boolean getAndroidBackupServiceEnabled() {
-        return getBoolean(R.string.settings_key_enable_android_backup_service, true);
+        return false;
     }
 
     public void setAndroidBackupServiceEnabled(boolean value) {
-        setBoolean(R.string.settings_key_enable_android_backup_service, value);
+        setBoolean(R.string.settings_key_enable_android_backup_service, false);
 	}
 
     public boolean getIsAppendingDateTimeToBackups() {

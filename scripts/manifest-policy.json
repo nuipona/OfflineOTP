@@ -1,0 +1,75 @@
+{
+  "package": "org.shadowice.flocke.andotp",
+  "min_sdk": 28,
+  "target_sdk": 35,
+  "allowed_permissions": [
+    "android.permission.CAMERA",
+    "android.permission.VIBRATE",
+    "android.permission.POST_NOTIFICATIONS",
+    "android.permission.WAKE_LOCK",
+    "android.permission.ACCESS_NETWORK_STATE",
+    "android.permission.RECEIVE_BOOT_COMPLETED",
+    "android.permission.FOREGROUND_SERVICE",
+    "org.shadowice.flocke.andotp.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION",
+    "org.shadowice.flocke.andotp.permission.CONTROL_VAULT"
+  ],
+  "exported_components": {
+    "activity:org.shadowice.flocke.andotp.Activities.MainActivity": {
+      "permission": "",
+      "actions": [
+        "android.intent.action.MAIN",
+        "android.intent.action.VIEW",
+        "org.shadowice.flocke.andotp.intent.SCAN_QR",
+        "org.shadowice.flocke.andotp.intent.IMPORT_QR",
+        "org.shadowice.flocke.andotp.intent.ENTER_DETAILS"
+      ],
+      "reason": "Launcher and confirmed, validated OTP import.",
+      "data": [
+        {
+          "scheme": "otpauth",
+          "host": "totp"
+        },
+        {
+          "scheme": "otpauth",
+          "host": "hotp"
+        }
+      ]
+    },
+    "activity:org.shadowice.flocke.andotp.Activities.PanicResponderActivity": {
+      "permission": "org.shadowice.flocke.andotp.permission.CONTROL_VAULT",
+      "actions": [
+        "info.guardianproject.panic.action.TRIGGER"
+      ],
+      "reason": "Same-signer control IPC; independently signed automation must not be authorized."
+    },
+    "receiver:org.shadowice.flocke.andotp.Receivers.EncryptedBackupBroadcastReceiver": {
+      "permission": "org.shadowice.flocke.andotp.permission.CONTROL_VAULT",
+      "actions": [
+        "org.shadowice.flocke.andotp.broadcast.ENCRYPTED_BACKUP"
+      ],
+      "reason": "Same-signer control IPC; independently signed automation must not be authorized."
+    },
+    "service:androidx.work.impl.background.systemjob.SystemJobService": {
+      "permission": "android.permission.BIND_JOB_SERVICE",
+      "actions": [],
+      "reason": "System-only job dispatch; permission must not be removed."
+    },
+    "receiver:androidx.work.impl.diagnostics.DiagnosticsReceiver": {
+      "permission": "android.permission.DUMP",
+      "actions": [
+        "androidx.work.diagnostics.REQUEST_DIAGNOSTICS"
+      ],
+      "reason": "Privileged diagnostics; permission must not be removed."
+    },
+    "receiver:androidx.profileinstaller.ProfileInstallReceiver": {
+      "permission": "android.permission.DUMP",
+      "actions": [
+        "androidx.profileinstaller.action.INSTALL_PROFILE",
+        "androidx.profileinstaller.action.SKIP_FILE",
+        "androidx.profileinstaller.action.SAVE_PROFILE",
+        "androidx.profileinstaller.action.BENCHMARK_OPERATION"
+      ],
+      "reason": "Privileged profile installation; permission must not be removed."
+    }
+  }
+}

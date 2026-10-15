@@ -22,37 +22,44 @@
 
 package org.shadowice.flocke.andotp.Utilities;
 
-import java.io.ByteArrayOutputStream;
+import android.util.AtomicFile;
+
 import java.io.File;
-import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
-import java.io.OutputStream;
 
-/** Small file helpers used for the encrypted database and the KeyStore key file. */
+/** Atomic private-file replacement; callers serialize access with DatabaseFileLock. */
 class FileHelper {
-    /** Reads the whole file into memory. */
+    static boolean exists(File file) {
+        return file.exists() || new File(file.getPath() + ".bak").exists();
+    }
+
     static byte[] readFileToBytes(File file) throws IOException {
-        final InputStream in = new FileInputStream(file);
-        try {
-            ByteArrayOutputStream bytes = new ByteArrayOutputStream();
-            byte[] buffer = new byte[1024];
-            int count;
-            while ((count = in.read(buffer)) != -1) {
-                bytes.write(buffer, 0, count);
-            }
-            return bytes.toByteArray();
-        } finally {
-            in.close();
+        try (InputStream input = new AtomicFile(file).openRead()) {
+            return BoundedInputReader.read(input, BoundedInputReader.MAX_DOCUMENT_BYTES + 1024);
         }
     }
 
-    /** Overwrites the file with the given bytes. */
     static void writeBytesToFile(File file, byte[] data) throws IOException {
-        try (OutputStream out = new FileOutputStream(file)) {
-            out.write(data);
+        AtomicFile atomic = new AtomicFile(file);
+        FileOutputStream output = null;
+        try {
+            output = atomic.startWrite();
+            output.write(data);
+            output.getFD().sync();
+            atomic.finishWrite(output);
+            output = null;
+            if (!java.util.Arrays.equals(readFileToBytes(file), data)) throw new IOException("Atomic write verification failed");
+        } catch (IOException | RuntimeException error) {
+            if (output != null) atomic.failWrite(output);
+            throw error;
         }
+    }
+
+    static void delete(File file) {
+        new AtomicFile(file).delete();
+        // Cover both legacy and current platform AtomicFile staging names.
+        new File(file.getPath() + ".new").delete();
     }
 }
-

@@ -37,13 +37,10 @@ public class BackupHelper {
         DocumentFile backupLocation = DocumentFile.fromTreeUri(context, backupLocationUri);
 
         if (backupLocation != null) {
-            // Try to find an existing file to overwrite
-            backupFile.file = backupLocation.findFile(BackupHelper.backupFilename(context, type));
-
-            // Try to create a new file
-            if (backupFile.file == null) {
-                backupFile.file = backupLocation.createFile(backupMimeType(type), BackupHelper.backupFilename(context, type));
-            }
+            // Never truncate the last recoverable backup, even with timestamp naming disabled.
+            String uniqueName = "otp_accounts_" + java.util.UUID.randomUUID() +
+                    (type == Constants.BackupType.OPEN_PGP ? ".json.gpg" : ".json.aes");
+            backupFile.file = backupLocation.createFile(backupMimeType(type), uniqueName);
 
             // Neither an existing nor a new file is available
             if (backupFile.file == null)
@@ -94,9 +91,14 @@ public class BackupHelper {
     /** Writes a password-encrypted backup: iteration count + salt + nonce + AES-GCM ciphertext. */
     public static boolean backupToFile(Context context, Uri uri, String password, String plain)
     {
-        boolean success;
+        return backupToFile(context, uri, password, plain, () -> true);
+    }
 
+    public static boolean backupToFile(Context context, Uri uri, String password, String plain,
+                                       java.util.function.BooleanSupplier permitted) {
+        boolean success;
         try {
+            if (password == null || password.isEmpty() || !permitted.getAsBoolean()) return false;
             int iter = EncryptionHelper.generateRandomIterations();
             byte[] salt = EncryptionHelper.generateRandom(Constants.ENCRYPTION_IV_LENGTH);
 
@@ -110,9 +112,9 @@ public class BackupHelper {
             System.arraycopy(salt, 0, data, Constants.INT_LENGTH, Constants.ENCRYPTION_IV_LENGTH);
             System.arraycopy(encrypted, 0, data, Constants.INT_LENGTH + Constants.ENCRYPTION_IV_LENGTH, encrypted.length);
 
-            success = StorageAccessHelper.saveFile(context, uri, data);
+            success = StorageAccessHelper.saveFile(context, uri, data, permitted);
         } catch (Exception e) {
-            e.printStackTrace();
+            // Never log passwords or document contents.
             success = false;
         }
 

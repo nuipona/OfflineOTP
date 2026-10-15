@@ -6,10 +6,16 @@
     android:installLocation="auto"
     package="org.shadowice.flocke.andotp">
 
+    <!-- External destructive/automation IPC is only available to same-signer apps. -->
+    <permission android:name="${applicationId}.permission.CONTROL_VAULT"
+        android:protectionLevel="signature" />
+
+    <uses-permission android:name="${applicationId}.permission.CONTROL_VAULT" />
+
     <application
-        android:allowBackup="true"
-        android:backupAgent=".Utilities.BackupAgent"
-        android:fullBackupOnly="true"
+        android:allowBackup="false"
+        android:fullBackupContent="@xml/backup_rules"
+        android:dataExtractionRules="@xml/data_extraction_rules"
         android:icon="@mipmap/ic_launcher"
         android:label="@string/app_name"
         android:supportsRtl="true"
@@ -43,29 +49,30 @@
                        android:resource="@xml/shortcuts" />
         </activity>
         <activity
-            android:name=".Activities.AboutActivity"
+            android:name=".Activities.AboutActivity" android:exported="false"
             android:parentActivityName=".Activities.MainActivity"
             android:theme="@style/AppTheme.NoActionBar" />
         <activity
-            android:name=".Activities.AuthenticateActivity"
+            android:name=".Activities.AuthenticateActivity" android:exported="false"
             android:parentActivityName=".Activities.MainActivity"
             android:theme="@style/AppTheme.NoActionBar" />
         <activity
-            android:name=".Activities.BackupActivity"
+            android:name=".Activities.BackupActivity" android:exported="false"
             android:parentActivityName=".Activities.MainActivity"
             android:theme="@style/AppTheme.NoActionBar" />
         <activity
-            android:name=".Activities.IntroScreenActivity"
+            android:name=".Activities.IntroScreenActivity" android:exported="false"
             android:screenOrientation="portrait"
             android:parentActivityName=".Activities.MainActivity"
             android:theme="@style/Theme.Intro.Solid" />
         <activity
-            android:name=".Activities.SettingsActivity"
+            android:name=".Activities.SettingsActivity" android:exported="false"
             android:parentActivityName=".Activities.MainActivity"
             android:theme="@style/AppTheme.NoActionBar" />
-        <activity android:name=".Activities.SecureCaptureActivity" />
+        <activity android:name=".Activities.SecureCaptureActivity" android:exported="false" />
         <activity
             android:name=".Activities.PanicResponderActivity"
+            android:permission="${applicationId}.permission.CONTROL_VAULT"
             android:exported="true"
             android:launchMode="singleInstance"
             android:noHistory="true"
@@ -78,6 +85,7 @@
 
         <receiver
             android:name=".Receivers.EncryptedBackupBroadcastReceiver"
+            android:permission="${applicationId}.permission.CONTROL_VAULT"
             android:exported="true">
             <intent-filter>
                 <action android:name="org.shadowice.flocke.andotp.broadcast.ENCRYPTED_BACKUP" />

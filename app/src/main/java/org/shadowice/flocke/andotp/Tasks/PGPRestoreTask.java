@@ -20,8 +20,11 @@ public class PGPRestoreTask extends GenericRestoreTask {
     @Override
     @NonNull
     protected BackupTaskResult doInBackground() {
-        String data = StorageAccessHelper.loadFileString(applicationContext, uri);
-
-        return new BackupTaskResult(BackupTaskResult.ResultType.RESTORE,true, data, 0, true, decryptIntent, uri);
+        try {
+            String data = new String(StorageAccessHelper.loadFile(applicationContext, uri), java.nio.charset.StandardCharsets.UTF_8);
+            return new BackupTaskResult(BackupTaskResult.ResultType.RESTORE, true, data, 0, true, decryptIntent, uri);
+        } catch (java.io.IOException | RuntimeException error) {
+            return BackupTaskResult.failure(BackupTaskResult.ResultType.RESTORE, org.shadowice.flocke.andotp.R.string.backup_toast_import_failed);
+        }
     }
 }

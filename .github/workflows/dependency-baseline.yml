@@ -1,0 +1,49 @@
+name: Generate dependency baseline for review
+
+# Deliberately manual: generated hashes establish provenance only after review.
+# Never regenerate/accept verification metadata automatically on a pull request.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  dependency-baseline:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      TZ: UTC
+      LANG: C.UTF-8
+      LC_ALL: C.UTF-8
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@c5195efecf7bdfc987ee8bae7a71cb8b11521c00 # v4.7.1
+        with:
+          distribution: temurin
+          java-version: '17.0.14+7'
+      - uses: android-actions/setup-android@9fc6c4e9069bf8d3d10b2204b1fb8f6ef7065407 # v3.2.2
+        with:
+          cmdline-tools-version: '12266719'
+          packages: 'platform-tools platforms;android-36 build-tools;36.0.0'
+      - name: Resolve all build/test inputs and record lockfiles and checksums
+        run: >-
+          ./gradlew --no-daemon --no-build-cache --write-locks
+          --write-verification-metadata sha256
+          :app:assembleFdroidRelease :app:assemblePlayRelease
+          :app:testFdroidDebugUnitTest :app:testPlayDebugUnitTest
+          :app:assembleFdroidDebugAndroidTest :app:assemblePlayDebugAndroidTest
+          :app:lintFdroidRelease :app:lintPlayRelease writeDependencyInventory
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: dependency-baseline-REVIEW-BEFORE-COMMITTING
+          retention-days: 14
+          path: |
+            gradle.lockfile
+            buildscript-gradle.lockfile
+            app/gradle.lockfile
+            app/buildscript-gradle.lockfile
+            gradle/verification-metadata.xml
+            build/reports/dependency-inventory.txt

@@ -47,6 +47,12 @@ public class PanicResponderActivity extends Activity {
 
             Set<String> response = settings.getPanicResponse();
 
+            if (response.contains("accounts") || response.contains("settings")) {
+                settings.disableAutomaticBackups();
+                androidx.work.WorkManager.getInstance(this).cancelUniqueWork(
+                        org.shadowice.flocke.andotp.Receivers.EncryptedBackupBroadcastReceiver.UNIQUE_WORK_NAME);
+                org.shadowice.flocke.andotp.Utilities.VaultSession.lock();
+            }
             if (response.contains("accounts")) {
                 DatabaseHelper.wipeDatabase(this);
                 KeyStoreHelper.wipeKeys(this);

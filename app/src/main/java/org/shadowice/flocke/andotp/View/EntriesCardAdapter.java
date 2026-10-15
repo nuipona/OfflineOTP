@@ -22,10 +22,8 @@
 
 package org.shadowice.flocke.andotp.View;
 
-import android.annotation.SuppressLint;
 import android.app.AlertDialog;
 import android.content.Context;
-import android.content.DialogInterface;
 import android.content.Intent;
 import android.graphics.Bitmap;
 import android.graphics.drawable.BitmapDrawable;
@@ -36,24 +34,14 @@ import androidx.appcompat.widget.PopupMenu;
 import androidx.recyclerview.widget.RecyclerView;
 
 import android.os.Looper;
-import android.text.Editable;
-import android.text.InputType;
-import android.text.TextUtils;
-import android.text.TextWatcher;
-import android.text.method.PasswordTransformationMethod;
 import android.view.LayoutInflater;
 import android.view.MenuInflater;
 import android.view.MenuItem;
 import android.view.View;
 import android.view.ViewGroup;
-import android.widget.Button;
-import android.widget.EditText;
 import android.widget.Filter;
 import android.widget.Filterable;
-import android.widget.FrameLayout;
-import android.widget.GridView;
 import android.widget.ImageView;
-import android.widget.LinearLayout;
 import android.widget.Toast;
 
 import com.google.zxing.BarcodeFormat;
@@ -65,20 +53,21 @@ import org.shadowice.flocke.andotp.Database.EntryList;
 import org.shadowice.flocke.andotp.Dialogs.ManualEntryDialog;
 import org.shadowice.flocke.andotp.R;
 import org.shadowice.flocke.andotp.Tasks.BackupTaskResult;
-import org.shadowice.flocke.andotp.Tasks.EncryptedBackupTask;
-import org.shadowice.flocke.andotp.Utilities.BackupHelper;
+import org.shadowice.flocke.andotp.Tasks.TaskOutcome;
+import org.shadowice.flocke.andotp.Utilities.EntryPersistence;
 import org.shadowice.flocke.andotp.Utilities.Constants;
-import org.shadowice.flocke.andotp.Utilities.DatabaseHelper;
-import org.shadowice.flocke.andotp.Utilities.EntryThumbnail;
+import org.shadowice.flocke.andotp.Utilities.VaultReadResult;
+import org.shadowice.flocke.andotp.Utilities.VaultWriteResult;
+import org.shadowice.flocke.andotp.Utilities.VaultSession;
+import org.shadowice.flocke.andotp.Utilities.InputPolicy;
 import org.shadowice.flocke.andotp.Utilities.Settings;
 import org.shadowice.flocke.andotp.Utilities.Tools;
-import org.shadowice.flocke.andotp.Utilities.UIHelper;
 import org.shadowice.flocke.andotp.View.ItemTouchHelper.ItemTouchHelperAdapter;
 
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Locale;
+import java.util.function.Consumer;
+import java.util.function.BiConsumer;
 
 import javax.crypto.SecretKey;
 
@@ -94,13 +83,13 @@ public class EntriesCardAdapter extends RecyclerView.Adapter<EntryViewHolder>
     private final Handler taskHandler;
     private EntryFilter filter;
     private final EntryList entries;
-    private ArrayList<Entry> displayedEntries;
+    private final EntryListPresentation presentation;
+    private final EntryPersistence persistence;
+    private final EntryActionDialogs dialogs;
     private Callback callback;
-    private List<String> tagsFilter = new ArrayList<>();
 
     private SecretKey encryptionKey = null;
 
-    private SortMode sortMode = SortMode.UNSORTED;
     private final TagsAdapter tagsFilterAdapter;
     private final Settings settings;
 
@@ -112,6 +101,9 @@ public class EntriesCardAdapter extends RecyclerView.Adapter<EntryViewHolder>
         this.settings = new Settings(context);
         this.taskHandler = new Handler(Looper.getMainLooper());
         this.entries = new EntryList();
+        this.presentation = new EntryListPresentation(entries);
+        this.persistence = new EntryPersistence(context);
+        this.dialogs = new EntryActionDialogs(context, settings);
 
         setHasStableIds(true);
     }
@@ -126,12 +118,12 @@ public class EntriesCardAdapter extends RecyclerView.Adapter<EntryViewHolder>
 
     @Override
     public int getItemCount() {
-        return displayedEntries.size();
+        return presentation.size();
     }
 
     @Override
     public long getItemId(int position) {
-        return displayedEntries.get(position).getListId();
+        return presentation.get(position).getListId();
     }
 
     public ArrayList<Entry> getEntries() {
@@ -150,6 +142,9 @@ public class EntriesCardAdapter extends RecyclerView.Adapter<EntryViewHolder>
 
     /** Adds the entry (with a toast if it is already present) and saves the database. */
     public void addEntry(Entry e) {
+        if (encryptionKey == null || VaultSession.getKey() != encryptionKey) throw new IllegalStateException("Vault locked");
+        e.validate();
+        if (entries.getEntries().size() >= InputPolicy.MAX_ENTRIES) throw new IllegalArgumentException("Too many entries");
         if (entries.addEntry(e)) {
             saveAndRefresh(settings.getAutoBackupEncryptedPasswordsEnabled());
         } else {
@@ -159,13 +154,14 @@ public class EntriesCardAdapter extends RecyclerView.Adapter<EntryViewHolder>
 
     /** Maps a position in the displayed list to the position in the persisted list. */
     private int getRealIndex(int displayPosition) {
-        return entries.indexOf(displayedEntries.get(displayPosition));
+        return presentation.sourceIndex(displayPosition);
     }
 
     /** Re-sorts and re-filters the displayed list and notifies the view. */
     private void entriesChanged(int itemPos) {
-        displayedEntries = entries.getEntriesSorted(sortMode);
-        filterByTags(tagsFilter);
+        clearFilter();
+        presentation.refreshTags(settings.getNoTagsToggle(), settings.getTagFunctionality());
+        notifyDataSetChanged();
 
         if (itemPos == RecyclerView.NO_POSITION)
             notifyDataSetChanged();
@@ -175,37 +171,30 @@ public class EntriesCardAdapter extends RecyclerView.Adapter<EntryViewHolder>
 
     /** Rebuilds the tag drawer from the tags that are actually in use. */
     public void updateTagsFilter() {
-        List<String> inUseTags = getTags();
-
-        HashMap<String, Boolean> tagsHashMap = new HashMap<>();
-        for(String tag: tagsFilterAdapter.getTags()) {
-            if(inUseTags.contains(tag))
-                tagsHashMap.put(tag, false);
-        }
-        for(String tag: tagsFilterAdapter.getActiveTags()) {
-            if(inUseTags.contains(tag))
-                tagsHashMap.put(tag, true);
-        }
-        for(String tag: getTags()) {
-            if(inUseTags.contains(tag))
-                if(!tagsHashMap.containsKey(tag))
-                    tagsHashMap.put(tag, true);
-        }
-
-        tagsFilterAdapter.setTags(tagsHashMap);
-        tagsFilter = tagsFilterAdapter.getActiveTags();
+        tagsFilterAdapter.setTags(presentation.reconcileTags(
+                tagsFilterAdapter.getTags(), tagsFilterAdapter.getActiveTags()));
+        presentation.selectTags(tagsFilterAdapter.getActiveTags());
     }
 
     /** Saves the database and, if enabled, writes an encrypted automatic backup. */
     public void saveEntries(boolean auto_backup) {
-        DatabaseHelper.saveDatabase(context, entries.getEntries(), encryptionKey);
-
-        if(auto_backup && BackupHelper.autoBackupType(context) == Constants.BackupType.ENCRYPTED) {
-            EncryptedBackupTask task = new EncryptedBackupTask(context, entries.getEntries(), settings.getBackupPasswordEnc(), null);
-            task.setCallback(this::handleTaskResult);
-
-            task.execute();
+        synchronized (VaultSession.MutationLock) {
+            VaultWriteResult result = persistence.save(entries.getEntries(), encryptionKey, auto_backup,
+                    this::handleBackupOutcome);
+            if (!(result instanceof VaultWriteResult.Saved)) {
+                // Revert unsaved UI mutations; never export them as a successful backup.
+                loadEntries();
+                Toast.makeText(context, R.string.backup_toast_import_save_failed, Toast.LENGTH_LONG).show();
+            }
         }
+    }
+
+    private void handleBackupOutcome(TaskOutcome<BackupTaskResult> outcome) {
+        if (outcome instanceof TaskOutcome.Value)
+            handleTaskResult(((TaskOutcome.Value<BackupTaskResult>) outcome).getValue());
+        else if (outcome instanceof TaskOutcome.Failure)
+            Toast.makeText(context, R.string.backup_toast_export_failed, Toast.LENGTH_LONG).show();
+        // Cancellation is not a successful export and must not emit a success toast.
     }
 
     private void handleTaskResult(BackupTaskResult result) {
@@ -216,20 +205,38 @@ public class EntriesCardAdapter extends RecyclerView.Adapter<EntryViewHolder>
         }
     }
 
-    /** Loads the database into the entry list (merging it into the existing entries). */
-    public void loadEntries() {
-        if (encryptionKey != null) {
-            ArrayList<Entry> newEntries = DatabaseHelper.loadDatabase(context, encryptionKey);
+    /** Clears secrets held by adapters/views and invalidates outstanding filters/timers. */
+    public void lockEntries() {
+        encryptionKey = null;
+        dialogs.dismissAll();
+        taskHandler.removeCallbacksAndMessages(null);
+        for (Entry entry : entries.getEntries()) entry.destroy();
+        entries.updateEntries(new ArrayList<>(), false);
+        presentation.clear();
+        filter = null;
+        notifyDataSetChanged();
+    }
 
-            entries.updateEntries(newEntries, true);
+    public boolean loadEntries() {
+        synchronized (VaultSession.MutationLock) {
+            if (encryptionKey == null || VaultSession.getKey() != encryptionKey) { lockEntries(); return false; }
+            VaultReadResult result = persistence.load(encryptionKey);
+            if (!(result instanceof VaultReadResult.Loaded)) { lockEntries(); return false; }
+            dialogs.dismissAll();
+            taskHandler.removeCallbacksAndMessages(null);
+            for (Entry entry : entries.getEntries()) entry.destroy();
+            entries.updateEntries(new ArrayList<>(), false);
+            entries.updateEntries(((VaultReadResult.Loaded) result).takeEntries(), true);
+            clearFilter();
             entriesChanged(RecyclerView.NO_POSITION);
+            return true;
         }
     }
 
     /** Shows only the entries matching the given tags. */
     public void filterByTags(List<String> tags) {
-        displayedEntries = entries.getEntriesFilteredByTags(tags, settings.getNoTagsToggle(), settings.getTagFunctionality(), sortMode);
-        tagsFilter = tags;
+        clearFilter();
+        presentation.filterByTags(tags, settings.getNoTagsToggle(), settings.getTagFunctionality());
 
         notifyDataSetChanged();
     }
@@ -260,7 +267,7 @@ public class EntriesCardAdapter extends RecyclerView.Adapter<EntryViewHolder>
 
     @Override
     public void onBindViewHolder(@NonNull EntryViewHolder entryViewHolder, int i) {
-        Entry entry = displayedEntries.get(i);
+        Entry entry = presentation.get(i);
 
         if (!entry.isTimeBased())
             entry.updateOTP(false);
@@ -368,7 +375,7 @@ public class EntriesCardAdapter extends RecyclerView.Adapter<EntryViewHolder>
 
             @Override
             public void onCounterClicked(int position) {
-                updateEntry(displayedEntries.get(position), entries.getEntry(getRealIndex(position)), position);
+                updateEntry(presentation.get(position), entries.getEntry(getRealIndex(position)), position);
             }
 
             @Override
@@ -381,7 +388,7 @@ public class EntriesCardAdapter extends RecyclerView.Adapter<EntryViewHolder>
     }
 
     private void establishPinIfNeeded(int position) {
-        final Entry entry = displayedEntries.get(position);
+        final Entry entry = presentation.get(position);
 
         if (entry.getType() == Entry.OTPType.MOTP && entry.getPin().isEmpty())
             establishPIN(position);
@@ -396,7 +403,7 @@ public class EntriesCardAdapter extends RecyclerView.Adapter<EntryViewHolder>
     }
 
     private void cardTapToRevealHandler(final int position) {
-        final Entry entry = displayedEntries.get(position);
+        final Entry entry = presentation.get(position);
         final int realIndex = entries.indexOf(entry);
 
         if (entry.isVisible()) {
@@ -414,6 +421,7 @@ public class EntriesCardAdapter extends RecyclerView.Adapter<EntryViewHolder>
     }
 
     private void updateEntry(Entry entry, Entry realEntry, final int position) {
+        if (entry.getCounter() >= Long.MAX_VALUE - 1) return;
         long counter = entry.getCounter() + 1;
 
         entry.setCounter(counter);
@@ -427,7 +435,7 @@ public class EntriesCardAdapter extends RecyclerView.Adapter<EntryViewHolder>
     }
 
     private void hideEntry(Entry entry) {
-        int pos = displayedEntries.indexOf(entry);
+        int pos = presentation.indexOf(entry);
         int realIndex = entries.indexOf(entry);
 
         if (realIndex >= 0) {
@@ -439,77 +447,43 @@ public class EntriesCardAdapter extends RecyclerView.Adapter<EntryViewHolder>
         boolean updateNeeded = updateLastUsedAndFrequency(pos, realIndex);
 
         if (pos >= 0) {
-            displayedEntries.get(pos).setVisible(false);
+            presentation.get(pos).setVisible(false);
 
             if (updateNeeded)
                 notifyItemChanged(pos);
         }
     }
 
-    private void setCounter(final int pos) {
-        AlertDialog.Builder builder = new AlertDialog.Builder(context);
-
-        int marginSmall = context.getResources().getDimensionPixelSize(R.dimen.activity_margin_small);
-        int marginMedium = context.getResources().getDimensionPixelSize(R.dimen.activity_margin_medium);
-
-        final EditText input = new EditText(context);
-        input.setLayoutParams(new  FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
-        input.setText(String.format(Locale.ENGLISH, "%d", displayedEntries.get(pos).getCounter()));
-        input.setInputType(InputType.TYPE_CLASS_NUMBER);
-        input.setSingleLine();
-
-        FrameLayout container = new FrameLayout(context);
-        container.setPaddingRelative(marginMedium, marginSmall, marginMedium, 0);
-        container.addView(input);
-
-        AlertDialog dialog = builder.setTitle(R.string.dialog_title_counter)
-                .setView(container)
-                .setPositiveButton(R.string.button_save, (dialogInterface, i) -> {
-                    int realIndex = getRealIndex(pos);
-                    long newCounter = Long.parseLong(input.getEditableText().toString());
-
-                    displayedEntries.get(pos).setCounter(newCounter);
-                    notifyItemChanged(pos);
-
-                    Entry e = entries.getEntry(realIndex);
-                    e.setCounter(newCounter);
-
-                    saveEntries(settings.getAutoBackupEncryptedFullEnabled());
-                })
-                .setNegativeButton(android.R.string.cancel, (dialogInterface, i) -> {})
-                .create();
-        addCounterValidationWatcher(input, dialog);
-        dialog.show();
+    private void showActionDialog(int position, BiConsumer<EntryActionTarget, Entry> show) {
+        synchronized (VaultSession.MutationLock) {
+            if (encryptionKey == null || VaultSession.getKey() != encryptionKey
+                    || position < 0 || position >= presentation.size()) return;
+            Entry entry = presentation.get(position);
+            show.accept(new EntryActionTarget(entry, VaultSession.generation()), entry);
+        }
     }
 
-    /** Enables the OK button only while the input is a non-negative number. */
-    private void addCounterValidationWatcher(EditText input, AlertDialog dialog) {
-        TextWatcher counterWatcher = new TextWatcher() {
-            @Override
-            public void beforeTextChanged(CharSequence charSequence, int i, int i1, int i2) {
-            }
+    /** Commands from the extracted dialogs re-resolve identity and authority before mutation. */
+    private void withTarget(EntryActionTarget target, Consumer<Entry> command) {
+        synchronized (VaultSession.MutationLock) {
+            if (encryptionKey == null || VaultSession.getKey() != encryptionKey) return;
+            Entry entry = target.resolve(entries, VaultSession.generation());
+            if (entry != null) command.accept(entry);
+        }
+    }
 
-            @Override
-            public void onTextChanged(CharSequence charSequence, int i, int i1, int i2) {
-            }
+    private void notifyEntryChanged(Entry entry) {
+        int position = presentation.indexOf(entry);
+        if (position >= 0) notifyItemChanged(position);
+    }
 
-            @Override
-            public void afterTextChanged(Editable input) {
-                Button positive = dialog.getButton(DialogInterface.BUTTON_POSITIVE);
-                if (positive != null) {
-                    positive.setEnabled(isZeroOrPositiveLongInput(input));
-                }
-            }
-
-            private boolean isZeroOrPositiveLongInput(Editable input) {
-                try {
-                    return !TextUtils.isEmpty(input) && (Long.parseLong(input.toString()) >= 0);
-                } catch (NumberFormatException e) {
-                    return false;
-                }
-            }
-        };
-        input.addTextChangedListener(counterWatcher);
+    private void setCounter(int position) {
+        showActionDialog(position, (target, entry) -> dialogs.counter(entry.getCounter(), value ->
+                withTarget(target, actual -> {
+                    actual.setCounter(value);
+                    notifyEntryChanged(actual);
+                    saveEntries(settings.getAutoBackupEncryptedFullEnabled());
+                })));
     }
 
     /** Records the usage; returns false when the resorting also updated the view. */
@@ -518,21 +492,16 @@ public class EntriesCardAdapter extends RecyclerView.Adapter<EntryViewHolder>
         long entryUsedFrequency = entries.getEntry(realIndex).getUsedFrequency();
 
         if (position >= 0) {
-            long displayEntryUsedFrequency = displayedEntries.get(position).getUsedFrequency();
-            displayedEntries.get(position).setLastUsed(timeStamp);
-            displayedEntries.get(position).setUsedFrequency(displayEntryUsedFrequency + 1);
+            long displayEntryUsedFrequency = presentation.get(position).getUsedFrequency();
+            presentation.get(position).setLastUsed(timeStamp);
+            presentation.get(position).setUsedFrequency(displayEntryUsedFrequency + 1);
         }
 
         entries.getEntry(realIndex).setLastUsed(timeStamp);
         entries.getEntry(realIndex).setUsedFrequency(entryUsedFrequency + 1);
         saveEntries(false);
 
-        if (sortMode == SortMode.LAST_USED) {
-            displayedEntries = EntryList.sortEntries(displayedEntries, sortMode);
-            notifyDataSetChanged();
-            return false;
-        } else if (sortMode == SortMode.MOST_USED) {
-            displayedEntries = EntryList.sortEntries(displayedEntries, sortMode);
+        if (presentation.resortAfterUsage()) {
             notifyDataSetChanged();
             return false;
         }
@@ -543,10 +512,10 @@ public class EntriesCardAdapter extends RecyclerView.Adapter<EntryViewHolder>
     /** Swaps two entries after a drag (only in the unsorted, unfiltered view). */
     @Override
     public boolean onItemMove(int fromPosition, int toPosition) {
-        if (sortMode == SortMode.UNSORTED && entries.isEqual(displayedEntries)) {
+        if (presentation.canDrag()) {
             entries.swapEntries(fromPosition, toPosition);
 
-            displayedEntries = entries.getEntries();
+            presentation.showReorderedEntries();
             notifyItemMoved(fromPosition, toPosition);
 
             saveEntries(false);
@@ -555,151 +524,46 @@ public class EntriesCardAdapter extends RecyclerView.Adapter<EntryViewHolder>
         return true;
     }
 
-    /** Shows the thumbnail picker with a filter field. */
-    public void changeThumbnail(final int pos) {
-        AlertDialog.Builder builder = new AlertDialog.Builder(context);
-
-        int marginSmall = context.getResources().getDimensionPixelSize(R.dimen.activity_margin_small);
-        int marginMedium = context.getResources().getDimensionPixelSize(R.dimen.activity_margin_medium);
-
-        int realIndex = getRealIndex(pos);
-        final ThumbnailSelectionAdapter thumbnailAdapter = new ThumbnailSelectionAdapter(context, entries.getEntry(realIndex).getIssuer(), entries.getEntry(realIndex).getLabel());
-
-        final EditText input = new EditText(context);
-        input.setLayoutParams(new  FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
-        input.setSingleLine();
-
-        input.addTextChangedListener(new TextWatcher() {
-            @Override
-            public void beforeTextChanged(CharSequence charSequence, int i, int i1, int i2) {}
-
-            @Override
-            public void onTextChanged(CharSequence charSequence, int i, int i1, int i2) {}
-
-            @Override
-            public void afterTextChanged(Editable editable) {
-                thumbnailAdapter.filter(editable.toString());
-            }
-        });
-
-        int gridPadding = context.getResources().getDimensionPixelSize(R.dimen.activity_margin_small);
-        int gridBackground = Tools.getThemeColor(context, R.attr.thumbnailBackground);
-
-        GridView grid = new GridView(context);
-        grid.setAdapter(thumbnailAdapter);
-        grid.setBackgroundColor(gridBackground);
-        grid.setPadding(gridPadding, gridPadding, gridPadding, gridPadding);
-        grid.setLayoutParams(new ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
-
-        int thumbnailSize = settings.getThumbnailSize();
-        grid.setColumnWidth(thumbnailSize);
-        grid.setNumColumns(GridView.AUTO_FIT);
-        grid.setVerticalSpacing(context.getResources().getDimensionPixelSize(R.dimen.activity_margin_medium));
-        grid.setHorizontalSpacing(context.getResources().getDimensionPixelSize(R.dimen.activity_margin_medium));
-        grid.setStretchMode(GridView.STRETCH_COLUMN_WIDTH);
-
-        LinearLayout layout = new LinearLayout(context);
-        layout.setOrientation(LinearLayout.VERTICAL);
-        layout.setLayoutParams(new ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
-        layout.addView(input);
-        layout.addView(grid);
-
-        FrameLayout container = new FrameLayout(context);
-        container.setPaddingRelative(marginMedium, marginSmall, marginMedium, 0);
-        container.addView(layout);
-
-        final AlertDialog alert = builder.setTitle(R.string.menu_popup_change_image)
-                .setView(container)
-                .setNegativeButton(android.R.string.cancel, (dialogInterface, i) -> {})
-                .create();
-
-        grid.setOnItemClickListener((parent, view, position, id) -> {
-            int realIndex1 = getRealIndex(pos);
-            EntryThumbnail.EntryThumbnails thumbnail = EntryThumbnail.EntryThumbnails.Default;
-            try {
-                int realPos = thumbnailAdapter.getRealIndex(position);
-                thumbnail = EntryThumbnail.EntryThumbnails.values()[realPos];
-            } catch (Exception e) {
-                e.printStackTrace();
-            }
-
-            Entry e = entries.getEntry(realIndex1);
-            e.setThumbnail(thumbnail);
-
-            saveEntries(settings.getAutoBackupEncryptedFullEnabled());
-            notifyItemChanged(pos);
-            alert.cancel();
-        });
-
-        alert.show();
-    }
-
-    /** Asks for the mOTP PIN, which is required to calculate the token. */
-    public void establishPIN(final int pos) {
-        AlertDialog.Builder builder = new AlertDialog.Builder(context);
-
-        int marginSmall = context.getResources().getDimensionPixelSize(R.dimen.activity_margin_small);
-        int marginMedium = context.getResources().getDimensionPixelSize(R.dimen.activity_margin_medium);
-
-        final EditText input = new EditText(context);
-        input.setLayoutParams(new  FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
-        input.setRawInputType(InputType.TYPE_NUMBER_VARIATION_PASSWORD  | InputType.TYPE_CLASS_NUMBER);
-        input.setText(displayedEntries.get(pos).getPin());
-        input.setSingleLine();
-        input.requestFocus();
-        input.setTransformationMethod(new PasswordTransformationMethod());
-        UIHelper.showKeyboard(context, input, true);
-
-        FrameLayout container = new FrameLayout(context);
-        container.setPaddingRelative(marginMedium, marginSmall, marginMedium, 0);
-        container.addView(input);
-
-        builder.setTitle(R.string.dialog_title_pin)
-                .setCancelable(false)
-                .setView(container)
-                .setPositiveButton(R.string.button_accept, (dialogInterface, i) -> {
-                    int realIndex = getRealIndex(pos);
-                    String newPin = input.getEditableText().toString();
-
-                    displayedEntries.get(pos).setPin(newPin);
-                    Entry e = entries.getEntry(realIndex);
-                    e.setPin(newPin);
-                    e.updateOTP(true);
-                    notifyItemChanged(pos);
-                    UIHelper.hideKeyboard(context, input);
-                })
-                .setNegativeButton(android.R.string.cancel, (dialogInterface, i) -> UIHelper.hideKeyboard(context, input))
-                .create()
-                .show();
-    }
-
-    /** Deletes the entry after a confirmation dialog. */
-    @SuppressLint("StringFormatInvalid")
-    public void removeItem(final int pos) {
-        AlertDialog.Builder builder = new AlertDialog.Builder(context);
-
-        String label = displayedEntries.get(pos).getLabel();
-        String message = context.getString(R.string.dialog_msg_confirm_delete, label);
-
-        builder.setTitle(R.string.dialog_title_remove)
-                .setMessage(message)
-                .setPositiveButton(R.string.yes, (dialogInterface, i) -> {
-                    int realIndex = getRealIndex(pos);
-
-                    displayedEntries.remove(pos);
-                    notifyItemRemoved(pos);
-
-                    entries.removeEntry(realIndex);
+    /** Dialogs render inputs; identity-based commands stay at the authorized mutation boundary. */
+    public void changeThumbnail(int position) {
+        showActionDialog(position, (target, entry) -> dialogs.thumbnail(entry.getIssuer(), entry.getLabel(), value ->
+                withTarget(target, actual -> {
+                    actual.setThumbnail(value);
                     saveEntries(settings.getAutoBackupEncryptedFullEnabled());
-                })
-                .setNegativeButton(R.string.no, (dialogInterface, i) -> {})
-                .show();
+                    notifyEntryChanged(actual);
+                })));
+    }
+
+    public void establishPIN(int position) {
+        showActionDialog(position, (target, entry) -> dialogs.pin(entry.getPin(), value ->
+                withTarget(target, actual -> {
+                    actual.setPin(value);
+                    actual.updateOTP(true);
+                    notifyEntryChanged(actual);
+                })));
+    }
+
+    public void removeItem(int position) {
+        showActionDialog(position, (target, entry) -> dialogs.delete(entry.getLabel(), () ->
+                withTarget(target, actual -> {
+                    int index = entries.indexOf(actual);
+                    int displayedIndex = presentation.indexOf(actual);
+                    if (displayedIndex >= 0) {
+                        presentation.removeDisplayed(displayedIndex);
+                        notifyItemRemoved(displayedIndex);
+                    }
+                    entries.removeEntry(index);
+                    if (actual.getHideTask() != null) taskHandler.removeCallbacks(actual.getHideTask());
+                    actual.setHideTask(null);
+                    try { saveEntries(settings.getAutoBackupEncryptedFullEnabled()); }
+                    finally { actual.destroy(); }
+                })));
     }
 
     /** Sends the current token as an ACTION_SEND intent of type "text/x-keystrokes", which apps
      * such as KDE Connect can pick up (e.g. to type it on a connected device). */
     private void sendKeystrokes(final int pos) {
-        String otp = displayedEntries.get(pos).getCurrentOTP();
+        String otp = presentation.get(pos).getCurrentOTP();
         Intent sendIntent = new Intent(Intent.ACTION_SEND);
         sendIntent.setType("text/x-keystrokes");
         sendIntent.putExtra(Intent.EXTRA_TEXT, otp);
@@ -710,7 +574,7 @@ public class EntriesCardAdapter extends RecyclerView.Adapter<EntryViewHolder>
 
     /** Shows the entry as a QR code (if the type can be encoded). */
     private void showQRCode(final int pos) {
-        Uri uri = displayedEntries.get(pos).toUri();
+        Uri uri = presentation.get(pos).toUri();
         if (uri != null) {
             Bitmap bitmap;
             try {
@@ -745,7 +609,7 @@ public class EntriesCardAdapter extends RecyclerView.Adapter<EntryViewHolder>
         MenuInflater inflate = popup.getMenuInflater();
         inflate.inflate(R.menu.menu_popup, popup.getMenu());
 
-        if (displayedEntries.get(pos).getType() == Entry.OTPType.MOTP){
+        if (presentation.get(pos).getType() == Entry.OTPType.MOTP){
              MenuItem item = popup.getMenu().getItem(ESTABLISH_PIN_MENU_INDEX);
              item.setVisible(true);
         }
@@ -780,12 +644,12 @@ public class EntriesCardAdapter extends RecyclerView.Adapter<EntryViewHolder>
 
     /** Changes the sort order of the displayed entries. */
     public void setSortMode(SortMode mode) {
-        this.sortMode = mode;
+        presentation.setSortMode(mode);
         entriesChanged(RecyclerView.NO_POSITION);
     }
 
     public SortMode getSortMode() {
-        return this.sortMode;
+        return presentation.getSortMode();
     }
 
     public void setCallback(Callback cb) {
@@ -801,6 +665,7 @@ public class EntriesCardAdapter extends RecyclerView.Adapter<EntryViewHolder>
 
     /** Drops the current search filter. */
     public void clearFilter() {
+        presentation.invalidateSearch();
         if (filter != null)
             filter = null;
     }
@@ -811,11 +676,12 @@ public class EntriesCardAdapter extends RecyclerView.Adapter<EntryViewHolder>
 
     /** Search filter that applies the configured search fields. */
     public class EntryFilter extends Filter {
+        private final long epoch = VaultSession.generation();
         private final List<Constants.SearchIncludes> filterValues = settings.getSearchValues();
 
         @Override
         protected FilterResults performFiltering(CharSequence constraint) {
-            ArrayList<Entry> filtered = entries.getFilteredEntries(constraint, filterValues, sortMode);
+            EntryListPresentation.SearchResult filtered = presentation.search(constraint, filterValues);
 
             final FilterResults filterResults = new FilterResults();
             filterResults.count = filtered.size();
@@ -825,10 +691,16 @@ public class EntriesCardAdapter extends RecyclerView.Adapter<EntryViewHolder>
         }
 
         @Override
-        @SuppressWarnings("unchecked")
         protected void publishResults(CharSequence constraint, @NonNull FilterResults results) {
-            displayedEntries = (ArrayList<Entry>) results.values;
-            notifyDataSetChanged();
+            if (!(results.values instanceof EntryListPresentation.SearchResult)) return;
+            EntryListPresentation.SearchResult projection = (EntryListPresentation.SearchResult) results.values;
+            synchronized (VaultSession.MutationLock) {
+                if (filter != this || !VaultSession.isCurrent(epoch) || encryptionKey == null || VaultSession.getKey() != encryptionKey) {
+                    projection.close();
+                    return;
+                }
+                if (presentation.publishSearch(projection)) notifyDataSetChanged();
+            }
         }
     }
 

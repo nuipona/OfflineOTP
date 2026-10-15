@@ -74,6 +74,7 @@ public class TokenCalculator {
 
     /** Computes the TOTP for the given unix time; {@code offset} shifts the time step. */
     public static int TOTP_RFC6238(byte[] secret, int period, long time, int digits, HashAlgorithm algorithm, int offset) {
+        InputPolicy.tokenParameters(period, digits, 0);
         int fullToken = TOTP(secret, period, time, algorithm, offset);
         int div = (int) Math.pow(10, digits);
 
@@ -101,6 +102,7 @@ public class TokenCalculator {
 
     /** Returns the HOTP for the given counter as a zero-padded string. */
     public static String HOTP(byte[] secret, long counter, int digits, HashAlgorithm algorithm) {
+        InputPolicy.tokenParameters(TOTP_DEFAULT_PERIOD, digits, counter);
         int fullToken = HOTP(secret, counter, algorithm);
         int div = (int) Math.pow(10, digits);
 
@@ -130,7 +132,7 @@ public class TokenCalculator {
 
             r = binary;
         } catch (Exception e) {
-            e.printStackTrace();
+            throw new IllegalStateException("OTP calculation failed");
         }
 
         return r;

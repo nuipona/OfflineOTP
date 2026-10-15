@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Request it deliberately: a different signing certificate must still deny it. -->
+    <uses-permission android:name="org.shadowice.flocke.andotp.dev.permission.CONTROL_VAULT" />
+    <application android:allowBackup="false" android:label="andOTP Security Test Only">
+        <activity android:name=".AttackActivity" android:exported="true" />
+    </application>
+</manifest>

@@ -11,6 +11,9 @@ import org.shadowice.flocke.andotp.Database.Entry;
 import org.shadowice.flocke.andotp.R;
 import org.shadowice.flocke.andotp.Utilities.Constants;
 import org.shadowice.flocke.andotp.Utilities.DatabaseHelper;
+import org.shadowice.flocke.andotp.Utilities.VaultReadResult;
+import org.shadowice.flocke.andotp.Utilities.VaultWriteResult;
+import org.shadowice.flocke.andotp.Utilities.VaultCommitDecision;
 import org.shadowice.flocke.andotp.Utilities.KeyStoreHelper;
 import org.shadowice.flocke.andotp.Utilities.NotificationHelper;
 import org.shadowice.flocke.andotp.Utilities.Settings;
@@ -33,6 +36,7 @@ public class EncryptedBackupWorker extends Worker {
         Context context = getApplicationContext();
         Settings settings = new Settings(context);
 
+        if (isStopped() || !settings.isEncryptedBackupBroadcastEnabled()) return Result.failure();
         // Settings may have changed since the broadcast was received, so check again.
         // Never write a backup without a password.
         String password = settings.getBackupPasswordEnc();
@@ -47,10 +51,22 @@ public class EncryptedBackupWorker extends Worker {
         }
 
         try {
-            SecretKey encryptionKey = KeyStoreHelper.loadEncryptionKeyFromKeyStore(context, false);
-            ArrayList<Entry> entries = DatabaseHelper.loadDatabase(context, encryptionKey);
-
-            BackupTaskResult result = new EncryptedBackupTask(context, entries, password, null).doInBackground();
+            final long generation;
+            final ArrayList<Entry> entries;
+            synchronized (DatabaseHelper.DatabaseFileLock) {
+                if (isStopped() || !settings.isEncryptedBackupBroadcastEnabled()) return Result.failure();
+                generation = org.shadowice.flocke.andotp.Utilities.VaultSession.generation();
+                SecretKey encryptionKey = KeyStoreHelper.loadEncryptionKeyFromKeyStore(context, false);
+                VaultReadResult loaded = DatabaseHelper.readVault(context, encryptionKey);
+                if (!(loaded instanceof VaultReadResult.Loaded)) return fail(context, R.string.backup_receiver_unexpected_error);
+                entries = ((VaultReadResult.Loaded) loaded).takeEntries();
+            }
+            BackupTaskResult result;
+            try {
+                result = new EncryptedBackupTask(context, entries, password, null,
+                        EncryptedBackupTask.Mode.BROADCAST, () -> !isStopped()
+                                && org.shadowice.flocke.andotp.Utilities.VaultSession.isCurrent(generation)).doInBackground();
+            } finally { for (Entry entry : entries) entry.destroy(); }
 
             if (result.success) {
                 NotificationHelper.notify(context, Constants.NotificationChannel.BACKUP_SUCCESS, R.string.backup_receiver_title_backup_success, result.payload);
@@ -58,7 +74,7 @@ public class EncryptedBackupWorker extends Worker {
             }
             return fail(context, result.messageId);
         } catch (RuntimeException e) {
-            Log.e(TAG, "Encrypted backup failed", e);
+            Log.e(TAG, "Encrypted backup failed");
             return fail(context, R.string.backup_receiver_unexpected_error);
         }
     }

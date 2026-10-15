@@ -33,7 +33,12 @@ import org.json.JSONObject;
 import org.shadowice.flocke.andotp.Utilities.EntryThumbnail;
 import org.shadowice.flocke.andotp.Utilities.TokenCalculator;
 
-import java.net.URL;
+import org.shadowice.flocke.andotp.Utilities.InputPolicy;
+import org.shadowice.flocke.andotp.Utilities.OtpUriParser;
+import org.shadowice.flocke.andotp.Utilities.OtpParseResult;
+import org.shadowice.flocke.andotp.Utilities.ValidatedOtp;
+import java.nio.charset.StandardCharsets;
+import java.util.Locale;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -92,7 +97,7 @@ public class Entry {
 
     public Entry(OTPType type, String secret, int period, int digits, String issuer, String label, TokenCalculator.HashAlgorithm algorithm, List<String> tags) {
         this.type = type;
-        this.secret = new Base32().decode(secret.toUpperCase());
+        this.secret = decodeSecret(secret);
         this.period = period;
         this.digits = digits;
         this.issuer = issuer;
@@ -100,11 +105,12 @@ public class Entry {
         this.algorithm = algorithm;
         this.tags = tags;
         setThumbnailFromIssuer(issuer);
+        validate();
     }
 
     public Entry(OTPType type, String secret, long counter, int digits, String issuer, String label, TokenCalculator.HashAlgorithm algorithm, List<String> tags) {
         this.type = type;
-        this.secret = new Base32().decode(secret.toUpperCase());
+        this.secret = decodeSecret(secret);
         this.counter = counter;
         this.digits = digits;
         this.issuer = issuer;
@@ -112,179 +118,144 @@ public class Entry {
         this.algorithm = algorithm;
         this.tags = tags;
         setThumbnailFromIssuer(issuer);
+        validate();
     }
 
     public Entry(OTPType type, String secret, String issuer, String label, List<String> tags) {
         this.type = type;
-        this.secret = secret.getBytes();
+        this.secret = secret.getBytes(StandardCharsets.UTF_8);
         this.issuer = issuer;
         this.label = label;
         this.tags = tags;
         this.period = TokenCalculator.TOTP_DEFAULT_PERIOD;
         setThumbnailFromIssuer(issuer);
+        validate();
     }
 
+    /** Legacy Java adapter: URI policy and explicit outcomes live in the Kotlin parser. */
     public Entry(String contents) throws Exception {
-        contents = contents.replaceFirst("otpauth", "http");
-        Uri uri = Uri.parse(contents);
-        URL url = new URL(contents);
-
-        if(!url.getProtocol().equals("http")){
-            throw new Exception("Invalid Protocol");
+        OtpParseResult result = OtpUriParser.parse(contents);
+        if (result instanceof OtpParseResult.Failure) {
+            throw new IllegalArgumentException("Invalid OTP URI: " + ((OtpParseResult.Failure) result).getError().name());
         }
-
-        switch (url.getHost()) {
-            case "totp":
-                type = OTPType.TOTP;
-                break;
-            case "hotp":
-                type = OTPType.HOTP;
-                break;
-            case "motp":
-                type = OTPType.MOTP;
-                break;
-            case "steam":
-                type = OTPType.STEAM;
-                break;
-            default:
-                throw new Exception("unknown otp type");
-        }
-
-        String secret = uri.getQueryParameter("secret");
-
-        String counter = uri.getQueryParameter("counter");
-        String issuer = uri.getQueryParameter("issuer");
-
-        String label = "";
-
-        if (uri.getPath() != null)
-            label = getStrippedLabel(issuer, uri.getPath().substring(1));
-
-        String period = uri.getQueryParameter("period");
-        String digits = uri.getQueryParameter("digits");
-        String algorithm = uri.getQueryParameter("algorithm");
-        List<String> tags = uri.getQueryParameters("tags");
-
-        if (type == OTPType.HOTP) {
-            if (counter != null) {
-                this.counter = Long.parseLong(counter);
-            } else {
-                throw new Exception("missing counter for HOTP");
-            }
-        } else if (type == OTPType.TOTP || type == OTPType.STEAM) {
-            if (period != null) {
-                this.period = Integer.parseInt(period);
-            } else {
-                this.period = TokenCalculator.TOTP_DEFAULT_PERIOD;
-            }
-        }
-
-        this.issuer = issuer;
-        this.label = label;
-
-        if (secret == null)
-            throw new Exception("Empty secret");
-
-        if(type == OTPType.MOTP) {
-            this.secret = secret.getBytes();
-        } else {
-            this.secret = new Base32().decode(secret.toUpperCase());
-        }
-
-        if (digits != null) {
-            this.digits = Integer.parseInt(digits);
-        } else {
-            this.digits = this.type == OTPType.STEAM ? TokenCalculator.STEAM_DEFAULT_DIGITS : TokenCalculator.TOTP_DEFAULT_DIGITS;
-        }
-
-        if (algorithm != null) {
-            this.algorithm = TokenCalculator.HashAlgorithm.valueOf(algorithm.toUpperCase());
-        } else {
-            this.algorithm = TokenCalculator.DEFAULT_ALGORITHM;
-        }
-
-        if (tags != null) {
-            this.tags = tags;
-        } else {
-            this.tags = new ArrayList<>();
-        }
-
-        if (issuer != null) {
+        if (!(result instanceof OtpParseResult.Success)) throw new IllegalStateException("Unknown OTP parser result");
+        ValidatedOtp value = ((OtpParseResult.Success) result).getValue();
+        try {
+            this.type = OTPType.valueOf(value.getKind().name());
+            this.secret = value.copySecret();
+            this.period = value.getPeriod();
+            this.digits = value.getDigits();
+            this.counter = value.getCounter();
+            this.issuer = value.getIssuer();
+            this.label = value.getLabel();
+            this.algorithm = TokenCalculator.HashAlgorithm.valueOf(value.getAlgorithm().name());
+            this.tags = new ArrayList<>(value.getTags());
             setThumbnailFromIssuer(issuer);
-        }
+            validate();
+        } catch (RuntimeException error) {
+            destroy();
+            throw error;
+        } finally { value.close(); }
     }
 
     public Entry (JSONObject jsonObj)
             throws Exception {
-        this.secret = new Base32().decode(jsonObj.getString(JSON_SECRET).toUpperCase());
-        this.label = jsonObj.getString(JSON_LABEL);
-
         try {
-            this.issuer = jsonObj.getString(JSON_ISSUER);
-        } catch (JSONException e) {
-            // Older backups did not store the issuer separately
-            this.issuer = "";
-        }
+            this.secret = decodeSecret(string(jsonObj, JSON_SECRET));
+            this.label = string(jsonObj, JSON_LABEL);
 
-        try {
-            this.type = OTPType.valueOf(jsonObj.getString(JSON_TYPE));
-        } catch(Exception e) {
-            this.type = DEFAULT_TYPE;
-        }
+            // Older backups did not store the issuer separately.
+            this.issuer = jsonObj.has(JSON_ISSUER) ? string(jsonObj, JSON_ISSUER) : "";
 
-        try {
-            this.period = jsonObj.getInt(JSON_PERIOD);
-        } catch(Exception e) {
-            if (type == OTPType.TOTP)
-                this.period = DEFAULT_PERIOD;
-        }
-
-        try {
-            this.counter = jsonObj.getLong(JSON_COUNTER);
-        } catch (Exception e) {
-            if (type == OTPType.HOTP)
-                throw new Exception("missing counter for HOTP");
-        }
-
-        try {
-            this.digits = jsonObj.getInt(JSON_DIGITS);
-        } catch(Exception e) {
-            this.digits = TokenCalculator.TOTP_DEFAULT_DIGITS;
-        }
-
-        try {
-            this.algorithm = TokenCalculator.HashAlgorithm.valueOf(jsonObj.getString(JSON_ALGORITHM));
-        } catch (Exception e) {
-            this.algorithm = TokenCalculator.DEFAULT_ALGORITHM;
-        }
-
-        this.tags = new ArrayList<>();
-        try {
-            JSONArray tagsArray = jsonObj.getJSONArray(JSON_TAGS);
-            for(int i = 0; i < tagsArray.length(); i++) {
-                this.tags.add(tagsArray.getString(i));
+            this.type = jsonObj.has(JSON_TYPE) ? OTPType.valueOf(jsonObj.getString(JSON_TYPE)) : DEFAULT_TYPE;
+            this.period = jsonObj.has(JSON_PERIOD) ? Math.toIntExact(integer(jsonObj, JSON_PERIOD)) : DEFAULT_PERIOD;
+            if (this.type == OTPType.HOTP && !jsonObj.has(JSON_COUNTER)) throw new IllegalArgumentException("Missing HOTP counter");
+            this.counter = jsonObj.has(JSON_COUNTER) ? integer(jsonObj, JSON_COUNTER) : 0;
+            this.digits = jsonObj.has(JSON_DIGITS) ? Math.toIntExact(integer(jsonObj, JSON_DIGITS))
+                    : (type == OTPType.STEAM ? TokenCalculator.STEAM_DEFAULT_DIGITS : TokenCalculator.TOTP_DEFAULT_DIGITS);
+            this.algorithm = jsonObj.has(JSON_ALGORITHM)
+                    ? TokenCalculator.HashAlgorithm.valueOf(jsonObj.getString(JSON_ALGORITHM)) : TokenCalculator.DEFAULT_ALGORITHM;
+            if (jsonObj.has(JSON_TAGS)) {
+                JSONArray array = jsonObj.getJSONArray(JSON_TAGS);
+                if (array.length() > InputPolicy.MAX_TAGS) throw new IllegalArgumentException("Too many tags");
+                for (int i = 0; i < array.length(); i++) {
+                    Object tag = array.get(i);
+                    if (!(tag instanceof String)) throw new IllegalArgumentException("Invalid tag");
+                    tags.add((String) tag);
+                }
             }
-        } catch (Exception e) {
-            // No tags stored (e.g. an older backup)
-        }
 
-        try {
-            this.thumbnail = EntryThumbnail.EntryThumbnails.valueOfIgnoreCase(jsonObj.getString(JSON_THUMBNAIL));
-        } catch(Exception e) {
-            this.thumbnail = EntryThumbnail.EntryThumbnails.Default;
-        }
+            try {
+                this.thumbnail = EntryThumbnail.EntryThumbnails.valueOfIgnoreCase(jsonObj.getString(JSON_THUMBNAIL));
+            } catch(Exception e) {
+                this.thumbnail = EntryThumbnail.EntryThumbnails.Default;
+            }
 
-        try {
-            this.last_used = jsonObj.getLong(JSON_LAST_USED);
-        } catch (Exception e) {
-            this.last_used = 0;
-        }
+            try {
+                this.last_used = jsonObj.getLong(JSON_LAST_USED);
+            } catch (Exception e) {
+                this.last_used = 0;
+            }
 
-        try {
-            this.used_frequency = jsonObj.getLong(JSON_USED_FREQUENCY);
-        } catch (Exception e) {
-            this.used_frequency = 0;
+            try {
+                this.used_frequency = jsonObj.getLong(JSON_USED_FREQUENCY);
+            } catch (Exception e) {
+                this.used_frequency = 0;
+            }
+            validate();
+        } catch (Exception error) {
+            destroy();
+            throw error;
         }
+    }
+
+    private static String string(JSONObject object, String name) throws JSONException {
+        Object value = object.get(name);
+        if (!(value instanceof String)) throw new IllegalArgumentException("Invalid entry text");
+        return (String) value;
+    }
+
+    private static long integer(JSONObject object, String name) throws JSONException {
+        String value = object.get(name).toString();
+        if (!value.matches("-?[0-9]+")) throw new IllegalArgumentException("Invalid integer");
+        return Long.parseLong(value);
+    }
+
+    private static byte[] decodeSecret(String encoded) {
+        if (encoded == null || encoded.length() > InputPolicy.MAX_SECRET_BYTES * 2) throw new IllegalArgumentException("Invalid secret");
+        String normalized = encoded.toUpperCase(Locale.ROOT);
+        if (!normalized.matches("[A-Z2-7]+={0,6}")) throw new IllegalArgumentException("Invalid Base32 secret");
+        byte[] bytes = new Base32().decode(normalized);
+        String canonical = new Base32().encodeAsString(bytes);
+        if (!(normalized.equals(canonical) || normalized.equals(canonical.replace("=", "")))) {
+            throw new IllegalArgumentException("Noncanonical Base32 secret");
+        }
+        return bytes;
+    }
+
+    public void validate() {
+        if (type == null || algorithm == null || secret == null || secret.length == 0
+                || secret.length > InputPolicy.MAX_SECRET_BYTES) throw new IllegalArgumentException("Invalid entry");
+        InputPolicy.tokenParameters(period, digits, counter);
+        if (type == OTPType.STEAM && digits != TokenCalculator.STEAM_DEFAULT_DIGITS) throw new IllegalArgumentException("Invalid Steam digits");
+        InputPolicy.text(issuer, InputPolicy.MAX_TEXT_CHARS);
+        InputPolicy.text(label, InputPolicy.MAX_TEXT_CHARS);
+        InputPolicy.text(pin, InputPolicy.MAX_TAG_CHARS);
+        if (tags == null || tags.size() > InputPolicy.MAX_TAGS) throw new IllegalArgumentException("Invalid tags");
+        for (String tag : tags) {
+            if (tag == null) throw new IllegalArgumentException("Invalid tag");
+            InputPolicy.text(tag, InputPolicy.MAX_TAG_CHARS);
+        }
+    }
+
+    /** Best-effort cleanup of owned arrays/references, including entries held by views. */
+    public void destroy() {
+        if (secret != null) Arrays.fill(secret, (byte) 0);
+        secret = null;
+        currentOTP = prevOTP = pin = issuer = label = "";
+        tags = new ArrayList<>();
+        visible = false;
+        hideTask = null;
     }
 
     /** Serializes this entry to the JSON object used in the database and in backups. */
@@ -381,7 +352,7 @@ public class Entry {
     }
 
     public byte[] getSecret() {
-        return secret;
+        return secret == null ? null : secret.clone();
     }
 
     /** The secret as stored/displayed: Base32, or the raw secret for mOTP. */
@@ -393,7 +364,7 @@ public class Entry {
     }
 
     public void setSecret(byte[] secret) {
-        this.secret = secret;
+        this.secret = secret == null ? null : secret.clone();
     }
 
     public String getIssuer() {
@@ -405,6 +376,7 @@ public class Entry {
 
         if (updateThumbnail && issuer != null)
             setThumbnailFromIssuer(issuer);
+        validate();
     }
 
     public String getLabel() {
@@ -513,6 +485,8 @@ public class Entry {
 
     /** Recalculates the token ({@code updateNow} forces a time-based refresh); returns whether one was produced. */
     public boolean updateOTP(boolean updateNow) {
+        if (secret == null) return false;
+        validate();
         if (type == OTPType.TOTP || type == OTPType.STEAM || type == OTPType.MOTP) {
             long time = System.currentTimeMillis() / 1000;
             long counter = time / this.getPeriod();
@@ -635,7 +609,7 @@ public class Entry {
             if (type == OTPType.MOTP)
                 Hex.decodeHex(secret);
             else
-                new Base32().decode(secret.toUpperCase());
+                decodeSecret(secret);
         } catch (Exception e) {
             return false;
         }
@@ -643,16 +617,4 @@ public class Entry {
         return true;
     }
 
-    /**
-     * @param issuer Issuer to strip from the front of the label
-     * @param label  Full label (e.g. "ACME:john.doe@email.com")
-     * @return The label without the "issuer:" prefix
-     */
-    private String getStrippedLabel(String issuer, String label) {
-        if (issuer == null || issuer.isEmpty() || !label.startsWith(issuer + ":")) {
-            return label.trim();
-        } else {
-            return label.substring(issuer.length() + 1).trim();
-        }
-    }
 }

@@ -36,14 +36,16 @@ import org.shadowice.flocke.andotp.Utilities.Constants;
 import org.shadowice.flocke.andotp.Utilities.NotificationHelper;
 import org.shadowice.flocke.andotp.Utilities.Settings;
 
-// Test in the dev build (Android 8+ needs an explicit package, hence -p):
-//   adb shell am broadcast -a org.shadowice.flocke.andotp.broadcast.ENCRYPTED_BACKUP -p org.shadowice.flocke.andotp.dev
+// Android enforces the manifest signature permission before invoking this receiver.
+// Ordinary automation apps and adb shell are intentionally not authorized callers.
 /** Queues a password-encrypted backup when the corresponding broadcast is received. */
 public class EncryptedBackupBroadcastReceiver extends BackupBroadcastReceiver {
-    private static final String UNIQUE_WORK_NAME = "encrypted_backup";
+    public static final String UNIQUE_WORK_NAME = "encrypted_backup";
+    public static final String ACTION = "org.shadowice.flocke.andotp.broadcast.ENCRYPTED_BACKUP";
 
     @Override
     public void onReceive(Context context, Intent intent) {
+        if (intent == null || !ACTION.equals(intent.getAction())) return;
         Settings settings = new Settings(context);
 
         if (!settings.isEncryptedBackupBroadcastEnabled()) {
@@ -56,6 +58,7 @@ public class EncryptedBackupBroadcastReceiver extends BackupBroadcastReceiver {
             return;
         }
 
+        if (!settings.tryAcquireBroadcastBackupSlot()) return;
         String password = settings.getBackupPasswordEnc();
 
         if (password == null || password.isEmpty()) {

@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="security_vault_error_title">Vault unavailable</string>
+    <string name="security_vault_error">The vault could not be safely opened. No data was replaced. Check your password and recovery backup. Missing keys cannot be recreated to decrypt an existing vault.</string>
+    <string name="security_import_title">Add this account?</string>
+    <string name="security_platform_backup_disabled">Disabled for security. Use portable password-encrypted or OpenPGP backups.</string>
+</resources>
