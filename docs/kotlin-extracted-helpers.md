@@ -27,7 +27,21 @@ Third batch (leaf components reachable from the Java owners):
 - `View/SimpleDoubleClickListener.kt`: single/double tap discrimination for the entry cards, subclassed
   in Java by `EntryViewHolder`.
 
-No activity, adapter, fragment, preference, receiver, worker, dialog renderer, persistence
+Fourth batch (drag & drop boundary, dialog/keyboard helpers, task result DTO):
+
+- `View/ItemTouchHelper/ItemTouchHelperAdapter.kt`, `ItemTouchHelperViewHolder.kt` and
+  `SimpleItemTouchHelperCallback.kt`: the RecyclerView drag & drop plumbing, converted as one unit
+  (implemented in Java by `EntriesCardAdapter`/`EntryViewHolder`, wired by `MainActivity`). This is
+  gesture plumbing and forwarding only — the list adapter, its ordering/persistence and the entry
+  view holder stay Java.
+- `Utilities/UIHelper.kt`: generic dialog/soft-keyboard helpers, called from activities,
+  preferences and `EntryActionDialogs.kt`.
+- `Utilities/ConfirmedPasswordTransformationHelper.kt`: show-password toggle wiring between the
+  password and confirm fields, called from the password dialogs/preferences.
+- `Tasks/BackupTaskResult.kt`: the result DTO of the backup/restore tasks, read field-by-field by
+  `BackupActivity` and the task subclasses.
+
+No activity, list adapter, fragment, preference, receiver, worker, dialog renderer, persistence
 implementation or task runner is converted. No coroutine, Compose, new dependency, SDK/bytecode
 target, storage format or crypto change is included.
 
@@ -135,12 +149,50 @@ version keeps exactly that short circuit and still fails (now with a clear `Null
 instead of a dereference) when a non-"done" action arrives without an event. Making it silently
 return `false` would be a behavior change and is left for a separate, reviewable hardening step.
 
+### Drag & drop, dialog helpers and the backup task result
+
+The `ItemTouchHelper` trio is converted as one unit because the two interfaces only have meaning
+together with the callback that dispatches to them. `SimpleItemTouchHelperCallback` stays a
+**non-final** `open` class with the same public `(ItemTouchHelperAdapter)` constructor and the
+`ALPHA_FULL` constant field; `setDragEnabled(boolean)`, `isLongPressDragEnabled()`,
+`isItemViewSwipeEnabled()`, `onMove`, `onSwiped`, `getMovementFlags`, `onChildDraw`,
+`onSelectedChanged` and `clearView` keep their names, parameter shapes and behavior: swiping stays
+disabled (`onSwiped` remains a no-op), cross-view-type moves are rejected before forwarding,
+`onSelectedChanged` accepts the platform's nullable view holder, the swipe fade keeps its
+`ALPHA_FULL - |dX| / width` arithmetic, and the adapter is still notified with the holders'
+adapter positions. The Java implementors (`EntriesCardAdapter`, `EntryViewHolder`) compile
+unchanged.
+
+`UIHelper` becomes an `object` with `@JvmStatic` methods (the documented static-only delta: no
+public constructor, final class; every call site uses static members only). The `view` parameters
+are now explicitly nullable — the Java code null-checked them instead of dereferencing — and
+`showKeyboard` keeps the Java **boxed** `Boolean` parameter: a null flag was never passed by any
+caller, and it still fails (now with a clear `NullPointerException`) instead of silently meaning
+"not forced", the same choice as `EditorActionHelper`. The generic dialog still runs `onOk` only
+on the positive button and tolerates a missing handler.
+
+`ConfirmedPasswordTransformationHelper` becomes an `object` with `@JvmStatic setup(...)`. The
+end-icon click still dispatches to both fields, starts with both fields masked, keeps the cursor
+position when toggling (`setSelection` after the transformation change, only for a non-negative
+selection) and refreshes the layout state.
+
+`BackupTaskResult` stays a plain **non-final** class — deliberately *not* a data class, because
+`payload` can hold the entire parsed restore database and generated `equals`/`toString`/`copy`
+would broadcast it. All fields stay public with the same names and mutability (`resultType`,
+`success`, `payload`, `messageId` final; `isPGP`, `decryptIntent`, `uri` writable) via `@JvmField`,
+so the Java readers are unchanged. Both constructors, the nested `ResultType` enum constants and
+the static `success`/`failure` factories survive with identical Java signatures.
+
+`LetterBitmap` was considered for this batch and deliberately stays Java: it is a
+package-private class, and Kotlin has no package-private visibility, so converting it would widen
+the Java-visible API — the same policy as `Constants` and `FileHelper`.
+
 ## Tests and acceptance
 
 Existing Java/Kotlin characterization tests remain in place and unchanged: the RFC vector tests in
 `ApplicationTest`, `BoundedInputReaderTest`, `EncryptedBackupHeaderTest`, `InputPolicyTest`,
 `ScreenTimerControllerTest`, `EntryActionTargetTest`, `VaultSessionTest`, `TaskContractsTest`,
-`SessionContractsTest`, `OtpUriParserTest`, the Kotlin interop tests and the security suites. New
+`SessionContractsTest`, `OtpUriParserTest`, the Kotlin interop tests and the security suites; the backup/restore result now also has a host test of its own (`BackupTaskResultTest`). New
 reflection/source guards were added where a conversion could silently change a Java-visible shape:
 `scripts/tests/test_ui_decomposition_policy.py` now requires the converted stems, the
 `@JvmStatic`/`@JvmField`/`const`/`@Throws`/`@Synchronized` shapes and the editor-action short-circuit,
@@ -151,7 +203,7 @@ and the existing architecture guard reads the moved `HandlerTimerScheduler.kt`.
 `scripts/kotlin-sandbox/` compiles the converted platform-free/low-platform sources against
 hand-written platform stubs and runs `Checks.kt` on a desktop JVM; `bootstrap-toolchain.sh` fetches
 a JDK and the Kotlin compiler from package mirrors when the machine has neither. Executed on
-2026-10-15 with **Kotlin 2.4.21 and Temurin 25.0.2** (`-jvm-target 1.8`), it reports 22 passing
+2026-10-15 with **Kotlin 2.4.21 and Temurin 25.0.2** (`-jvm-target 1.8`), it reports 27 passing
 checks:
 
 - RFC 6238 TOTP vectors (SHA-1/256/512, six timestamps, eight digits) and RFC 4226 HOTP vectors.
@@ -163,6 +215,16 @@ checks:
 - `SecretKeyWrapper` against a real JVM-generated RSA key pair: round trip of AES-128/AES-256 keys, modulus-sized output, tampered blob, wrong private key, wrong-length input, and an independent `RSA/ECB/PKCS1Padding` decryption proving which transformation is in use.
 - `SimpleDoubleClickListener` tap sequences against a fake `View` (delayed single click, suppressed single click, no second double click, fresh single click after the delta).
 - `DimensionConverter` parse/unit/rounding cases, the unmodifiable lookup table and the sub-pixel rounding branch.
+- Drag & drop forwarding: same-type moves forwarded with adapter positions, cross-type rejection,
+  grid/list movement flags (decoded through the stub's replicated `makeMovementFlags`), drag-enable
+  toggling, the select/clear lifecycle with its non-idle guard and nullable holder, the swipe-fade
+  arithmetic, and the disabled-swipe no-op.
+- `UIHelper` dialog confirmation (the handler runs on the positive button, a missing handler is
+  tolerated) and keyboard wiring (request versus forced toggle, the null-flag `NullPointerException`,
+  missing-view no-ops).
+- `ConfirmedPasswordTransformationHelper` toggle sequence: masked start, both fields
+  unmasked/re-masked together, the cursor restored, the layout refreshed.
+- `BackupTaskResult` factories, field defaults, writable PGP fields and a payload-free `toString`.
 - The converted sources are compiled with the real `Utilities/Constants.java` on the resolution
   path, so `SecretKeyWrapper` is checked against the actual package-private constant rather than a copy.
 - Reflection assertions on the Java-visible shapes (static forwarders, constant fields, checked exceptions, synchronized methods, enum constants, private constructor, non-final class where the Java was extendable, abstract callbacks, and the deliberate `object` delta for static-only utilities).
@@ -191,6 +253,8 @@ tracked in the [decomposition plan](ui-decomposition-plan.md).
   resolution source (see the sandbox check) confirms that same-package Kotlin reads the
   package-private `ALGORITHM_ASYMMETRIC` constant, and the harness now resolves that Java source
   instead of mirroring it.
-- `View/ItemTouchHelper/ItemTouchHelperAdapter.java` and `ItemTouchHelperViewHolder.java`: no logic to
-  preserve or verify. They are better converted together with `SimpleItemTouchHelperCallback` than
-  split from it, so that the drag/drop boundary is reviewed as one unit.
+- `Utilities/LetterBitmap.java`: same package-private policy — the class itself is package-private,
+  and a Kotlin conversion would have to publish it to at least `public`/`internal` bytecode.
+
+The drag & drop trio, `UIHelper`, `ConfirmedPasswordTransformationHelper` and `BackupTaskResult`
+are no longer in this list: they are converted (see the fourth batch above).

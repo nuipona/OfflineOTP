@@ -3,6 +3,9 @@ package android.os
 
 import java.util.Locale
 
+/** Field/type-only stand-in for the platform window-token binder. */
+interface IBinder
+
 class Handler(private val looper: Looper?) {
     fun postDelayed(runnable: Runnable, delayMillis: Long): Boolean = true
     fun removeCallbacks(runnable: Runnable) {}

@@ -1,14 +1,26 @@
 // Sandbox-only stand-ins, see android_content.kt.
 package android.view
 
+import android.os.IBinder
+
 /**
  * `postDelayed` is left `open` here purely so the checks can capture what a listener posts; the
- * platform method is not overridable in the same way. No platform timing is exercised.
+ * platform method is not overridable in the same way. No platform timing is exercised. The
+ * alpha/translation/width/windowToken surface exists for the view-drawing and keyboard helpers;
+ * the platform getters are final and the fakes subclass this stand-in instead.
  */
 open class View {
-    interface OnClickListener {
+    /** The platform interface is Java; a `fun interface` keeps lambda/SAM conversion working. */
+    fun interface OnClickListener {
         fun onClick(v: View)
     }
+
+    var alpha: Float = 1.0f
+    var translationX: Float = 0.0f
+    /** The platform getter is final; the stand-in is writable so checks can size a fake view. */
+    var width: Int = 0
+    val windowToken: IBinder? get() = null
+    open fun refreshDrawableState() {}
 
     open fun postDelayed(runnable: Runnable, delayMillis: Long): Boolean = true
 }

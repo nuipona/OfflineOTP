@@ -58,9 +58,17 @@ APP_SOURCES=(
     "$KOTLIN_APP/Utilities/SecretKeyWrapper.kt"
     "$KOTLIN_APP/Utilities/DimensionConverter.kt"
     "$KOTLIN_APP/View/SimpleDoubleClickListener.kt"
+    "$KOTLIN_APP/View/ItemTouchHelper/ItemTouchHelperAdapter.kt"
+    "$KOTLIN_APP/View/ItemTouchHelper/ItemTouchHelperViewHolder.kt"
+    "$KOTLIN_APP/View/ItemTouchHelper/SimpleItemTouchHelperCallback.kt"
+    "$KOTLIN_APP/Utilities/UIHelper.kt"
+    "$KOTLIN_APP/Utilities/ConfirmedPasswordTransformationHelper.kt"
+    "$KOTLIN_APP/Tasks/BackupTaskResult.kt"
 )
 
 STUBS=("$SANDBOX"/stubs/android/*.kt
+    "$SANDBOX"/stubs/androidx/recyclerview/widget/*.kt
+    "$SANDBOX"/stubs/com/google/android/material/textfield/*.kt
     "$SANDBOX/stubs/org/shadowice/flocke/andotp/R.kt"
     "$SANDBOX/stubs/org/apache/commons/codec/binary/Hex.kt")
 
