@@ -40,7 +40,6 @@ import java.security.PrivateKey;
 import java.security.PublicKey;
 import java.security.SecureRandom;
 import java.security.spec.InvalidKeySpecException;
-import java.security.spec.KeySpec;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Random;
@@ -76,43 +75,31 @@ public class EncryptionHelper {
         void onSuccessfulEncryptionChange(Constants.EncryptionType newEncryptionType, SecretKey newEncryptionKey);
     }
 
-    /** Re-encrypts the database with the new key/type, restoring the database backup on failure. */
-    public static EncryptionChangeResult tryEncryptionChange(Context context, SecretKey oldKey, Constants.EncryptionType newType, byte[] newKey, EncryptionChangeCallback changeCallback) {
-        if (DatabaseHelper.backupDatabase(context)) {
-            ArrayList<Entry> entries;
+    /** Re-encrypts only authenticated data; staged settings/file commit survives process death. */
+    public static EncryptionChangeResult tryEncryptionChange(Context context, SecretKey oldKey, Constants.EncryptionType newType, byte[] newKey, EncryptionChangeCallback callback) {
+        return tryEncryptionChange(context, oldKey, newType, newKey, callback, () -> true);
+    }
 
-            if (oldKey != null)
-                entries = DatabaseHelper.loadDatabase(context, oldKey);
-            else
-                return EncryptionChangeResult.DECRYPTION_FAILED;
-
-            SecretKey newEncryptionKey;
-
-            if (newType == Constants.EncryptionType.KEYSTORE) {
-                newEncryptionKey = KeyStoreHelper.loadEncryptionKeyFromKeyStore(context, true);
-            } else if (newKey != null && newKey.length > 0) {
-                newEncryptionKey = EncryptionHelper.generateSymmetricKey(newKey);
-            } else {
-                DatabaseHelper.restoreDatabaseBackup(context);
-                return EncryptionChangeResult.MISSING_NEW_KEY;
-            }
-
-            if (DatabaseHelper.saveDatabase(context, entries, newEncryptionKey)) {
-                // Persist new encryption here already so everything is fully setup when the task finishes
-                Settings settings = new Settings(context);
-                settings.setEncryption(newType);
-
-                if (changeCallback != null)
-                    changeCallback.onSuccessfulEncryptionChange(newType, newEncryptionKey);
-
-                return EncryptionChangeResult.SUCCESS;
-            }
-
-            DatabaseHelper.restoreDatabaseBackup(context);
-
-            return EncryptionChangeResult.CHANGE_FAILURE;
-        } else {
-            return EncryptionChangeResult.BACKUP_FAILURE;
+    public static EncryptionChangeResult tryEncryptionChange(Context context, SecretKey oldKey, Constants.EncryptionType newType, byte[] newKey, EncryptionChangeCallback callback, java.util.function.BooleanSupplier permitted) {
+        synchronized (DatabaseHelper.DatabaseFileLock) {
+            if (!permitted.getAsBoolean() || oldKey == null || VaultSession.getKey() != oldKey) return EncryptionChangeResult.DECRYPTION_FAILED;
+            VaultReadResult loaded = DatabaseHelper.readVault(context, oldKey);
+            if (!(loaded instanceof VaultReadResult.Loaded)) return EncryptionChangeResult.DECRYPTION_FAILED;
+            ((VaultReadResult.Loaded) loaded).close();
+            SecretKey key;
+            if (newType == Constants.EncryptionType.KEYSTORE) key = KeyStoreHelper.createEncryptionKey(context);
+            else if (newKey != null && (newKey.length == 16 || newKey.length == 24 || newKey.length == 32)) key = generateSymmetricKey(newKey);
+            else return EncryptionChangeResult.MISSING_NEW_KEY;
+            if (key == null) return EncryptionChangeResult.MISSING_NEW_KEY;
+            Settings settings = new Settings(context);
+            long generation = VaultSession.generation();
+            VaultWriteResult write = DatabaseHelper.changeVaultEncryption(context, oldKey, key, false, id -> {
+                if (!permitted.getAsBoolean() || !VaultSession.isCurrent(generation)) return VaultCommitDecision.CANCELED;
+                return VaultCommitDecision.fromCommit(settings.commitVaultSettings(id, newType, null, null, false));
+            });
+            if (!(write instanceof VaultWriteResult.Saved)) return EncryptionChangeResult.CHANGE_FAILURE;
+            if (callback != null) callback.onSuccessfulEncryptionChange(newType, key);
+            return EncryptionChangeResult.SUCCESS;
         }
     }
 
@@ -120,16 +107,20 @@ public class EncryptionHelper {
     public static int benchmarkIterations(String password, byte[] salt) {
         try {
             SecretKeyFactory secretKeyFactory = SecretKeyFactory.getInstance(Constants.PBKDF2_ALGORITHM);
-            KeySpec keySpec = new PBEKeySpec(password.toCharArray(), salt, Constants.PBKDF2_BENCHMARK_ITERATIONS, Constants.PBKDF2_LENGTH);
+            char[] passwordChars = password.toCharArray();
+            PBEKeySpec keySpec;
+            try { keySpec = new PBEKeySpec(passwordChars, salt, Constants.PBKDF2_BENCHMARK_ITERATIONS, Constants.PBKDF2_LENGTH); }
+            finally { Arrays.fill(passwordChars, '\0'); }
 
             long startTime = System.currentTimeMillis();
-            secretKeyFactory.generateSecret(keySpec);
+            try { secretKeyFactory.generateSecret(keySpec); }
+            finally { keySpec.clearPassword(); }
             long finishTime = System.currentTimeMillis();
 
-            long timeDiff = finishTime - startTime;
+            long timeDiff = Math.max(1, finishTime - startTime);
             int scaledIterationTarget = (int) (((double) Constants.PBKDF2_BENCHMARK_ITERATIONS / (double) timeDiff) * Constants.PBKDF2_TARGET_AUTH_TIME);
 
-            return Math.max(scaledIterationTarget, Constants.PBKDF2_MIN_AUTH_ITERATIONS);
+            return Math.min(2000000, Math.max(scaledIterationTarget, Constants.PBKDF2_MIN_AUTH_ITERATIONS));
         } catch (NoSuchAlgorithmException | InvalidKeySpecException e) {
             e.printStackTrace();
             return Constants.PBKDF2_MIN_AUTH_ITERATIONS;
@@ -153,10 +144,17 @@ public class EncryptionHelper {
     /** Derives the PBKDF2 output and splits it into the auth password and the encryption key. */
     public static PBKDF2Credentials generatePBKDF2Credentials(String password, byte[] salt, int iter)
         throws NoSuchAlgorithmException, InvalidKeySpecException {
+        if (password == null || password.length() > InputPolicy.MAX_TEXT_CHARS || salt == null
+                || salt.length < 8 || iter < 1 || iter > 20000000) throw new IllegalArgumentException("Invalid credential parameters");
         SecretKeyFactory secretKeyFactory = SecretKeyFactory.getInstance(Constants.PBKDF2_ALGORITHM);
-        KeySpec keySpec = new PBEKeySpec(password.toCharArray(), salt, iter, Constants.PBKDF2_LENGTH);
+        char[] passwordChars = password.toCharArray();
+        PBEKeySpec keySpec;
+        try { keySpec = new PBEKeySpec(passwordChars, salt, iter, Constants.PBKDF2_LENGTH); }
+        finally { Arrays.fill(passwordChars, '\0'); }
 
-        byte[] array = secretKeyFactory.generateSecret(keySpec).getEncoded();
+        byte[] array;
+        try { array = secretKeyFactory.generateSecret(keySpec).getEncoded(); }
+        finally { keySpec.clearPassword(); }
 
         int halfPoint = array.length / 2;
 
@@ -164,6 +162,7 @@ public class EncryptionHelper {
         credentials.password = Arrays.copyOfRange(array, halfPoint, array.length);
         credentials.key = Arrays.copyOfRange(array, 0, halfPoint);
 
+        Arrays.fill(array, (byte) 0);
         return credentials;
     }
 
@@ -175,10 +174,19 @@ public class EncryptionHelper {
     /** Derives the AES key used for password-encrypted backups. */
     public static SecretKey generateSymmetricKeyPBKDF2(String password, int iter, byte[] salt)
         throws NoSuchAlgorithmException, InvalidKeySpecException {
+        if (password == null || password.length() > InputPolicy.MAX_TEXT_CHARS || salt == null
+                || salt.length < 8 || iter < 1 || iter > 20000000) throw new IllegalArgumentException("Invalid credential parameters");
         SecretKeyFactory secretKeyFactory = SecretKeyFactory.getInstance(Constants.PBKDF2_ALGORITHM);
-        KeySpec keySpec = new PBEKeySpec(password.toCharArray(), salt, iter, Constants.PBKDF2_LENGTH);
+        char[] passwordChars = password.toCharArray();
+        PBEKeySpec keySpec;
+        try { keySpec = new PBEKeySpec(passwordChars, salt, iter, Constants.PBKDF2_LENGTH); }
+        finally { Arrays.fill(passwordChars, '\0'); }
 
-        return secretKeyFactory.generateSecret(keySpec);
+        byte[] raw;
+        try { raw = secretKeyFactory.generateSecret(keySpec).getEncoded(); }
+        finally { keySpec.clearPassword(); }
+        try { return new SecretKeySpec(raw, "AES"); }
+        finally { Arrays.fill(raw, (byte) 0); }
     }
 
     /** Legacy key derivation (plain SHA-256 of the password) for old-format encrypted backups. */
@@ -234,6 +242,11 @@ public class EncryptionHelper {
     /** Splits the nonce off the front of the blob and decrypts the remaining ciphertext. */
     public static byte[] decrypt(SecretKey secretKey, byte[] cipherText)
             throws NoSuchPaddingException, InvalidKeyException, NoSuchAlgorithmException, IllegalBlockSizeException, BadPaddingException, InvalidAlgorithmParameterException {
+        // AES-GCM always contains a nonce and a 128-bit authentication tag,
+        // even when the plaintext is empty. Reject framing before provider work.
+        if (cipherText == null || cipherText.length < Constants.ENCRYPTION_IV_LENGTH + 16) {
+            throw new IllegalArgumentException("Truncated AES-GCM data");
+        }
         byte[] iv = Arrays.copyOfRange(cipherText, 0, Constants.ENCRYPTION_IV_LENGTH);
         byte[] encrypted = Arrays.copyOfRange(cipherText, Constants.ENCRYPTION_IV_LENGTH, cipherText.length);
 

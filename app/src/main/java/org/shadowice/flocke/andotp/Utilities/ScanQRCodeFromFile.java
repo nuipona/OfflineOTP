@@ -70,27 +70,36 @@ public class ScanQRCodeFromFile {
 
     /** Decodes the first QR code found in the given image file. */
     public static String scanQRImage(Context context, Uri uri) {
-        // Check if external storage is accessible
-        if (!Tools.isExternalStorageReadable()) {
-            Toast.makeText(context, R.string.backup_toast_storage_not_accessible, Toast.LENGTH_LONG).show();
-            return null;
-        }
         // Read the image file
         byte[] imageInBytes;
         try {
             imageInBytes = StorageAccessHelper.loadFile(context, uri);
-        } catch (IOException e) {
-            e.printStackTrace();
+        } catch (IOException | RuntimeException e) {
             Toast.makeText(context, R.string.toast_file_load_error, Toast.LENGTH_LONG).show();
             return null;
         }
 
-        Bitmap bMap = BitmapFactory.decodeByteArray(imageInBytes, 0, imageInBytes.length);
+        BitmapFactory.Options options = new BitmapFactory.Options();
+        options.inJustDecodeBounds = true;
+        BitmapFactory.decodeByteArray(imageInBytes, 0, imageInBytes.length, options);
+        if (!InputPolicy.validImage(options.outWidth, options.outHeight)) {
+            Toast.makeText(context, R.string.toast_file_load_error, Toast.LENGTH_LONG).show();
+            return null;
+        }
+        options.inJustDecodeBounds = false;
+        options.inPreferredConfig = Bitmap.Config.ARGB_8888;
+        Bitmap bMap = BitmapFactory.decodeByteArray(imageInBytes, 0, imageInBytes.length, options);
+        if (bMap == null || !InputPolicy.validImage(bMap.getWidth(), bMap.getHeight())) {
+            if (bMap != null) bMap.recycle();
+            Toast.makeText(context, R.string.toast_file_load_error, Toast.LENGTH_LONG).show();
+            return null;
+        }
         String contents = null;
-        int[] intArray = new int[bMap.getWidth() * bMap.getHeight()];
-
-        bMap.getPixels(intArray, 0, bMap.getWidth(), 0, 0, bMap.getWidth(), bMap.getHeight());
-        LuminanceSource source = new RGBLuminanceSource(bMap.getWidth(), bMap.getHeight(), intArray);
+        int width = bMap.getWidth(), height = bMap.getHeight();
+        int[] intArray = new int[width * height];
+        try { bMap.getPixels(intArray, 0, width, 0, 0, width, height); }
+        finally { bMap.recycle(); }
+        LuminanceSource source = new RGBLuminanceSource(width, height, intArray);
         BinaryBitmap bitmap = new BinaryBitmap(new HybridBinarizer(source));
 
         Result result = null;

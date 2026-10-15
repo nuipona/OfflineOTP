@@ -34,26 +34,32 @@ public abstract class GenericBackupTask extends UiBasedBackgroundTask<BackupTask
     @Override
     @NonNull
     protected BackupTaskResult doInBackground() {
-        String fileName;
-
-        if (uri == null) {
-            BackupHelper.BackupFile backupFile = BackupHelper.backupFile(applicationContext, settings.getBackupLocation(), type);
-
-            if (backupFile.file == null)
-                return new BackupTaskResult(BackupTaskResult.ResultType.BACKUP,false, null, backupFile.errorMessage);
-
-            uri = backupFile.file.getUri();
-            fileName = backupFile.file.getName();
-        } else {
-            fileName = StorageAccessHelper.getContentFileName(applicationContext, uri);
-        }
-
-        boolean success = doBackup();
-
-        if (success)
-            return BackupTaskResult.success(BackupTaskResult.ResultType.BACKUP ,fileName);
-        else
+        androidx.documentfile.provider.DocumentFile created = null;
+        boolean success = false;
+        try {
+            if (!canWrite()) return BackupTaskResult.failure(BackupTaskResult.ResultType.BACKUP, R.string.backup_toast_export_failed);
+            String fileName;
+            if (uri == null) {
+                BackupHelper.BackupFile backup = BackupHelper.backupFile(applicationContext, settings.getBackupLocation(), type);
+                if (backup.file == null) return BackupTaskResult.failure(BackupTaskResult.ResultType.BACKUP, backup.errorMessage);
+                created = backup.file;
+                uri = created.getUri();
+                fileName = StorageAccessHelper.getContentFileName(applicationContext, uri);
+            } else fileName = StorageAccessHelper.getContentFileName(applicationContext, uri);
+            success = canWrite() && doBackup() && canWrite();
+            return success ? BackupTaskResult.success(BackupTaskResult.ResultType.BACKUP, fileName)
+                    : BackupTaskResult.failure(BackupTaskResult.ResultType.BACKUP, R.string.backup_toast_export_failed);
+        } catch (RuntimeException error) {
             return BackupTaskResult.failure(BackupTaskResult.ResultType.BACKUP, R.string.backup_toast_export_failed);
+        } finally {
+            if (!success && created != null) {
+                try { created.delete(); } catch (RuntimeException ignored) { }
+            }
+        }
+    }
+
+    protected boolean canWrite() {
+        return !isCanceled() && org.shadowice.flocke.andotp.Utilities.VaultSession.getKey() != null;
     }
 
     /** The backup type this task writes (used for the file name and MIME type). */

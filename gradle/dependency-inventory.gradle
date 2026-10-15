@@ -1,0 +1,57 @@
+import java.security.MessageDigest
+
+// Include resolved graph edges and artifact bytes, not machine-specific cache paths.
+// This is provenance for independent-build comparison; it is NOT a committed lockfile.
+tasks.register('writeDependencyInventory') {
+    def report = layout.buildDirectory.file('reports/dependency-inventory.txt')
+    outputs.file(report)
+    outputs.upToDateWhen { false }
+    doLast {
+        def lines = new TreeSet<String>()
+        def record = { String label, configuration ->
+            configuration.incoming.resolutionResult.allDependencies.each { dependency ->
+                if (dependency instanceof org.gradle.api.artifacts.result.UnresolvedDependencyResult) {
+                    throw new GradleException("Unresolved dependency in ${label}: ${dependency.attempted}", dependency.failure)
+                }
+                lines.add("graph ${label} ${dependency.from.id.displayName} -> ${dependency.selected.id.displayName}")
+            }
+            configuration.resolvedConfiguration.resolvedArtifacts.each { artifact ->
+                def digest = MessageDigest.getInstance('SHA-256')
+                artifact.file.withInputStream { input ->
+                    byte[] buffer = new byte[8192]
+                    int count
+                    while ((count = input.read(buffer)) != -1) {
+                        digest.update(buffer, 0, count)
+                    }
+                }
+                lines.add("artifact ${label} ${artifact.moduleVersion.id} ${artifact.name}:${artifact.classifier ?: ''}:${artifact.extension} ${digest.digest().encodeHex()}")
+            }
+        }
+        record('root-buildscript', project.buildscript.configurations.classpath)
+        def app = project(':app')
+        ['fdroidDebug', 'fdroidRelease', 'playDebug', 'playRelease',
+         'fdroidDebugUnitTest', 'playDebugUnitTest',
+         'fdroidDebugAndroidTest', 'playDebugAndroidTest'].each { variant ->
+            ['CompileClasspath', 'RuntimeClasspath'].each { suffix ->
+                def name = "${variant}${suffix}"
+                // Missing configurations are errors: do not silently omit test inputs.
+                record(name, app.configurations.getByName(name))
+            }
+        }
+        // Kotlin's compiler/build-tools/plugin artifacts are build inputs too, not
+        // just the stdlib on variant classpaths. Include all resolvable such configs.
+        def kotlinTooling = app.configurations.findAll { configuration ->
+            configuration.canBeResolved && (configuration.name.startsWith('kotlinCompiler')
+                    || configuration.name.startsWith('kotlinBuildTools'))
+        }.sort { it.name }
+        if (!kotlinTooling.any { it.name == 'kotlinCompilerClasspath' }) {
+            throw new GradleException('Missing Kotlin compiler configuration; review inventory coverage')
+        }
+        kotlinTooling.each { configuration ->
+            record("kotlin-tooling:${configuration.name}", configuration)
+        }
+        def destination = report.get().asFile
+        destination.parentFile.mkdirs()
+        destination.setText(lines.join('\n') + '\n', 'UTF-8')
+    }
+}

@@ -62,6 +62,11 @@ import org.shadowice.flocke.andotp.Tasks.UiBasedBackgroundTask;
 import org.shadowice.flocke.andotp.Utilities.BackupHelper;
 import org.shadowice.flocke.andotp.Utilities.Constants;
 import org.shadowice.flocke.andotp.Utilities.DatabaseHelper;
+import org.shadowice.flocke.andotp.Utilities.VaultRestoreOperation;
+import org.shadowice.flocke.andotp.Utilities.VaultReadResult;
+import org.shadowice.flocke.andotp.Utilities.VaultSession;
+import org.shadowice.flocke.andotp.Utilities.BoundedOutput;
+import org.shadowice.flocke.andotp.Utilities.BoundedInputReader;
 import org.shadowice.flocke.andotp.Utilities.EncryptionHelper;
 import org.shadowice.flocke.andotp.Utilities.Tools;
 
@@ -79,6 +84,7 @@ public class BackupActivity extends BackgroundTaskActivity<BackupTaskResult> {
 
     private Constants.BackupType backupType = Constants.BackupType.ENCRYPTED;
     private SecretKey encryptionKey = null;
+    private VaultRestoreOperation restoreOperation;
 
     private OpenPgpServiceConnection pgpServiceConnection;
     private String pgpEncryptionUserIDs;
@@ -114,9 +120,9 @@ public class BackupActivity extends BackgroundTaskActivity<BackupTaskResult> {
         stub.setLayoutResource(R.layout.content_backup);
         View v = stub.inflate();
 
-        Intent callingIntent = getIntent();
-        byte[] keyMaterial = callingIntent.getByteArrayExtra(Constants.EXTRA_BACKUP_ENCRYPTION_KEY);
-        encryptionKey = EncryptionHelper.generateSymmetricKey(keyMaterial);
+        encryptionKey = VaultSession.getKey();
+        if (encryptionKey == null) { finish(); return; }
+        restoreOperation = new VaultRestoreOperation(this);
 
         Spinner spBackupType = v.findViewById(R.id.backupType);
         btnBackup = v.findViewById(R.id.buttonBackup);
@@ -245,11 +251,21 @@ public class BackupActivity extends BackgroundTaskActivity<BackupTaskResult> {
 
     @Override
     public void onDestroy() {
+        encryptionKey = null;
         super.onDestroy();
 
         if (pgpServiceConnection != null)
             pgpServiceConnection.unbindFromService();
     }
+
+    @Override protected boolean requiresVaultSession() { return true; }
+    @Override protected void onVaultLocked() {
+        encryptionKey = null;
+        cancelBackgroundTask();
+        finish();
+    }
+
+    private boolean canOperate() { return !isFinishing() && encryptionKey != null && VaultSession.getKey() == encryptionKey; }
 
     // TODO: Show more information about the finished backup (e.g. a notification with the file name)
     private void notifyBackupState(int msgId) {
@@ -257,7 +273,21 @@ public class BackupActivity extends BackgroundTaskActivity<BackupTaskResult> {
     }
 
     @Override
+    protected void onTaskFailure(org.shadowice.flocke.andotp.Tasks.TaskFailure error) {
+        notifyBackupState(currentTask == BackupTaskResult.ResultType.RESTORE
+                ? R.string.backup_toast_import_failed : R.string.backup_toast_export_failed);
+    }
+
+    private ArrayList<Entry> readOwnedEntries() {
+        VaultReadResult result = DatabaseHelper.readVault(this, encryptionKey);
+        if (!(result instanceof VaultReadResult.Loaded))
+            throw new IllegalStateException("Vault unavailable");
+        return ((VaultReadResult.Loaded) result).takeEntries();
+    }
+
+    @Override
     void onTaskResult(BackupTaskResult backupTaskResult) {
+        if (!canOperate()) return;
         if (backupTaskResult.resultType == BackupTaskResult.ResultType.BACKUP)
             handleBackupTaskResult(backupTaskResult);
         else if (backupTaskResult.resultType == BackupTaskResult.ResultType.RESTORE)
@@ -281,14 +311,15 @@ public class BackupActivity extends BackgroundTaskActivity<BackupTaskResult> {
         if (result.success) {
             if (result.isPGP) {
                 InputStream is = new ByteArrayInputStream(result.payload.getBytes(StandardCharsets.UTF_8));
-                ByteArrayOutputStream os = new ByteArrayOutputStream();
+                ByteArrayOutputStream os = new BoundedOutput(BoundedInputReader.MAX_DOCUMENT_BYTES);
 
                 OpenPgpApi api = new OpenPgpApi(this, pgpServiceConnection.getService());
-                Intent resultIntent = api.executeApi(result.decryptIntent, is, os);
-
+                Intent resultIntent;
+                try { resultIntent = api.executeApi(result.decryptIntent, is, os); }
+                catch (RuntimeException error) { notifyBackupState(R.string.backup_toast_import_failed); return; }
                 handleOpenPGPResult(resultIntent, os, result.uri, Constants.INTENT_BACKUP_DECRYPT_PGP);
             } else {
-                restoreEntries(result.payload, false);
+                if (restoreEntries(result.payload, false)) finishWithResult();
             }
         } else {
             if (result.messageId != 0)
@@ -297,8 +328,7 @@ public class BackupActivity extends BackgroundTaskActivity<BackupTaskResult> {
                 notifyBackupState(R.string.backup_toast_import_failed);
         }
 
-        if (result.success && !result.isPGP)
-            finishWithResult();
+
     }
 
     @Override
@@ -410,29 +440,25 @@ public class BackupActivity extends BackgroundTaskActivity<BackupTaskResult> {
     }
 
     /** Adds the restored entries (replacing the current ones if selected) and saves the database. */
-    private void restoreEntries(String text, boolean finish) {
-        ArrayList<Entry> entries = DatabaseHelper.stringToEntries(text);
-
-        if (entries.size() > 0) {
-            if (! swReplace.isChecked()) {
-                ArrayList<Entry> currentEntries = DatabaseHelper.loadDatabase(this, encryptionKey);
-
-                entries.removeAll(currentEntries);
-                entries.addAll(currentEntries);
-            }
-
-            if (DatabaseHelper.saveDatabase(this, entries, encryptionKey)) {
-                reload = true;
-                Toast.makeText(this, R.string.backup_toast_import_success, Toast.LENGTH_LONG).show();
-
-                if (finish)
-                    finishWithResult();
-            } else {
-                Toast.makeText(this, R.string.backup_toast_import_save_failed, Toast.LENGTH_LONG).show();
-            }
-        } else {
-            Toast.makeText(this, R.string.backup_toast_import_no_entries, Toast.LENGTH_LONG).show();
+    private boolean restoreEntries(String text, boolean finish) {
+        if (!canOperate()) return false;
+        VaultRestoreOperation.Result result = restoreOperation.restore(text, swReplace.isChecked(),
+                encryptionKey, VaultSession.generation(), this::canOperate);
+        if (result == VaultRestoreOperation.Result.SAVED) {
+            reload = true;
+            notifyBackupState(R.string.backup_toast_import_success);
+            if (finish) finishWithResult();
+            return true;
         }
+        if (result == VaultRestoreOperation.Result.EMPTY_IMPORT)
+            notifyBackupState(R.string.backup_toast_import_no_entries);
+        else if (result == VaultRestoreOperation.Result.SAVE_FAILED
+                || result == VaultRestoreOperation.Result.SESSION_REVOKED
+                || result == VaultRestoreOperation.Result.RECOVERY_REQUIRED)
+            notifyBackupState(R.string.backup_toast_import_save_failed);
+        else
+            notifyBackupState(R.string.backup_toast_import_failed);
+        return false;
     }
 
     /* Encrypted backup functions */
@@ -469,17 +495,13 @@ public class BackupActivity extends BackgroundTaskActivity<BackupTaskResult> {
     }
 
     private void doBackupCryptWithPassword(Uri uri, String password) {
-        if (Tools.isExternalStorageWritable()) {
-            ArrayList<Entry> entries = DatabaseHelper.loadDatabase(this, encryptionKey);
-
-            EncryptedBackupTask task = new EncryptedBackupTask(this, entries, password, uri);
-            startBackgroundTask(task, BackupTaskResult.ResultType.BACKUP);
-        } else {
-            Toast.makeText(this, R.string.backup_toast_storage_not_accessible, Toast.LENGTH_LONG).show();
-        }
+        if (!canOperate()) return;
+        try {
+            ArrayList<Entry> entries = readOwnedEntries();
+            try { startBackgroundTask(new EncryptedBackupTask(this, entries, password, uri), BackupTaskResult.ResultType.BACKUP); }
+            finally { for (Entry entry : entries) entry.destroy(); }
+        } catch (RuntimeException error) { notifyBackupState(R.string.backup_toast_export_failed); }
     }
-
-    /* OpenPGP backup functions */
 
     private void restoreEncryptedWithPGP(Uri uri, Intent decryptIntent) {
         if (decryptIntent == null)
@@ -499,8 +521,14 @@ public class BackupActivity extends BackgroundTaskActivity<BackupTaskResult> {
     }
 
     private void backupEncryptedWithPGP(Uri uri, Intent encryptIntent) {
-        ArrayList<Entry> entries = DatabaseHelper.loadDatabase(this, encryptionKey);
-        String plainJSON = DatabaseHelper.entriesToString(entries);
+        if (!canOperate()) return;
+        ArrayList<Entry> entries;
+        String plainJSON;
+        try {
+            entries = readOwnedEntries();
+            try { plainJSON = DatabaseHelper.entriesToString(entries); }
+            finally { for (Entry entry : entries) entry.destroy(); }
+        } catch (RuntimeException error) { notifyBackupState(R.string.backup_toast_export_failed); return; }
 
         if (encryptIntent == null) {
             encryptIntent = new Intent();
@@ -517,9 +545,11 @@ public class BackupActivity extends BackgroundTaskActivity<BackupTaskResult> {
         }
 
         InputStream is = new ByteArrayInputStream(plainJSON.getBytes(StandardCharsets.UTF_8));
-        ByteArrayOutputStream os = new ByteArrayOutputStream();
+        ByteArrayOutputStream os = new BoundedOutput(BoundedInputReader.MAX_DOCUMENT_BYTES);
         OpenPgpApi api = new OpenPgpApi(this, pgpServiceConnection.getService());
-        Intent result = api.executeApi(encryptIntent, is, os);
+        Intent result;
+        try { result = api.executeApi(encryptIntent, is, os); }
+        catch (RuntimeException error) { notifyBackupState(R.string.backup_toast_export_failed); return; }
         handleOpenPGPResult(result, os, uri, Constants.INTENT_BACKUP_ENCRYPT_PGP);
     }
 
@@ -530,6 +560,9 @@ public class BackupActivity extends BackgroundTaskActivity<BackupTaskResult> {
 
     /** Handles the OpenPGP API result; a pending user interaction is passed to the OpenPGP app. */
     public void handleOpenPGPResult(Intent result, ByteArrayOutputStream os, Uri file, int requestCode) {
+        if (!canOperate() || result == null || (os instanceof BoundedOutput && ((BoundedOutput) os).overflowed())) {
+            notifyBackupState(R.string.backup_toast_import_failed); return;
+        }
         if (result.getIntExtra(OpenPgpApi.RESULT_CODE, OpenPgpApi.RESULT_CODE_ERROR) == OpenPgpApi.RESULT_CODE_SUCCESS) {
             if (requestCode == Constants.INTENT_BACKUP_ENCRYPT_PGP) {
                 if (os != null)

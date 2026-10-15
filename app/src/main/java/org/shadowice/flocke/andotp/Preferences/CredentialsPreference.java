@@ -78,6 +78,7 @@ public class CredentialsPreference extends DialogPreference
     );
 
     private int minLength = 0;
+    private ChangeCredentialsTask activeTask;
 
     private final Context context;
     private final Settings settings;
@@ -144,6 +145,8 @@ public class CredentialsPreference extends DialogPreference
         passwordLayout = view.findViewById(R.id.passwordLayout);
         passwordInput = view.findViewById(R.id.passwordEdit);
         passwordConfirm = view.findViewById(R.id.passwordConfirm);
+        passwordInput.setSaveEnabled(false);
+        passwordConfirm.setSaveEnabled(false);
 
         if (settings.getBlockAccessibility()) {
             passwordLayout.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS);
@@ -209,7 +212,22 @@ public class CredentialsPreference extends DialogPreference
 
         assert passwordInput.getText() != null; // The save button should only be accessible when a password has been entered (and confirmed)
         ChangeCredentialsTask task = new ChangeCredentialsTask(context, encryptionType, oldEncryptionKey, value, passwordInput.getText().toString());
-        task.setCallback(this::handleTaskResult);
+        if (activeTask != null) { activeTask.setOutcomeCallback(null); activeTask.cancel(); }
+        activeTask = task;
+        task.setOutcomeCallback(outcome -> {
+            if (activeTask != task) { task.disposeOutcome(outcome); return; }
+            activeTask = null;
+            if (outcome instanceof org.shadowice.flocke.andotp.Tasks.TaskOutcome.Value)
+                handleTaskResult(((org.shadowice.flocke.andotp.Tasks.TaskOutcome.Value<ChangeCredentialsTask.Result>) outcome).getValue());
+            else {
+                if (outcome instanceof org.shadowice.flocke.andotp.Tasks.TaskOutcome.Failure)
+                    Toast.makeText(getContext(), R.string.settings_toast_encryption_change_failed, Toast.LENGTH_LONG).show();
+                passwordInput.setText("");
+                passwordConfirm.setText("");
+                setInProgress(false);
+                getDialog().dismiss();
+            }
+        });
 
         setInProgress(true);
         task.execute();
@@ -231,15 +249,31 @@ public class CredentialsPreference extends DialogPreference
     /** Persists the new value on success and closes the dialog. */
     private void handleTaskResult(ChangeCredentialsTask.Result result) {
         if (result.success) {
-            persistString(value.toString().toLowerCase());
+            // Credentials and auth mode were already committed with the ciphertext.
             setSummary(entries.get(entryValues.indexOf(value)));
 
             if (encryptionChangeCallback != null)
                 encryptionChangeCallback.onSuccessfulEncryptionChange(result.encryptionType, result.newEncryptionKey);
+        } else {
+            Toast.makeText(getContext(), R.string.settings_toast_encryption_change_failed, Toast.LENGTH_LONG).show();
         }
 
+        passwordInput.setText("");
+        passwordConfirm.setText("");
         setInProgress(false);
         getDialog().dismiss();
+    }
+
+    @Override
+    protected void onDialogClosed(boolean positiveResult) {
+        if (activeTask != null) {
+            activeTask.setOutcomeCallback(null);
+            activeTask.cancel();
+            activeTask = null;
+        }
+        if (passwordInput != null) passwordInput.setText("");
+        if (passwordConfirm != null) passwordConfirm.setText("");
+        super.onDialogClosed(positiveResult);
     }
 
     @Override

@@ -68,9 +68,13 @@ key, which renders them useless.
 
 ### Automatic backups:
 
- * BroadcastReceivers: andOTP supports a number of broadcasts to perform automated backups, e.g. via Tasker. These will get saved to the defined backup directory. **These only work when KeyStore is used as the encryption mechanism.**
-   - **org.shadowice.flocke.andotp.broadcast.ENCRYPTED_BACKUP**: Perform an encrypted backup of your 2FA database using the selected password in settings.
-     Android 8.0 and newer only deliver this broadcast when it is addressed to andOTP. Set the package to `org.shadowice.flocke.andotp` (`org.shadowice.flocke.andotp.dev` for the dev build), e.g. `adb shell am broadcast -a org.shadowice.flocke.andotp.broadcast.ENCRYPTED_BACKUP -p org.shadowice.flocke.andotp`, or use the package field of Tasker's Send Intent action.
+ * **Signature-authorized automation only:** `org.shadowice.flocke.andotp.broadcast.ENCRYPTED_BACKUP` requires `${applicationId}.permission.CONTROL_VAULT`, requested by a companion app signed with the **same signing identity** as andOTP. An explicit package/component is also required on modern Android, but is not authorization. Independently signed Tasker/PanicKit apps and ordinary `adb shell` commands no longer have access. This compatibility break also applies to panic IPC.
+ * Broadcast backups require opt-in, KeyStore database encryption, a configured backup directory and a nonempty encrypted backup password. Duplicate requests are coalesced and rate-limited. Automatic exports use new UUID-named documents to avoid overwriting the last recoverable backup.
+ * **Android cloud backup/device transfer are disabled.** Use portable password-encrypted or OpenPGP backups and verify that you can restore them before changing devices, clearing keys or switching signing identities.
+
+See [Vault security hardening](docs/vault-security-hardening.md) for input limits,
+fail-closed behavior, process-only sessions, credential transactions, backup lifecycle
+and remaining verification requirements.
 
 ## Migration:
 
@@ -79,6 +83,15 @@ Check out [this](https://github.com/andOTP/andOTP/wiki/Migration) wiki page to l
 **Warning**: Builds signed with different keys are not compatible!
 You will have to uninstall one to install the other, which will delete all your data.
 So make sure you have a **current backup** before switching!
+
+## Building and testing:
+
+See [Reproducible builds and security regression tests](docs/build-and-security-tests.md)
+for the pinned toolchain, local commands, CI checks, dependency-baseline review,
+and test coverage/limitations. The [Kotlin OTP parser pilot](docs/kotlin-otp-parser-pilot.md)
+adds a small validated URI boundary with explicit results while retaining Java callers.
+Instrumentation tests must only run on disposable
+emulators or installations without real accounts.
 
 ## Contribute:
 
@@ -145,3 +158,5 @@ LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRA
 TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE
 OR OTHER DEALINGS IN THE SOFTWARE.
 ```
+
+The [vault/session/task contract migration](docs/kotlin-vault-session-task-contracts.md) extends the Kotlin OTP pilot with typed outcomes and controllers; compilation and device acceptance remain pending.

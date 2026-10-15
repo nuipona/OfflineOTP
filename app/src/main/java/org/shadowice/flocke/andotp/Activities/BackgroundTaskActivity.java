@@ -10,6 +10,8 @@ import androidx.lifecycle.LifecycleOwner;
 import androidx.lifecycle.ProcessLifecycleOwner;
 
 import org.shadowice.flocke.andotp.Tasks.UiBasedBackgroundTask;
+import org.shadowice.flocke.andotp.Tasks.TaskOutcome;
+import org.shadowice.flocke.andotp.Tasks.TaskFailure;
 
 /**
  * Base activity for screens that run one {@link UiBasedBackgroundTask} through a retained task
@@ -19,9 +21,15 @@ public abstract class BackgroundTaskActivity<Result> extends BaseActivity {
     final protected String TAG_TASK_FRAGMENT = this.getClass().getSimpleName() + ".TaskFragment";
 
     private ProcessLifecycleObserver observer = null;
+    private UiBasedBackgroundTask<Result> activeTask;
+    private TaskFragment<Result> activeFragment;
 
     /** Called with the result of a finished task; the UI is already back to its idle state. */
     abstract void onTaskResult(Result result);
+
+    protected void onTaskFailure(TaskFailure error) {
+        onReturnToCanceledTask();
+    }
 
     protected void onReturnToCanceledTask() {
         // Override to react when the user comes back to a canceled task
@@ -63,7 +71,7 @@ public abstract class BackgroundTaskActivity<Result> extends BaseActivity {
     @Override
     public void onResume() {
         super.onResume();
-        checkBackgroundTask();
+        if (!isFinishing()) checkBackgroundTask();
     }
 
     @Override
@@ -74,7 +82,7 @@ public abstract class BackgroundTaskActivity<Result> extends BaseActivity {
         TaskFragment<Result> taskFragment = findTaskFragment();
 
         if (taskFragment != null)
-            taskFragment.setCallback(null);
+            taskFragment.setOutcomeCallback(null);
     }
 
     /** Cancels the running task (if any) and restores the idle UI. */
@@ -89,72 +97,65 @@ public abstract class BackgroundTaskActivity<Result> extends BaseActivity {
 
     /** Hands the task to the retained fragment and switches to the running UI. */
     protected void startBackgroundTask(UiBasedBackgroundTask<Result> task) {
-        TaskFragment<Result> taskFragment = findTaskFragment();
-
-        // Don't start a task if we already have an active task running.
-        if (taskFragment == null || taskFragment.isCanceled()) {
-            task.setCallback(this::handleTaskResult);
-
-            if (taskFragment == null) {
-                taskFragment = new TaskFragment<>();
-                getFragmentManager()
-                        .beginTransaction()
-                        .add(taskFragment, TAG_TASK_FRAGMENT)
-                        .commit();
-            }
-
-            taskFragment.startTask(task);
-
-            setupUiForTaskState(true);
+        TaskFragment<Result> fragment = findTaskFragment();
+        if (fragment != null && !fragment.isCanceled()) {
+            task.setOutcomeCallback(null);
+            task.cancel();
+            return;
         }
-    }
-
-    private void handleTaskResult(Result result) {
-        setupUiForTaskState(false);
-
-        onTaskResult(result);
-
-        // Remove the task fragment after the task is finished
-        TaskFragment<Result> taskFragment = findTaskFragment();
-
-        if (taskFragment != null) {
-            getFragmentManager().beginTransaction()
-                    .remove(taskFragment)
-                    .commit();
-        }
-    }
-
-    /** Re-attaches the result callback after returning to the activity. */
-    private void checkBackgroundTask() {
-        TaskFragment<Result> taskFragment = findTaskFragment();
-
-        if (taskFragment != null) {
-            if (taskFragment.isCanceled()) {
-                // The task was canceled, so remove the task fragment
-                getFragmentManager().beginTransaction()
-                        .remove(taskFragment)
-                        .commit();
-
-                onReturnToCanceledTask();
-
-                setupUiForTaskState(false);
-            } else {
-                taskFragment.setCallback(this::handleTaskResult);
-
-                setupUiForTaskState(true);
-            }
+        if (fragment == null) {
+            fragment = new TaskFragment<>();
+            activeFragment = fragment;
+            getFragmentManager().beginTransaction().add(fragment, TAG_TASK_FRAGMENT).commit();
         } else {
-            setupUiForTaskState(false);
+            fragment.setOutcomeCallback(null);
         }
+        activeTask = task;
+        task.setOutcomeCallback(outcome -> handleTaskOutcome(task, outcome));
+        fragment.startTask(task);
+        setupUiForTaskState(true);
+    }
+
+    private void handleTaskOutcome(UiBasedBackgroundTask<Result> source, TaskOutcome<Result> outcome) {
+        if (source != activeTask) {
+            source.disposeOutcome(outcome);
+            return;
+        }
+        TaskFragment<Result> fragment = findTaskFragment();
+        activeTask = null;
+        activeFragment = null;
+        if (fragment != null && fragment.task == source) {
+            fragment.task = null;
+            getFragmentManager().beginTransaction().remove(fragment).commit();
+        }
+        setupUiForTaskState(false);
+        if (outcome instanceof TaskOutcome.Value)
+            onTaskResult(((TaskOutcome.Value<Result>) outcome).getValue());
+        else if (outcome instanceof TaskOutcome.Failure)
+            onTaskFailure(((TaskOutcome.Failure<Result>) outcome).getError());
+        else
+            onReturnToCanceledTask();
+    }
+
+    /** Rebind the same task on resume, including a retained cancellation outcome. */
+    private void checkBackgroundTask() {
+        TaskFragment<Result> fragment = findTaskFragment();
+        if (fragment == null) { setupUiForTaskState(false); return; }
+        activeFragment = fragment;
+        activeTask = fragment.task;
+        UiBasedBackgroundTask<Result> source = activeTask;
+        fragment.setOutcomeCallback(outcome -> handleTaskOutcome(source, outcome));
+        setupUiForTaskState(!fragment.isCanceled());
     }
 
     /** The retained task fragment, or null if none is attached. */
     @Nullable
     @SuppressWarnings("unchecked")
     private TaskFragment<Result> findTaskFragment() {
+        if (activeFragment != null && activeFragment.task != null) return activeFragment;
         Fragment fragment = getFragmentManager().findFragmentByTag(TAG_TASK_FRAGMENT);
 
-        if (fragment instanceof TaskFragment)
+        if (fragment instanceof TaskFragment && ((TaskFragment<?>) fragment).task != null)
             return (TaskFragment<Result>) fragment;
         else
             return null;
@@ -183,9 +184,14 @@ public abstract class BackgroundTaskActivity<Result> extends BaseActivity {
             task.execute();
         }
 
-        public void setCallback(@Nullable UiBasedBackgroundTask.UiCallback<Result> callback) {
+        public void setOutcomeCallback(@Nullable UiBasedBackgroundTask.OutcomeCallback<Result> callback) {
             if (this.task != null)
-                this.task.setCallback(callback);
+                this.task.setOutcomeCallback(callback);
+        }
+
+        @Override public void onDestroy() {
+            if (task != null) { task.setOutcomeCallback(null); task.cancel(); }
+            super.onDestroy();
         }
 
         public boolean isCanceled() {

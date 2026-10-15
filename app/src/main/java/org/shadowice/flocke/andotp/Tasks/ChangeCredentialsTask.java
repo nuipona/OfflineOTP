@@ -11,8 +11,7 @@ import org.shadowice.flocke.andotp.Utilities.Settings;
 import javax.crypto.SecretKey;
 
 /** Changes the authentication credentials and re-encrypts the database if required. */
-public class ChangeCredentialsTask extends UiBasedBackgroundTask<ChangeCredentialsTask.Result>
-    implements EncryptionHelper.EncryptionChangeCallback {
+public class ChangeCredentialsTask extends UiBasedBackgroundTask<ChangeCredentialsTask.Result> {
 
     private final Context context;
     private final Settings settings;
@@ -20,8 +19,6 @@ public class ChangeCredentialsTask extends UiBasedBackgroundTask<ChangeCredentia
     private final Constants.AuthMethod newAuthMethod;
     private final SecretKey oldEncryptionKey;
     private final String password;
-
-    private SecretKey newEncryptionKey = null;
 
     public ChangeCredentialsTask(Context context, Constants.EncryptionType encryptionType, SecretKey oldKey, Constants.AuthMethod newAuth, String password) {
         super(new Result(false, null, null));
@@ -34,38 +31,31 @@ public class ChangeCredentialsTask extends UiBasedBackgroundTask<ChangeCredentia
         this.password = password;
     }
 
-    @Override
-    public void onSuccessfulEncryptionChange(Constants.EncryptionType newEncryptionType, SecretKey newEncryptionKey) {
-        this.newEncryptionKey = newEncryptionKey;
-    }
-
     /** Stores the new credentials and re-encrypts the database when password encryption is used. */
     @NonNull
     @Override
     protected Result doInBackground() {
-        byte[] newKey = null;
-
-        if (newAuthMethod == Constants.AuthMethod.PASSWORD || newAuthMethod == Constants.AuthMethod.PIN) {
-            if (!password.isEmpty()) {
-                newKey = settings.setAuthCredentials(password);
-            } else {
-                return new Result(false, null, null);
+        Settings.PreparedCredentials prepared = null;
+        try {
+            if (isCanceled() || oldEncryptionKey == null || org.shadowice.flocke.andotp.Utilities.VaultSession.getKey() != oldEncryptionKey) return new Result(false, null, null);
+            if (newAuthMethod == Constants.AuthMethod.PASSWORD || newAuthMethod == Constants.AuthMethod.PIN) prepared = settings.prepareAuthCredentials(password);
+            if (encryptionType == Constants.EncryptionType.PASSWORD && prepared == null) return new Result(false, null, null);
+            SecretKey nextKey = encryptionType == Constants.EncryptionType.PASSWORD
+                    ? EncryptionHelper.generateSymmetricKey(prepared.key) : oldEncryptionKey;
+            Settings.PreparedCredentials credentials = prepared;
+            long epoch = org.shadowice.flocke.andotp.Utilities.VaultSession.generation();
+            synchronized (org.shadowice.flocke.andotp.Utilities.DatabaseHelper.DatabaseFileLock) {
+                if (isCanceled() || org.shadowice.flocke.andotp.Utilities.VaultSession.getKey() != oldEncryptionKey) return new Result(false, null, null);
+                org.shadowice.flocke.andotp.Utilities.VaultWriteResult write = org.shadowice.flocke.andotp.Utilities.DatabaseHelper.changeVaultEncryption(context,
+                        oldEncryptionKey, nextKey, false, id -> {
+                            if (isCanceled() || !org.shadowice.flocke.andotp.Utilities.VaultSession.isCurrent(epoch)) return org.shadowice.flocke.andotp.Utilities.VaultCommitDecision.CANCELED;
+                            return org.shadowice.flocke.andotp.Utilities.VaultCommitDecision.fromCommit(settings.commitVaultSettings(id, encryptionType, newAuthMethod, credentials, false));
+                        });
+                boolean success = write instanceof org.shadowice.flocke.andotp.Utilities.VaultWriteResult.Saved;
+                return new Result(success, success ? nextKey : null, encryptionType);
             }
-        }
-
-        if (settings.getEncryption() == Constants.EncryptionType.PASSWORD) {
-            if (newKey == null)
-                return new Result(false, null, null);
-
-            if (EncryptionHelper.tryEncryptionChange(context, oldEncryptionKey, encryptionType, newKey, this) != EncryptionHelper.EncryptionChangeResult.SUCCESS)
-                return new Result(false, null, null);
-        }
-
-        // We already persist the new value here so if something happens to the calling preference
-        // everything is already finalized
-        settings.setAuthMethod(newAuthMethod);
-
-        return new Result(true, newEncryptionKey, encryptionType);
+        } catch (Exception error) { return new Result(false, null, null); }
+        finally { if (prepared != null) prepared.destroy(); }
     }
 
     /** Outcome of the change, including the new key and encryption type. */

@@ -27,68 +27,16 @@ import android.app.backup.BackupAgentHelper;
 import android.app.backup.BackupDataInput;
 import android.app.backup.BackupDataOutput;
 import android.app.backup.FullBackupDataOutput;
-import android.app.backup.FileBackupHelper;
-import android.app.backup.SharedPreferencesBackupHelper;
 import android.os.ParcelFileDescriptor;
-import android.util.Log;
-
-
 import java.io.IOException;
 
-/** Backs up the preferences and the (already encrypted) database files via the Android backup service. */
+/** Legacy class retained to refuse old platform backup/restore callbacks. Not registered. */
 public class BackupAgent extends BackupAgentHelper {
-    static final String PREFS_BACKUP_KEY = "prefs";
-    static final String FILES_BACKUP_KEY = "files";
-
-    @Override
-    public void onBackup(ParcelFileDescriptor oldState, BackupDataOutput data, ParcelFileDescriptor newState) throws IOException {
-        Settings settings = new Settings(this);
-        StringBuilder stringBuilder = new StringBuilder("onBackup called with the backup service set to ");
-        stringBuilder.append(settings.getAndroidBackupServiceEnabled() ? "enabled" : "disabled");
-
-        if(settings.getAndroidBackupServiceEnabled()) {
-            synchronized (DatabaseHelper.DatabaseFileLock) {
-                stringBuilder.append(" calling parent onBackup");
-                super.onBackup(oldState, data, newState);
-            }
-        }
-        Log.d(BackupAgent.class.getSimpleName(), stringBuilder.toString());
-    }
-
-    /** With fullBackupOnly, the system uses this path instead of onBackup, so it must honor the setting too. */
-    @Override
-    public void onFullBackup(FullBackupDataOutput data) throws IOException {
-        Settings settings = new Settings(this);
-        if (!settings.getAndroidBackupServiceEnabled()) {
-            Log.d(BackupAgent.class.getSimpleName(), "onFullBackup skipped, backup service disabled");
-            return;
-        }
-        synchronized (DatabaseHelper.DatabaseFileLock) {
-            super.onFullBackup(data);
-        }
-    }
-
-    @Override
-    public void onRestore(BackupDataInput data, int appVersionCode, ParcelFileDescriptor newState) throws IOException {
-        Settings settings = new Settings(this);
-        StringBuilder stringBuilder = new StringBuilder("onRestore called with the backup service set to ");
-        stringBuilder.append(settings.getAndroidBackupServiceEnabled() ? "enabled" : "disabled");
-
-        synchronized (DatabaseHelper.DatabaseFileLock) {
-            stringBuilder.append(" but restore happens regardless, calling parent onRestore");
-            super.onRestore(data, appVersionCode, newState);
-        }
-        Log.d(BackupAgent.class.getSimpleName(), stringBuilder.toString());
-    }
-
-    @Override
-    public void onCreate() {
-        String prefs = android.preference.PreferenceManager.getDefaultSharedPreferencesName(this);
-
-        SharedPreferencesBackupHelper sharedPreferencesBackupHelper = new SharedPreferencesBackupHelper(this, prefs);
-        addHelper(PREFS_BACKUP_KEY, sharedPreferencesBackupHelper);
-
-        FileBackupHelper fileBackupHelper = new FileBackupHelper(this, Constants.FILENAME_DATABASE, Constants.FILENAME_DATABASE_BACKUP);
-        addHelper(FILES_BACKUP_KEY, fileBackupHelper);
+    @Override public void onCreate() { }
+    @Override public void onBackup(ParcelFileDescriptor oldState, BackupDataOutput data,
+                                    ParcelFileDescriptor newState) { }
+    @Override public void onFullBackup(FullBackupDataOutput data) { }
+    @Override public void onRestore(BackupDataInput data, int version, ParcelFileDescriptor state) throws IOException {
+        throw new IOException("Platform restore is disabled; use portable encrypted backups");
     }
 }

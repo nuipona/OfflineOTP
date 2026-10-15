@@ -35,7 +35,6 @@ import java.security.GeneralSecurityException;
 import java.security.KeyPair;
 import java.security.KeyPairGenerator;
 import java.security.KeyStore;
-import java.security.ProviderException;
 import java.security.spec.AlgorithmParameterSpec;
 import java.util.Calendar;
 import java.util.GregorianCalendar;
@@ -48,17 +47,25 @@ public class KeyStoreHelper {
 
     /** Deletes the wrapped key file and the KeyStore entry (PANIC response and "clear keystore"). */
     public static void wipeKeys(Context context) {
-        File keyFile = new File(context.getFilesDir() + "/" + Constants.FILENAME_ENCRYPTED_KEY);
-        keyFile.delete();
-
-        try {
-            final KeyStore keyStore = KeyStore.getInstance("AndroidKeyStore");
-            keyStore.load(null);
-            if (keyStore.containsAlias(Constants.KEYSTORE_ALIAS_WRAPPING))
-                keyStore.deleteEntry(Constants.KEYSTORE_ALIAS_WRAPPING);
-        } catch (GeneralSecurityException | IOException e) {
-            e.printStackTrace();
+        VaultSession.lock(SessionLockReason.RESET);
+        synchronized (DatabaseHelper.DatabaseFileLock) {
+            FileHelper.delete(new File(context.getFilesDir(), Constants.FILENAME_ENCRYPTED_KEY));
+            try {
+                KeyStore store = KeyStore.getInstance("AndroidKeyStore");
+                store.load(null);
+                for (String alias : new String[] {Constants.KEYSTORE_ALIAS_WRAPPING, Constants.KEYSTORE_ALIAS_PASSWORD}) {
+                    if (store.containsAlias(alias)) store.deleteEntry(alias);
+                }
+            } catch (GeneralSecurityException | IOException | RuntimeException error) { /* No replacement keys on error. */ }
         }
+    }
+
+    public static KeyPair loadAsymmetricKeyPair(Context context, String alias) throws GeneralSecurityException, IOException {
+        KeyStore store = KeyStore.getInstance("AndroidKeyStore");
+        store.load(null);
+        if (!store.containsAlias(alias)) return null;
+        KeyStore.PrivateKeyEntry entry = (KeyStore.PrivateKeyEntry) store.getEntry(alias, null);
+        return entry == null ? null : new KeyPair(entry.getCertificate().getPublicKey(), entry.getPrivateKey());
     }
 
     /** Returns the RSA key pair stored under the alias, generating it first if needed. */
@@ -94,21 +101,29 @@ public class KeyStoreHelper {
             return null;
     }
 
-    /** Loads the AES key wrapped with the KeyStore key pair (the database key in KeyStore mode);
-     * errors are only shown to the user if {@code failSilent} is false. */
+    /** Read-only key lookup. Missing files/aliases never generate replacements. */
     public static SecretKey loadEncryptionKeyFromKeyStore(Context context, boolean failSilent) {
-        SecretKey encKey = null;
-
-        try {
-            KeyPair pair = KeyStoreHelper.loadOrGenerateAsymmetricKeyPair(context, Constants.KEYSTORE_ALIAS_WRAPPING);
-            if (pair != null)
-                encKey = EncryptionHelper.loadOrGenerateWrappedKey(new File(context.getFilesDir() + "/" + Constants.FILENAME_ENCRYPTED_KEY), pair);
-        } catch (GeneralSecurityException | IOException | ProviderException e) {
-            e.printStackTrace();
-            if (! failSilent)
-                UIHelper.showGenericDialog(context, R.string.dialog_title_keystore_error, R.string.dialog_msg_keystore_error);
+        synchronized (DatabaseHelper.DatabaseFileLock) {
+            try {
+                File wrapped = new File(context.getFilesDir(), Constants.FILENAME_ENCRYPTED_KEY);
+                if (!FileHelper.exists(wrapped)) return null;
+                KeyPair pair = loadAsymmetricKeyPair(context, Constants.KEYSTORE_ALIAS_WRAPPING);
+                if (pair == null) return null;
+                return new SecretKeyWrapper(pair).unwrap(FileHelper.readFileToBytes(wrapped));
+            } catch (GeneralSecurityException | IOException | RuntimeException error) { return null; }
         }
+    }
 
-        return encKey;
+    /** Only explicit new-vault/reset/migration paths may call this. */
+    public static SecretKey createEncryptionKey(Context context) {
+        synchronized (DatabaseHelper.DatabaseFileLock) {
+            File wrapped = new File(context.getFilesDir(), Constants.FILENAME_ENCRYPTED_KEY);
+            if (FileHelper.exists(wrapped)) return loadEncryptionKeyFromKeyStore(context, true);
+            try {
+                KeyPair pair = loadOrGenerateAsymmetricKeyPair(context, Constants.KEYSTORE_ALIAS_WRAPPING);
+                if (pair == null) return null;
+                return EncryptionHelper.loadOrGenerateWrappedKey(wrapped, pair);
+            } catch (GeneralSecurityException | IOException | RuntimeException error) { return null; }
+        }
     }
 }

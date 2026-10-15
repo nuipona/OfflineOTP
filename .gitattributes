@@ -1,0 +1,5 @@
+# Preserve the official wrapper bytes on every checkout.
+gradlew text eol=lf
+gradlew.bat text eol=lf
+*.jar binary
+*.aes binary

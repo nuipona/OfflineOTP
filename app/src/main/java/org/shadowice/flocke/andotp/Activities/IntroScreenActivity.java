@@ -74,6 +74,7 @@ public class IntroScreenActivity extends IntroActivity {
 
     private boolean setupFinished = false;
     private byte[] encryptionKey = null;
+    private long setupGeneration = org.shadowice.flocke.andotp.Utilities.VaultSession.generation();
 
     @Override
     protected void onCreate(Bundle savedInstanceState){
@@ -84,7 +85,8 @@ public class IntroScreenActivity extends IntroActivity {
         androidSyncFragment = new AndroidSyncFragment(encryptionFragment);
         introFinishedFragment = new IntroFinishedFragment(this, (success, encryptionKey) -> {
             this.setupFinished = success;
-            this.encryptionKey = encryptionKey;
+            if (this.encryptionKey != null) java.util.Arrays.fill(this.encryptionKey, (byte) 0);
+            this.encryptionKey = encryptionKey == null ? null : encryptionKey.clone();
         });
 
         encryptionFragment.setEncryptionChangedCallback(newEncryptionType -> authenticationFragment.updateEncryptionType(newEncryptionType));
@@ -161,7 +163,12 @@ public class IntroScreenActivity extends IntroActivity {
     public Intent onSendActivityResult(int result) {
         Intent data = new Intent();
         data.putExtra(Constants.EXTRA_INTRO_FINISHED, setupFinished);
-        data.putExtra(Constants.EXTRA_INTRO_ENCRYPTION_KEY, encryptionKey);
+        if (encryptionKey != null) {
+            org.shadowice.flocke.andotp.Utilities.VaultSession.offerDerivedKey(encryptionKey,
+                    setupGeneration);
+            java.util.Arrays.fill(encryptionKey, (byte) 0);
+            encryptionKey = null;
+        }
 
         return data;
     }
@@ -249,6 +256,7 @@ public class IntroScreenActivity extends IntroActivity {
         private final SaveSettingsCallback callback;
 
         private boolean canGoForward = false;
+        private FinishIntroTask activeTask;
 
         public IntroFinishedFragment(Context context, SaveSettingsCallback callback) {
             this.context = context;
@@ -276,16 +284,46 @@ public class IntroScreenActivity extends IntroActivity {
 
                 if (callback != null)
                     callback.onAfterSaveSettings(false, null);
+                return;
             }
 
             FinishIntroTask task = new FinishIntroTask(context, encryptionType, authMethod, password, androidSyncEnabled);
-            task.setCallback(this::handleTaskResult);
+            if (activeTask != null) { activeTask.setOutcomeCallback(null); activeTask.cancel(); }
+            activeTask = task;
+            task.setOutcomeCallback(outcome -> {
+                if (activeTask != task) { task.disposeOutcome(outcome); return; }
+                activeTask = null;
+                if (outcome instanceof org.shadowice.flocke.andotp.Tasks.TaskOutcome.Value) {
+                    FinishIntroTask.Result result = ((org.shadowice.flocke.andotp.Tasks.TaskOutcome.Value<FinishIntroTask.Result>) outcome).getValue();
+                    try { handleTaskResult(result); }
+                    finally { task.disposeOutcome(outcome); }
+                } else {
+                    title.setText(R.string.intro_slide4_title_failed);
+                    message.setText(R.string.intro_slide4_desc_failed);
+                    progress.setVisibility(View.INVISIBLE);
+                    canGoForward = false;
+                    if (callback != null) callback.onAfterSaveSettings(false, null);
+                }
+            });
 
             progress.setVisibility(View.VISIBLE);
             task.execute();
         }
 
+        @Override public void onDestroyView() {
+            if (activeTask != null) {
+                activeTask.setOutcomeCallback(null);
+                activeTask.cancel();
+                activeTask = null;
+            }
+            super.onDestroyView();
+        }
+
         private void handleTaskResult(FinishIntroTask.Result result) {
+            if (!org.shadowice.flocke.andotp.Utilities.VaultSession.isCurrent(result.generation)) {
+                if (result.encryptionKey != null) java.util.Arrays.fill(result.encryptionKey, (byte) 0);
+                return;
+            }
             if (result.saveSuccessful) {
                 title.setText(R.string.intro_slide4_title);
                 message.setText(R.string.intro_slide4_desc);
@@ -340,8 +378,9 @@ public class IntroScreenActivity extends IntroActivity {
                     R.string.settings_toast_android_sync_disabled
             ));
 
-            introAndroidSync.setChecked(encryptionFragment.getEncryptionType() != Constants.EncryptionType.KEYSTORE);
-            introAndroidSync.setEnabled(encryptionFragment.getEncryptionType() != Constants.EncryptionType.KEYSTORE);
+            introAndroidSync.setChecked(false);
+            introAndroidSync.setEnabled(false);
+            introAndroidSync.setText(R.string.security_platform_backup_disabled);
 
             return root;
         }
@@ -455,7 +494,9 @@ public class IntroScreenActivity extends IntroActivity {
             credentialsLayout = root.findViewById(R.id.introCredentialsLayout);
             passwordLayout = root.findViewById(R.id.introPasswordLayout);
             passwordInput = root.findViewById(R.id.introPasswordEdit);
+            passwordInput.setSaveEnabled(false);
             passwordConfirm = root.findViewById(R.id.introPasswordConfirm);
+            passwordConfirm.setSaveEnabled(false);
 
             generateSelectionMapping();
 

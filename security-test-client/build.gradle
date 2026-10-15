@@ -1,0 +1,44 @@
+// Test-only, independently signed caller. Never distribute with the authenticator.
+apply plugin: 'com.android.application'
+
+def testKey = layout.buildDirectory.file('independent-test-key.jks')
+
+tasks.register('generateIndependentTestKey', Exec) {
+    outputs.file(testKey)
+    onlyIf { !testKey.get().asFile.exists() }
+    doFirst { testKey.get().asFile.parentFile.mkdirs() }
+    commandLine "${System.getProperty('java.home')}/bin/keytool", '-genkeypair', '-noprompt',
+            '-keystore', testKey.get().asFile.absolutePath, '-storepass', 'android',
+            '-keypass', 'android', '-storetype', 'JKS', '-alias', 'security-test', '-keyalg', 'RSA',
+            '-keysize', '2048', '-validity', '3650', '-dname', 'CN=andOTP Security Test Only'
+}
+
+android {
+    namespace 'org.shadowice.flocke.andotp.securityclient'
+    compileSdk 36
+    buildToolsVersion '36.0.0'
+    defaultConfig {
+        applicationId 'org.shadowice.flocke.andotp.securityclient'
+        minSdk 28
+        targetSdk 35
+        versionCode 1
+        versionName 'test-only'
+    }
+    signingConfigs {
+        independentTest {
+            storeFile testKey.get().asFile
+            storePassword 'android'
+            keyAlias 'security-test'
+            keyPassword 'android'
+        }
+    }
+    buildTypes { debug { signingConfig signingConfigs.independentTest } }
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_1_8
+        targetCompatibility JavaVersion.VERSION_1_8
+    }
+}
+
+tasks.matching { it.name == 'validateSigningDebug' }.configureEach {
+    dependsOn 'generateIndependentTestKey'
+}

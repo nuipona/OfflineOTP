@@ -20,12 +20,12 @@ public class EntryList {
     }
 
     /** Adds the entry unless it is already in the list; returns whether it was added. */
-    public boolean addEntry(Entry newEntry) {
+    public synchronized boolean addEntry(Entry newEntry) {
         return addEntry(newEntry, false);
     }
 
     /** Like {@link #addEntry(Entry)}, but replaces an existing entry when {@code update} is true. */
-    public boolean addEntry(Entry newEntry, boolean update) {
+    public synchronized boolean addEntry(Entry newEntry, boolean update) {
         if (! entries.contains(newEntry)) {
             long newId = currentId.incrementAndGet();
             newEntry.setListId(newId);
@@ -47,7 +47,7 @@ public class EntryList {
     }
 
     /** Keeps the entries that are still present and adds or updates the given ones. */
-    public void updateEntries(ArrayList<Entry> newEntries, boolean update) {
+    public synchronized void updateEntries(ArrayList<Entry> newEntries, boolean update) {
         // Remove all items not in the new list
         entries.retainAll(newEntries);
 
@@ -57,34 +57,34 @@ public class EntryList {
         }
     }
 
-    public Entry getEntry(int pos) {
+    public synchronized Entry getEntry(int pos) {
         return entries.get(pos);
     }
 
     /** Swaps two entries (used by drag & drop in the unsorted view). */
-    public void swapEntries(int fromPosition, int toPosition) {
+    public synchronized void swapEntries(int fromPosition, int toPosition) {
         Collections.swap(entries, fromPosition, toPosition);
     }
 
-    public void removeEntry(int pos) {
+    public synchronized void removeEntry(int pos) {
         entries.remove(pos);
     }
 
     /** Position of the entry, or -1 if it is not in the list. */
-    public int indexOf(Entry e) {
+    public synchronized int indexOf(Entry e) {
         return entries.indexOf(e);
     }
 
     /** True if the list holds the same entries in the same order. */
-    public boolean isEqual(ArrayList<Entry> otherEntries) {
+    public synchronized boolean isEqual(ArrayList<Entry> otherEntries) {
         return entries.equals(otherEntries);
     }
 
-    public ArrayList<Entry> getEntries() {
+    public synchronized ArrayList<Entry> getEntries() {
         return new ArrayList<>(entries);
     }
 
-    public ArrayList<Entry> getEntriesSorted(Constants.SortMode sortMode) {
+    public synchronized ArrayList<Entry> getEntriesSorted(Constants.SortMode sortMode) {
         return sortEntries(entries, sortMode);
     }
 
@@ -105,7 +105,7 @@ public class EntryList {
         return sorted;
     }
 
-    public ArrayList<String> getAllTags() {
+    public synchronized ArrayList<String> getAllTags() {
         HashSet<String> tags = new HashSet<>();
 
         for(Entry entry : entries) {
@@ -115,7 +115,7 @@ public class EntryList {
         return new ArrayList<>(tags);
     }
 
-    public ArrayList<Entry> getFilteredEntries(CharSequence constraint, List<Constants.SearchIncludes> filterValues, Constants.SortMode sortMode) {
+    public synchronized ArrayList<Entry> getFilteredEntries(CharSequence constraint, List<Constants.SearchIncludes> filterValues, Constants.SortMode sortMode) {
         ArrayList<Entry> filtered = new ArrayList<>();
 
         if (constraint != null && constraint.length() != 0){
@@ -142,7 +142,7 @@ public class EntryList {
     }
 
     /** Returns the entries matching the tag filter (AND/OR, plus tagless entries if enabled). */
-    public ArrayList<Entry> getEntriesFilteredByTags(List<String> tags, boolean noTags, Constants.TagFunctionality tagFunctionality, Constants.SortMode sortMode) {
+    public synchronized ArrayList<Entry> getEntriesFilteredByTags(List<String> tags, boolean noTags, Constants.TagFunctionality tagFunctionality, Constants.SortMode sortMode) {
         ArrayList<Entry> matchingEntries = new ArrayList<>();
 
         for(Entry e : entries) {
@@ -181,7 +181,7 @@ public class EntryList {
         }
 
         @Override
-        public int compare(Entry o1, Entry o2) {
+        public synchronized int compare(Entry o1, Entry o2) {
             return collator.compare(o1.getIssuer(), o2.getIssuer());
         }
     }
@@ -196,7 +196,7 @@ public class EntryList {
         }
 
         @Override
-        public int compare(Entry o1, Entry o2) {
+        public synchronized int compare(Entry o1, Entry o2) {
             return collator.compare(o1.getLabel(), o2.getLabel());
         }
     }
@@ -204,7 +204,7 @@ public class EntryList {
     /** Sorts by the time of the last use (most recent first). */
     public static class LastUsedComparator implements Comparator<Entry> {
         @Override
-        public int compare(Entry o1, Entry o2) {
+        public synchronized int compare(Entry o1, Entry o2) {
             return Long.compare(o2.getLastUsed(), o1.getLastUsed());
         }
     }
@@ -212,7 +212,7 @@ public class EntryList {
     /** Sorts by the number of uses (most frequently used first). */
     public static class MostUsedComparator implements Comparator<Entry> {
         @Override
-        public int compare(Entry o1, Entry o2) {
+        public synchronized int compare(Entry o1, Entry o2) {
             return Long.compare(o2.getUsedFrequency(), o1.getUsedFrequency());
         }
     }

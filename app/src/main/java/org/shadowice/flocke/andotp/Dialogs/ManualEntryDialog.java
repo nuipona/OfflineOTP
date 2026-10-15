@@ -77,6 +77,7 @@ public class ManualEntryDialog {
         final EditText issuerInput = inputView.findViewById(R.id.manual_issuer);
         final EditText labelInput = inputView.findViewById(R.id.manual_label);
         final EditText secretInput = inputView.findViewById(R.id.manual_secret);
+        secretInput.setSaveEnabled(false);
         final TextView secretView = inputView.findViewById(R.id.manual_secret_view);
         final EditText counterInput = inputView.findViewById(R.id.manual_counter);
         final EditText periodInput = inputView.findViewById(R.id.manual_period);
@@ -203,6 +204,8 @@ public class ManualEntryDialog {
         final Button positiveButton = dialog.getButton(AlertDialog.BUTTON_POSITIVE);
 
         positiveButton.setOnClickListener(view -> {
+            if (org.shadowice.flocke.andotp.Utilities.VaultSession.getKey() == null) { dialog.dismiss(); return; }
+            try {
             // Strip whitespace from the secret
             String secret = secretInput.getText().toString().replaceAll("\\s+","");
             Entry.OTPType type = (Entry.OTPType) typeInput.getSelectedItem();
@@ -221,6 +224,8 @@ public class ManualEntryDialog {
             if (type == Entry.OTPType.TOTP || type == Entry.OTPType.STEAM) {
                 int period = Integer.parseInt(periodInput.getText().toString());
 
+                Entry validated = new Entry(type, secret, period, digits, issuer, label, algorithm, tagsAdapter.getActiveTags());
+                validated.destroy();
                 if (isNewEntry) {
                     Entry e = new Entry(type, secret, period, digits, issuer, label, algorithm, tagsAdapter.getActiveTags());
                     e.updateOTP(false);
@@ -244,6 +249,8 @@ public class ManualEntryDialog {
             } else if (type == Entry.OTPType.HOTP) {
                 long counter = Long.parseLong(counterInput.getText().toString());
 
+                Entry validated = new Entry(type, secret, counter, digits, issuer, label, algorithm, tagsAdapter.getActiveTags());
+                validated.destroy();
                 if (isNewEntry) {
                     Entry e = new Entry(type, secret, counter, digits, issuer, label, algorithm, tagsAdapter.getActiveTags());
                     e.updateOTP(false);
@@ -263,6 +270,8 @@ public class ManualEntryDialog {
                         updateCallback.onUpdate();
                 }
             } else if (type == Entry.OTPType.MOTP) {
+                Entry validated = new Entry(type, secret, issuer, label, tagsAdapter.getActiveTags());
+                validated.destroy();
                 if (isNewEntry) {
                     Entry newEntry;
 
@@ -286,6 +295,7 @@ public class ManualEntryDialog {
             }
 
             dialog.dismiss();
+            } catch (RuntimeException error) { secretInput.setError(callingActivity.getString(R.string.toast_invalid_qr_code)); }
         });
 
         positiveButton.setEnabled(false);

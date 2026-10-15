@@ -26,6 +26,6 @@ public class PGPBackupTask extends GenericBackupTask {
 
     @Override
     protected boolean doBackup() {
-        return StorageAccessHelper.saveFile(applicationContext, uri, payload);
+        return StorageAccessHelper.saveFile(applicationContext, uri, payload.getBytes(java.nio.charset.StandardCharsets.UTF_8), this::canWrite);
     }
 }

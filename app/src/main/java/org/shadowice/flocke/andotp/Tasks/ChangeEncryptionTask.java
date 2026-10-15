@@ -23,10 +23,14 @@ public class ChangeEncryptionTask extends UiBasedBackgroundTask<ChangeEncryption
     public ChangeEncryptionTask(Context context, SecretKey oldEncryptionKey, Constants.EncryptionType newEncryptionType, byte[] newKey) {
         super(new Result(EncryptionHelper.EncryptionChangeResult.TASK_CREATION_FAILED, null, null));
 
-        this.context = context;
+        this.context = context.getApplicationContext();
         this.oldEncryptionKey = oldEncryptionKey;
         this.newEncryptionType = newEncryptionType;
-        this. newKeyMaterial = newKey;
+        this.newKeyMaterial = newKey == null ? null : newKey.clone();
+    }
+
+    @Override protected void onCancellation() {
+        if (newKeyMaterial != null) java.util.Arrays.fill(newKeyMaterial, (byte) 0);
     }
 
     @Override
@@ -38,9 +42,13 @@ public class ChangeEncryptionTask extends UiBasedBackgroundTask<ChangeEncryption
     @NonNull
     @Override
     protected Result doInBackground() {
-        EncryptionHelper.EncryptionChangeResult result = EncryptionHelper.tryEncryptionChange(context, oldEncryptionKey, newEncryptionType, newKeyMaterial, this);
-
-        return new Result(result, this.newEncryptionKey, this.newEncryptionType);
+        try {
+            if (isCanceled()) return new Result(EncryptionHelper.EncryptionChangeResult.CHANGE_FAILURE, null, newEncryptionType);
+            EncryptionHelper.EncryptionChangeResult result = EncryptionHelper.tryEncryptionChange(context, oldEncryptionKey, newEncryptionType, newKeyMaterial, this, () -> !isCanceled());
+            return new Result(result, this.newEncryptionKey, this.newEncryptionType);
+        } finally {
+            if (newKeyMaterial != null) java.util.Arrays.fill(newKeyMaterial, (byte) 0);
+        }
     }
 
     /** Detailed outcome of the change (see {@link EncryptionHelper.EncryptionChangeResult}) plus the new key and type. */
