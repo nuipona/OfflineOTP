@@ -30,6 +30,8 @@ import org.shadowice.flocke.andotp.Database.ValidatedEntry
 import org.shadowice.flocke.andotp.Utilities.EntryThumbnail
 import org.shadowice.flocke.andotp.Utilities.LetterBitmap
 import org.shadowice.flocke.andotp.Utilities.BoundedInputReader
+import org.shadowice.flocke.andotp.Utilities.BackupHelper
+import org.shadowice.flocke.andotp.Utilities.StorageAccessHelper
 import org.shadowice.flocke.andotp.Utilities.DatabaseHelper
 import org.shadowice.flocke.andotp.Utilities.VaultReadError
 import org.shadowice.flocke.andotp.Utilities.VaultReadResult
@@ -77,6 +79,9 @@ import android.content.DialogInterface
 import android.content.Intent
 import android.graphics.Canvas
 import android.net.Uri
+import android.database.Cursor
+import android.os.ParcelFileDescriptor
+import android.provider.OpenableColumns
 import android.os.Handler
 import android.os.IBinder
 import android.text.method.PasswordTransformationMethod
@@ -94,6 +99,7 @@ import com.google.android.material.textfield.TextInputLayout
 import org.json.JSONObject
 
 import java.io.ByteArrayInputStream
+import java.io.File
 import java.io.IOException
 import java.io.InputStream
 import java.lang.reflect.Method
@@ -471,6 +477,108 @@ private class SandboxNumberPreference(context: Context) : NumberPickerPreference
     fun close(positive: Boolean) = onDialogClosed(positive)
     fun initialize(restore: Boolean, value: Any?) = onSetInitialValue(restore, value)
     fun defaultValue(array: android.content.res.TypedArray, index: Int): Any = onGetDefaultValue(array, index)
+}
+
+
+// --- fake document provider for the storage helper -------------------------------------------
+
+/** A `content:` URI built through the replicated `Uri.Builder` (the stub's `parse` stays inert). */
+private fun contentUri(vararg segments: String): Uri {
+    val builder = Uri.Builder().scheme("content").authority("org.example.documents")
+    for (segment in segments) builder.appendPath(segment)
+    return builder.build()
+}
+
+/** A `file:` URI over an absolute path, one segment at a time so `..` survives unnormalized. */
+private fun fileUri(path: String): Uri {
+    val builder = Uri.Builder().scheme("file")
+    for (segment in path.split('/').filter { it.isNotEmpty() }) builder.appendPath(segment)
+    return builder.build()
+}
+
+/** Serves one row (or none) of document metadata and records that it was closed. */
+private class FakeCursor(private val displayName: String?, private val hasRow: Boolean = true,
+                         private val column: Int = 0) : Cursor {
+    var closed = false
+    override fun moveToFirst(): Boolean = hasRow
+    override fun moveToNext(): Boolean = false
+    override fun getColumnIndex(columnName: String?): Int =
+        if (columnName == OpenableColumns.DISPLAY_NAME) column else -1
+    override fun getColumnIndexOrThrow(columnName: String?): Int = getColumnIndex(columnName)
+    override fun getString(columnIndex: Int): String? = displayName
+    override fun getInt(columnIndex: Int): Int = 0
+    override fun isNull(columnIndex: Int): Boolean = displayName == null
+    override fun close() {
+        closed = true
+    }
+}
+
+/** Records every provider call; writes go to [target] through the replicated descriptor. */
+private class FakeResolver : android.content.ContentResolver() {
+    val calls = ArrayList<String>()
+    var target: File? = null
+    var descriptor: ParcelFileDescriptor? = null
+    var failure: RuntimeException? = null
+    var cursor: Cursor? = null
+    var projection: List<String>? = null
+    var input: InputStream? = null
+
+    override fun openFileDescriptor(uri: Uri?, mode: String?): ParcelFileDescriptor? {
+        calls.add("open $mode")
+        failure?.let { throw it }
+        val file = target ?: return null
+        return ParcelFileDescriptor.open(file, ParcelFileDescriptor.parseMode(mode)).also { descriptor = it }
+    }
+
+    override fun query(uri: Uri?, projection: Array<String>?, selection: String?,
+                       selectionArgs: Array<String>?, sortOrder: String?): Cursor? {
+        calls.add("query")
+        this.projection = projection?.toList()
+        failure?.let { throw it }
+        return cursor
+    }
+
+    override fun openInputStream(uri: Uri?): InputStream? {
+        calls.add("read")
+        failure?.let { throw it }
+        return input
+    }
+}
+
+private class FakeStorageContext(val resolver: FakeResolver, private val cache: File) : Context() {
+    override fun getContentResolver(): android.content.ContentResolver = resolver
+    override fun getCacheDir(): File = cache
+}
+
+/** Answers the permission checks from a script and counts how often it was asked. */
+private class ScriptedPermission(private val refuseAt: Int = -1) : java.util.function.BooleanSupplier {
+    var asked = 0
+    override fun getAsBoolean(): Boolean {
+        asked++
+        return asked != refuseAt
+    }
+}
+
+/** A stream that reports whether it was closed. */
+private class ClosingStream(bytes: ByteArray) : ByteArrayInputStream(bytes) {
+    var closed = false
+    override fun close() {
+        closed = true
+        super.close()
+    }
+}
+
+/** Produces [size] zero bytes lazily, so an oversized document needs no large fixture. */
+private class ZeroStream(private val size: Long) : InputStream() {
+    private var produced = 0L
+    override fun read(): Int = if (produced++ < size) 0 else -1
+    override fun read(buffer: ByteArray, offset: Int, length: Int): Int {
+        if (produced >= size) return -1
+        val count = minOf(length.toLong(), size - produced).toInt()
+        java.util.Arrays.fill(buffer, offset, offset + count, 0.toByte())
+        produced += count
+        return count
+    }
 }
 
 fun main() {
@@ -1273,6 +1381,200 @@ fun main() {
             poison.setBoolean(null, false)
             VaultSession.lock(SessionLockReason.RESET) // leave no failed session behind for later checks
         }
+    }
+
+    check("document writes are content-only, bounded and re-check permission around every chunk") {
+        val directory = java.nio.file.Files.createTempDirectory("andotp-sandbox").toFile()
+        try {
+            val resolver = FakeResolver()
+            val context = FakeStorageContext(resolver, File(directory, "cache"))
+            val document = File(directory, "backup.json.aes")
+            val uri = contentUri("document", "backup.json.aes")
+            val data = ByteArray(20000) { (it % 251).toByte() }
+
+            // Three 8 KiB chunks: asked before opening, after opening, before each chunk and after the flush.
+            resolver.target = document
+            val permission = ScriptedPermission()
+            expect(StorageAccessHelper.saveFile(context, uri, data, permission), { "a permitted write failed" })
+            expect(document.readBytes().contentEquals(data), { "written bytes differ" })
+            expect(permission.asked == 6, { "permission asked ${permission.asked} times, expected 6" })
+            expect(resolver.calls == listOf("open wt"), { "provider calls ${resolver.calls}" })
+            expect(!resolver.descriptor!!.getFileDescriptor().valid(), { "descriptor left open after a write" })
+
+            // Revoked before the third chunk: false, the write stops there and nothing stays open.
+            val revoked = ScriptedPermission(refuseAt = 5)
+            expect(!StorageAccessHelper.saveFile(context, uri, data, revoked), { "a revoked write reported success" })
+            expect(document.length() == 16384L, { "revocation wrote ${document.length()} bytes" })
+            expect(revoked.asked == 5, { "a revoked write kept asking: ${revoked.asked}" })
+            expect(!resolver.descriptor!!.getFileDescriptor().valid(), { "descriptor left open after revocation" })
+
+            // Refused right after opening (nothing written) and after the final flush (all written, still false).
+            expect(!StorageAccessHelper.saveFile(context, uri, data, ScriptedPermission(refuseAt = 2)), { "after-open refusal" })
+            expect(document.length() == 0L, { "after-open refusal wrote ${document.length()} bytes" })
+            expect(!StorageAccessHelper.saveFile(context, uri, data, ScriptedPermission(refuseAt = 6)), { "final refusal" })
+            expect(document.length() == data.size.toLong(), { "final refusal must not truncate what was written" })
+
+            // An empty document is opened, flushed and permitted three times; the String overload is UTF-8.
+            val empty = ScriptedPermission()
+            expect(StorageAccessHelper.saveFile(context, uri, ByteArray(0), empty) && empty.asked == 3, { "empty write" })
+            expect(StorageAccessHelper.saveFile(context, uri, "Grüße"), { "String overload" })
+            expect(document.readText(Charsets.UTF_8) == "Grüße", { "String overload encoding" })
+
+            // Refused before the provider is touched: the scheme, the bounds, a missing URI/data,
+            // and a permission that is already gone.
+            resolver.calls.clear()
+            val longUri = contentUri("x".repeat(InputPolicy.MAX_URI_CHARS))
+            for ((label, refused) in listOf(
+                    "null uri" to { StorageAccessHelper.saveFile(context, null, data) },
+                    "null data" to { StorageAccessHelper.saveFile(context, uri, null as ByteArray?) },
+                    "file scheme" to { StorageAccessHelper.saveFile(context, fileUri(document.path), data) },
+                    "long uri" to { StorageAccessHelper.saveFile(context, longUri, data) },
+                    "oversized" to { StorageAccessHelper.saveFile(context, uri, ByteArray(BoundedInputReader.MAX_DOCUMENT_BYTES + 1)) },
+                    "not permitted" to { StorageAccessHelper.saveFile(context, uri, data, ScriptedPermission(refuseAt = 1)) })) {
+                expect(!refused(), { "$label was written" })
+            }
+            expect(resolver.calls.isEmpty(), { "the provider was reached by a refused write: ${resolver.calls}" })
+            // The exact bound is still accepted.
+            expect(StorageAccessHelper.saveFile(context, uri, ByteArray(BoundedInputReader.MAX_DOCUMENT_BYTES)), { "exact bound" })
+
+            // Provider failures are false, never an exception: no descriptor, or a SecurityException.
+            resolver.target = null
+            expect(!StorageAccessHelper.saveFile(context, uri, data), { "a missing descriptor reported success" })
+            resolver.failure = SecurityException("revoked grant")
+            expect(!StorageAccessHelper.saveFile(context, uri, data), { "a provider exception reported success" })
+        } finally {
+            directory.deleteRecursively()
+        }
+    }
+
+    check("document reads are bounded and file URIs stay confined to the private cache") {
+        val directory = java.nio.file.Files.createTempDirectory("andotp-sandbox").toFile()
+        try {
+            val resolver = FakeResolver()
+            val cache = File(directory, "cache").apply { mkdirs() }
+            val context = FakeStorageContext(resolver, cache)
+            val bytes = "{\"version\":1}".toByteArray(Charsets.UTF_8)
+
+            // A content document is read through the provider, and the provider's stream is closed.
+            val stream = ClosingStream(bytes)
+            resolver.input = stream
+            expect(StorageAccessHelper.loadFile(context, contentUri("document", "a")).contentEquals(bytes), { "content read" })
+            expect(stream.closed, { "the provider stream was left open" })
+            resolver.input = ByteArrayInputStream(bytes)
+            expect(StorageAccessHelper.loadFileString(context, contentUri("document", "a")) == "{\"version\":1}", { "text read" })
+
+            // A cache fixture is allowed, through the same provider path.
+            resolver.input = ByteArrayInputStream(bytes)
+            expect(StorageAccessHelper.loadFile(context, fileUri(File(cache, "fixture.png").path)).contentEquals(bytes),
+                    { "a private cache fixture was refused" })
+
+            // Everything else is an IOException before the provider is asked for a stream.
+            resolver.calls.clear()
+            val sibling = File(directory, "cache-evil/fixture.png").path      // shares the cache prefix
+            val traversal = cache.path + "/../secrets.dat"                     // canonicalized out of the cache
+            for ((label, uri) in listOf(
+                    "null" to null,
+                    "long" to contentUri("x".repeat(InputPolicy.MAX_URI_CHARS)),
+                    "http" to Uri.Builder().scheme("https").authority("example.org").appendPath("a").build(),
+                    "outside" to fileUri(File(directory, "secrets.dat").path),
+                    "sibling" to fileUri(sibling),
+                    "traversal" to fileUri(traversal),
+                    "cache itself" to fileUri(cache.path),
+                    "empty path" to Uri.Builder().scheme("file").build())) {
+                expectThrows(IOException::class.java) { StorageAccessHelper.loadFile(context, uri) }
+                expect(StorageAccessHelper.loadFileString(context, uri) == "", { "$label produced text" })
+            }
+            expect(resolver.calls.isEmpty(), { "a refused URI reached the provider: ${resolver.calls}" })
+
+            // The byte limit holds regardless of what the provider reports or streams.
+            resolver.input = ZeroStream(BoundedInputReader.MAX_DOCUMENT_BYTES + 1L)
+            expectThrows(IOException::class.java) { StorageAccessHelper.loadFile(context, contentUri("big")) }
+            resolver.input = null
+            expectThrows(IOException::class.java) { StorageAccessHelper.loadFile(context, contentUri("none")) }
+            // Provider exceptions propagate from loadFile and become "" in loadFileString.
+            resolver.failure = SecurityException("revoked grant")
+            expectThrows(SecurityException::class.java) { StorageAccessHelper.loadFile(context, contentUri("a")) }
+            expect(StorageAccessHelper.loadFileString(context, contentUri("a")) == "", { "provider failure produced text" })
+        } finally {
+            directory.deleteRecursively()
+        }
+    }
+
+    check("document display names are advisory, bounded and lose ASCII control characters") {
+        val resolver = FakeResolver()
+        val context = FakeStorageContext(resolver, File("."))
+        val uri = contentUri("document", "last-segment.json")
+
+        val cursor = FakeCursor("My\u0000Backup\n\t.json\u007F")
+        resolver.cursor = cursor
+        expect(StorageAccessHelper.getContentFileName(context, uri) == "MyBackup.json", { "control characters kept" })
+        expect(cursor.closed, { "the metadata cursor was left open" })
+        expect(resolver.projection == listOf(OpenableColumns.DISPLAY_NAME), { "projection ${resolver.projection}" })
+        // \p{Cntrl} is the ASCII set of java.util.regex: a C1 control such as U+0085 is not stripped.
+        resolver.cursor = FakeCursor("name\u0085")
+        expect(StorageAccessHelper.getContentFileName(context, uri) == "name\u0085", { "C1 control handling changed" })
+
+        // Unusable metadata falls back to the last path segment.
+        for (unusable in listOf<Cursor?>(null, FakeCursor("x", hasRow = false), FakeCursor("x", column = -1), FakeCursor(null))) {
+            resolver.cursor = unusable
+            expect(StorageAccessHelper.getContentFileName(context, uri) == "last-segment.json", { "fallback for $unusable" })
+        }
+        resolver.failure = IllegalStateException("provider died")
+        expect(StorageAccessHelper.getContentFileName(context, uri) == "last-segment.json", { "query failure" })
+        resolver.failure = null
+
+        // The length bound applies before stripping; bad input yields the "backup" placeholder.
+        resolver.cursor = FakeCursor("\u0000".repeat(InputPolicy.MAX_TEXT_CHARS + 1))
+        expect(StorageAccessHelper.getContentFileName(context, uri) == "backup", { "the bound was applied after stripping" })
+        resolver.cursor = FakeCursor("n".repeat(InputPolicy.MAX_TEXT_CHARS))
+        expect(StorageAccessHelper.getContentFileName(context, uri) == "n".repeat(InputPolicy.MAX_TEXT_CHARS), { "exact bound" })
+        resolver.cursor = null
+        expect(StorageAccessHelper.getContentFileName(context, null) == "backup", { "null uri" })
+        expect(StorageAccessHelper.getContentFileName(context, contentUri("x".repeat(InputPolicy.MAX_URI_CHARS))) == "backup",
+                { "long uri" })
+        expect(StorageAccessHelper.getContentFileName(context, Uri.Builder().scheme("content").authority("a").build()) == "backup",
+                { "no metadata and no path segment" })
+
+        // Only content URIs are queried; a file URI goes straight to its last segment.
+        resolver.calls.clear()
+        expect(StorageAccessHelper.getContentFileName(context, fileUri("/data/cache/plain.png")) == "plain.png", { "file name" })
+        expect(resolver.calls.isEmpty(), { "a file URI was queried: ${resolver.calls}" })
+    }
+
+    check("the storage and backup helpers keep their static Java surface") {
+        val storage = StorageAccessHelper::class.java
+        expectPublicFieldValue(storage, "INSTANCE", StorageAccessHelper, storage, true)
+        for (signature in listOf(
+                "static boolean saveFile(Context,Uri,byte[])",
+                "static boolean saveFile(Context,Uri,byte[],BooleanSupplier)",
+                "static boolean saveFile(Context,Uri,String)",
+                "static String getContentFileName(Context,Uri)",
+                "static byte[] loadFile(Context,Uri)",
+                "static String loadFileString(Context,Uri)")) {
+            expectMethod(storage, signature)
+        }
+        // Java callers (ScanQRCodeFromFile) catch IOException around loadFile, so it must stay declared.
+        val load = storage.getMethod("loadFile", Context::class.java, Uri::class.java)
+        expect(load.exceptionTypes.toList() == listOf(IOException::class.java), { "loadFile throws ${load.exceptionTypes.toList()}" })
+        expect(storage.declaredMethods.filter { Modifier.isPublic(it.modifiers) && Modifier.isStatic(it.modifiers) }
+                .none { it.exceptionTypes.isNotEmpty() && it.name != "loadFile" }, { "an unexpected checked exception appeared" })
+
+        // BackupHelper's members take the Java Constants.BackupType, which has no class file here,
+        // so its methods cannot be reflected; the nested result type can, and it stays a mutable,
+        // extendable Java-style holder with public fields and a public no-argument constructor.
+        val backupFile = BackupHelper.BackupFile::class.java
+        expect(!Modifier.isFinal(backupFile.modifiers) && Modifier.isStatic(backupFile.modifiers),
+                { "BackupFile is final or no longer a static nested class" })
+        expect(backupFile.enclosingClass == BackupHelper::class.java, { "BackupFile moved" })
+        for ((name, fieldType) in listOf("file" to androidx.documentfile.provider.DocumentFile::class.java, "errorMessage" to INT_TYPE)) {
+            val found = field(backupFile, name)!!
+            expect(found.type == fieldType && Modifier.isPublic(found.modifiers) && !Modifier.isFinal(found.modifiers) &&
+                    !Modifier.isStatic(found.modifiers), { "BackupFile.$name is no longer a public mutable field" })
+        }
+        val fresh = BackupHelper.BackupFile()
+        expect(fresh.file == null && fresh.errorMessage == 0, { "BackupFile defaults changed" })
+        expect(backupFile.declaredMethods.none { it.name.startsWith("get") || it.name.startsWith("set") },
+                { "BackupFile grew accessors instead of fields" })
     }
 
     check("bounded document reads reject oversize input and keep the caller's stream") {

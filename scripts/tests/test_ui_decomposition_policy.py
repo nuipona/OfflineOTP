@@ -94,7 +94,7 @@ class UiDecompositionSourceTest(unittest.TestCase):
                      "Tasks/EncryptedRestoreTask", "Tasks/ChangeEncryptionTask",
                      "Tasks/ChangeCredentialsTask", "Tasks/FinishIntroTask",
                      "Database/Entry", "Database/EntryJson", "Database/EntryJsonResult",
-                     "Utilities/DatabaseHelper"):
+                     "Utilities/DatabaseHelper", "Utilities/StorageAccessHelper", "Utilities/BackupHelper"):
             self.assertTrue((KOTLIN / (stem + ".kt")).is_file())
             self.assertFalse((JAVA / (stem + ".java")).exists())
         timer = (KOTLIN / "Utilities/ScreenTimerController.kt").read_text()
