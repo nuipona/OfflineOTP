@@ -39,6 +39,13 @@ python3 -m unittest discover -s scripts/tests -v
 bash scripts/verify_reproducible_build.sh
 ```
 
+Optional, **not** part of CI and not an acceptance gate: where only a JDK and a Kotlin compiler are
+available (no Android SDK, no dependency graph), `bash scripts/kotlin-sandbox/run.sh` compiles the
+converted platform-free/low-platform Kotlin sources against hand-written platform stubs and runs
+behavior/API-shape checks on a desktop JVM. Read
+[its README](../scripts/kotlin-sandbox/README.md) first: a green run there is not the Gradle, lint,
+packaging or device result, and the stub Android surface is not the platform.
+
 With a disposable API 28 or 36 emulator already running:
 
 ```sh

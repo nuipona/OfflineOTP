@@ -24,9 +24,9 @@ This is **static source analysis, not a penetration test or a security certifica
 
 | Area | Observed state | Implication |
 | --- | --- | --- |
-| Application language | 65 main-source Java files, about 12,176 lines including comments/blank lines; two flavor-specific Java files; two Java instrumentation test files | A mixed Java/Kotlin migration is feasible; there is no in-repository C/C++ memory-unsafe core to replace |
-| Native/other runtimes | No checked-in Kotlin, Rust, C, or C++ implementation | Rust would introduce JNI, native packaging and a second toolchain rather than remove existing native exposure |
-| Build | Three Groovy Gradle files; Gradle 8.13 wrapper; Android Gradle Plugin 8.13.2; no Kotlin plugin | Add Kotlin only after checking plugin/AGP/Gradle compatibility |
+| Application language | 61 main-source Java files, about 11,933 lines including comments/blank lines, plus 22 converted Kotlin files (about 1,754 lines) and two flavor-specific Java files; 12 Java instrumentation test files | A mixed Java/Kotlin migration is feasible; there is no in-repository C/C++ memory-unsafe core to replace. Counts are a 2026-10-15 snapshot of this review, not a target |
+| Native/other runtimes | Kotlin (JVM) sources are checked in under `app/src/main/kotlin`; no Rust, C, or C++ implementation | Rust would introduce JNI, native packaging and a second toolchain rather than remove existing native exposure |
+| Build | Three Groovy Gradle files; Gradle 8.13 wrapper; Android Gradle Plugin 8.13.2; Kotlin plugin 2.3.20 pinned with `jvmTarget` 1.8 | Kotlin is added; keep plugin/AGP/Gradle compatibility verified, and note that no Gradle build has been executed in this environment |
 | Android contract | `minSdkVersion 28`, `targetSdkVersion 35`, `compileSdk 36`; Java source/target 8 and core-library desugaring | Declared support begins at Android 9, not the older Android versions supported by historical upstream releases |
 | UI | Android activities, XML layouts, preferences, RecyclerView; data binding enabled | Kotlin works with the existing UI; no need to combine language migration with Compose |
 | Storage/crypto | Encrypted JSON in private files; JCA AES-GCM/PBKDF2/HMAC; RSA key wrapping through AndroidKeyStore | Preserve platform providers and existing file formats during language migration |
@@ -78,7 +78,7 @@ Evidence: [manifest, lines 67–77](../app/src/main/AndroidManifest.xml); [Panic
 
 **Action:** Require the actual expected scheme and supported OTP type; reject missing/invalid Base32 secrets, invalid periods, digit counts, counters and algorithms; bound strings and collections; define behavior for duplicate parameters and Unicode/locale cases. Preserve supported Steam/mOTP behavior deliberately. Present a confirmation screen before committing external entries.
 
-Evidence: [MainActivity, lines 378–407 and 944–955](../app/src/main/java/org/shadowice/flocke/andotp/Activities/MainActivity.java); [Entry, line 127 onward](../app/src/main/java/org/shadowice/flocke/andotp/Database/Entry.java); [TokenCalculator](../app/src/main/java/org/shadowice/flocke/andotp/Utilities/TokenCalculator.java).
+Evidence: [MainActivity, lines 378–407 and 944–955](../app/src/main/java/org/shadowice/flocke/andotp/Activities/MainActivity.java); [Entry, line 127 onward](../app/src/main/java/org/shadowice/flocke/andotp/Database/Entry.java); [TokenCalculator](../app/src/main/kotlin/org/shadowice/flocke/andotp/Utilities/TokenCalculator.kt) (converted to Kotlin; the OTP math and parameter bounds are unchanged).
 
 ### C. Bound document, image and password-derivation work — high priority
 
@@ -180,7 +180,7 @@ Resolve panic authorization, external-entry confirmation, bounded inputs/KDF wor
 
 ### Phase 2 — pilot Kotlin at a narrow boundary
 
-**Implementation update:** the [Kotlin OTP parser pilot](kotlin-otp-parser-pilot.md) now supplies this narrow boundary and a Java adapter. The tests/build/runtime acceptance gates are still pending; this is not approval for a wider migration. The original assessment below describes the intended rollout.
+**Implementation update:** the [Kotlin OTP parser pilot](kotlin-otp-parser-pilot.md) supplied this narrow boundary and a Java adapter, and the [conversion record](kotlin-extracted-helpers.md) lists the leaf/utility classes converted since, including `TokenCalculator`. The tests/build/runtime acceptance gates are still pending: only a partial sandbox compile/run check ([scripts/kotlin-sandbox](../scripts/kotlin-sandbox/README.md)) has been executed, and it is not Gradle, lint, packaging or device acceptance. This is not approval for a wider migration, in particular the large UI classes. The original assessment below describes the intended rollout.
 
 Add Kotlin and migrate a bounded OTP parser/validator plus tests, keeping a Java façade. Compare old/new behavior on valid fixtures and intentionally document stricter rejection of invalid input. Continue only if interoperability, build complexity and maintenance ownership are acceptable.
 

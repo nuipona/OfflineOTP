@@ -1,0 +1,73 @@
+#!/usr/bin/env bash
+#
+# Non-authoritative sandbox check for converted Kotlin sources.
+#
+# Compiles the listed Kotlin sources plus the platform stubs in ./stubs against a locally installed
+# Kotlin compiler, then runs ./Checks.kt on a desktop JVM. It exists because an environment without
+# the Android SDK, AndroidX artifacts and their dependency graph cannot run the Gradle unit-test,
+# lint or instrumentation gates. It is NOT that gate: it says nothing about Android runtime
+# behaviour, resources, manifest, packaging, lint or the other app sources. Read README.md first.
+set -euo pipefail
+
+SANDBOX="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ROOT="$(cd "$SANDBOX/../.." && pwd)"
+KOTLIN_APP="$ROOT/app/src/main/kotlin/org/shadowice/flocke/andotp"
+OUT="${KOTLIN_SANDBOX_OUT:-$ROOT/reports/kotlin-sandbox/out}"
+
+KOTLINC="${KOTLINC:-$(command -v kotlinc-jvm || command -v kotlinc || true)}"
+JAVA_BIN="${JAVA_BIN:-$(command -v java || true)}"
+if [[ -z "$KOTLINC" || -z "$JAVA_BIN" ]]; then
+    echo "kotlinc and java are required; set KOTLINC=/path/to/kotlinc-jvm and JAVA_BIN=/path/to/java" >&2
+    exit 2
+fi
+
+# The kotlin-stdlib jar sits next to the compiler in a normal distribution.
+STDLIB="${KOTLIN_STDLIB:-}"
+if [[ -z "$STDLIB" ]]; then
+    KOTLINC_REAL="$(readlink -f "$KOTLINC")"
+    for candidate in "$(dirname "$KOTLINC_REAL")/../lib/kotlin-stdlib.jar" "$(dirname "$KOTLINC")/../lib/kotlin-stdlib.jar"; do
+        if [[ -f "$candidate" ]]; then
+            STDLIB="$(cd "$(dirname "$candidate")" && pwd)/$(basename "$candidate")"
+            break
+        fi
+    done
+fi
+if [[ -z "$STDLIB" || ! -f "$STDLIB" ]]; then
+    echo "kotlin-stdlib.jar not found; set KOTLIN_STDLIB=/path/to/kotlin-stdlib.jar" >&2
+    exit 2
+fi
+
+# Converted platform-free and low-platform utilities covered by this check. Every entry is
+# compiled and its Java-visible shapes are asserted in Checks.kt. Files that still depend on the
+# Android/AndroidX graph (settings, vault, task runners, dialogs, adapters, activities) are
+# deliberately absent: see README.md for the list and the reason.
+APP_SOURCES=(
+    "$KOTLIN_APP/Utilities/InputPolicy.kt"
+    "$KOTLIN_APP/Utilities/OtpParseResult.kt"
+    "$KOTLIN_APP/Utilities/SessionContracts.kt"
+    "$KOTLIN_APP/Tasks/TaskContracts.kt"
+    "$KOTLIN_APP/Tasks/AuthenticationOutcome.kt"
+    "$KOTLIN_APP/Utilities/Tools.kt"
+    "$KOTLIN_APP/Utilities/ScreenTimerController.kt"
+    "$KOTLIN_APP/Utilities/TokenCalculator.kt"
+    "$KOTLIN_APP/Utilities/BoundedInputReader.kt"
+    "$KOTLIN_APP/Utilities/BoundedOutput.kt"
+    "$KOTLIN_APP/Utilities/EncryptedBackupHeader.kt"
+    "$KOTLIN_APP/Utilities/EditorActionHelper.kt"
+    "$KOTLIN_APP/Utilities/HandlerTimerScheduler.kt"
+)
+
+STUBS=("$SANDBOX"/stubs/android/*.kt
+    "$SANDBOX/stubs/org/shadowice/flocke/andotp/R.kt"
+    "$SANDBOX/stubs/org/apache/commons/codec/binary/Hex.kt")
+
+rm -rf "$OUT"
+mkdir -p "$OUT"
+
+echo "kotlinc: $KOTLINC"
+echo "java:    $JAVA_BIN"
+echo "stdlib:  $STDLIB"
+echo "output:  $OUT"
+
+"$KOTLINC" -jvm-target 1.8 -nowarn "${APP_SOURCES[@]}" "${STUBS[@]}" "$SANDBOX/Checks.kt" -d "$OUT"
+"$JAVA_BIN" -cp "$OUT:$STDLIB" ChecksKt
