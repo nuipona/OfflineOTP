@@ -82,7 +82,12 @@ class UiDecompositionSourceTest(unittest.TestCase):
                      "Utilities/EncryptedBackupHeader", "Utilities/TokenCalculator",
                      "Utilities/EditorActionHelper", "Utilities/HandlerTimerScheduler",
                      "Utilities/SecretKeyWrapper", "Utilities/DimensionConverter",
-                     "View/SimpleDoubleClickListener"):
+                     "View/SimpleDoubleClickListener",
+                     "View/ItemTouchHelper/ItemTouchHelperAdapter",
+                     "View/ItemTouchHelper/ItemTouchHelperViewHolder",
+                     "View/ItemTouchHelper/SimpleItemTouchHelperCallback",
+                     "Utilities/UIHelper", "Utilities/ConfirmedPasswordTransformationHelper",
+                     "Tasks/BackupTaskResult", "Tasks/UiBasedBackgroundTask"):
             self.assertTrue((KOTLIN / (stem + ".kt")).is_file())
             self.assertFalse((JAVA / (stem + ".java")).exists())
         timer = (KOTLIN / "Utilities/ScreenTimerController.kt").read_text()
@@ -190,3 +195,72 @@ class UiDecompositionSourceTest(unittest.TestCase):
         # The default-locale lower-casing of the unit suffix is inherited from the Java implementation.
         self.assertIn("matcher.group(3).lowercase(Locale.getDefault())", dimensions)
         self.assertIn(r'Pattern.compile("^\\s*(\\d+(\\.\\d+)*)\\s*([a-zA-Z]+)\\s*$")', dimensions)
+
+    def test_converted_drag_drop_dialog_and_result_helpers_keep_java_api_shapes(self):
+        callback = (KOTLIN / "View/ItemTouchHelper/SimpleItemTouchHelperCallback.kt").read_text()
+        # The Java class was non-final; drag/drop stays one reviewable boundary with its interfaces.
+        self.assertIn("open class SimpleItemTouchHelperCallback(private val adapter: ItemTouchHelperAdapter) : ItemTouchHelper.Callback()", callback)
+        self.assertIn("const val ALPHA_FULL = 1.0f", callback)
+        self.assertIn("fun setDragEnabled(newDragState: Boolean)", callback)
+        self.assertIn("adapter.onItemMove(source.adapterPosition, target.adapterPosition)", callback)
+        self.assertIn("viewHolder is ItemTouchHelperViewHolder", callback)
+        self.assertIn("return false", callback)  # cross-view-type moves are rejected
+        self.assertNotIn("data class", callback)
+
+        adapter = (KOTLIN / "View/ItemTouchHelper/ItemTouchHelperAdapter.kt").read_text()
+        self.assertIn("interface ItemTouchHelperAdapter", adapter)
+        self.assertIn("fun onItemMove(fromPosition: Int, toPosition: Int): Boolean", adapter)
+        holder = (KOTLIN / "View/ItemTouchHelper/ItemTouchHelperViewHolder.kt").read_text()
+        self.assertIn("interface ItemTouchHelperViewHolder", holder)
+        self.assertIn("fun onItemSelected()", holder)
+        self.assertIn("fun onItemClear()", holder)
+
+        ui = (KOTLIN / "Utilities/UIHelper.kt").read_text()
+        self.assertIn("object UIHelper", ui)
+        self.assertIn("@JvmStatic", ui)
+        self.assertIn("fun showGenericDialog(context: Context, titleId: Int, messageId: Int, onOk: Runnable?)", ui)
+        self.assertIn("fun showKeyboard(context: Context, view: View?, showForced: Boolean?)", ui)
+        # A null flag keeps failing like the Java unboxing did; it must not silently mean "not forced".
+        self.assertIn('throw NullPointerException("Missing showForced flag")', ui)
+
+        passwords = (KOTLIN / "Utilities/ConfirmedPasswordTransformationHelper.kt").read_text()
+        self.assertIn("object ConfirmedPasswordTransformationHelper", passwords)
+        self.assertIn("@JvmStatic", passwords)
+        self.assertIn("fun setup(passwordLayout: TextInputLayout, passwordInput: TextInputEditText, passwordConfirmInput: EditText)", passwords)
+        self.assertIn("passwordLayout.setEndIconOnClickListener {", passwords)
+        self.assertIn("dispatchPasswordVisibilityChange(passwordConfirmInput, wasShowingPassword)", passwords)
+
+        result = (KOTLIN / "Tasks/BackupTaskResult.kt").read_text()
+        # Plain (non-data) class: payload can hold the whole parsed database and must not leak
+        # through generated equals/toString/copy, and the Java class stayed extendable.
+        self.assertIn("open class BackupTaskResult(type: ResultType, success: Boolean, payload: String?, messageId: Int)", result)
+        self.assertNotIn("data class BackupTaskResult", result)
+        for field in ("@JvmField val resultType: ResultType = type", "@JvmField val success: Boolean = success",
+                      "@JvmField val payload: String? = payload", "@JvmField val messageId: Int = messageId",
+                      "@JvmField var isPGP: Boolean = false", "@JvmField var decryptIntent: Intent? = null",
+                      "@JvmField var uri: Uri? = null"):
+            self.assertIn(field, result)
+        self.assertIn("enum class ResultType", result)
+        self.assertIn("@JvmStatic", result)
+        self.assertIn("R.string.backup_toast_export_success", result)
+
+    def test_converted_task_runner_keeps_the_java_surface_and_scheduling_contract(self):
+        source = (KOTLIN / "Tasks/UiBasedBackgroundTask.kt").read_text()
+        # Non-final generic abstract class with the same single failedResult constructor.
+        self.assertIn("abstract class UiBasedBackgroundTask<Result>(private val failedResult: Result)", source)
+        self.assertIn("protected final fun taskGeneration(): Long", source)
+        self.assertIn("@Throws(Exception::class)\n    protected abstract fun doInBackground(): Result", source)
+        self.assertIn("protected open fun onCancellation()", source)
+        self.assertIn("protected open fun discardResult(result: Result)", source)
+        # The delivery/cancellation contract and its legacy adapter keep their shapes.
+        self.assertIn("fun setCallback(callback: UiCallback<Result>?)", source)
+        self.assertIn("fun setOutcomeCallback(callback: OutcomeCallback<Result>?)", source)
+        self.assertIn('throw IllegalStateException("Task already submitted")', source)
+        self.assertIn("synchronized(VaultSession.MutationLock)", source)
+        self.assertIn("VaultSession.addChangeListener(sessionChanged)", source)
+        self.assertIn("VaultSession.removeChangeListener(sessionChanged)", source)
+        self.assertIn("fun interface OutcomeCallback<Result>", source)
+        self.assertIn("fun interface UiCallback<Result>", source)
+        self.assertIn("mainThreadHandler.post { deliverPending() }", source)
+        for forbidden in ("data class", "Parcelable", "Serializable"):
+            self.assertNotIn(forbidden, source)

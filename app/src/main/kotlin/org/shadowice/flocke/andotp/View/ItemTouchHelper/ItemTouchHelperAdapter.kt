@@ -14,30 +14,30 @@
  * limitations under the License.
  */
 
-package org.shadowice.flocke.andotp.View.ItemTouchHelper;
+package org.shadowice.flocke.andotp.View.ItemTouchHelper
 
-import androidx.recyclerview.widget.RecyclerView;
-import androidx.recyclerview.widget.ItemTouchHelper;
+import androidx.recyclerview.widget.ItemTouchHelper
+import androidx.recyclerview.widget.RecyclerView
 
 /**
- * Interface to listen for move events from a {@link ItemTouchHelper.Callback}.
+ * Interface to listen for move events from an [ItemTouchHelper.Callback].
  *
  * @author Paul Burke (ipaulpro)
  */
-public interface ItemTouchHelperAdapter {
+interface ItemTouchHelperAdapter {
 
     /**
      * Called when an item has been dragged far enough to trigger a move. This is called every time
-     * an item is shifted, and <strong>not</strong> at the end of a "drop" event.<br/>
-     * <br/>
-     * Implementations should call {@link RecyclerView.Adapter#notifyItemMoved(int, int)} after
+     * an item is shifted, and **not** at the end of a "drop" event.
+     *
+     * Implementations should call `RecyclerView.Adapter.notifyItemMoved(int, int)` after
      * adjusting the underlying data to reflect this move.
      *
      * @param fromPosition The start position of the moved item.
      * @param toPosition   The resolved position of the moved item.
      * @return True if the item was moved to the new adapter position.
      *
-     * @see RecyclerView.ViewHolder#getAdapterPosition()
+     * @see RecyclerView.ViewHolder.adapterPosition
      */
-    boolean onItemMove(int fromPosition, int toPosition);
+    fun onItemMove(fromPosition: Int, toPosition: Int): Boolean
 }

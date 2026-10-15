@@ -3,6 +3,8 @@ package android.graphics
 
 abstract class ColorFilter
 
+class Canvas
+
 class PorterDuffColorFilter(color: Int, mode: PorterDuff.Mode) : ColorFilter()
 
 class PorterDuff private constructor() {

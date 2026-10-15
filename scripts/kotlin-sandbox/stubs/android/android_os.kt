@@ -3,9 +3,27 @@ package android.os
 
 import java.util.Locale
 
-class Handler(private val looper: Looper?) {
+/** Field/type-only stand-in for the platform window-token binder. */
+interface IBinder
+
+/**
+ * `postDelayed` stays inert; `post` queues what the task runner delivers so the checks can drain
+ * the "main thread" deterministically. No looper is created and no platform timing is exercised.
+ */
+open class Handler(private val looper: Looper?) {
     fun postDelayed(runnable: Runnable, delayMillis: Long): Boolean = true
     fun removeCallbacks(runnable: Runnable) {}
+
+    open fun post(runnable: Runnable): Boolean {
+        posted.offer(runnable)
+        return true
+    }
+
+    companion object {
+        /** Deliveries waiting for the fake main loop; drained by Checks.kt. */
+        @JvmField
+        val posted: java.util.Queue<Runnable> = java.util.concurrent.ConcurrentLinkedQueue()
+    }
 }
 
 class Looper private constructor() {

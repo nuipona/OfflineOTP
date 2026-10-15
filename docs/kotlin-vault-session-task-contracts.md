@@ -2,7 +2,7 @@
 
 ## Scope and acceptance status
 
-This extends the OTP parser pilot with Kotlin contract envelopes and Android-free session/task controllers. The Java UI, executor/Handler scheduler, storage implementation, WorkManager entry points and JCA crypto remain in place. There is no coroutine, Compose, serialization or bulk UI migration. Ciphertext, JSON, encrypted backup and staged UUID formats and cryptographic algorithms are unchanged.
+This extends the OTP parser pilot with Kotlin contract envelopes and Android-free session/task controllers. The Java UI, storage implementation, WorkManager entry points and JCA crypto remain in place; the executor/Handler scheduling adapter (`UiBasedBackgroundTask`) is now Kotlin with an unchanged contract. There is no coroutine, Compose, serialization or bulk UI migration. Ciphertext, JSON, encrypted backup and staged UUID formats and cryptographic algorithms are unchanged.
 
 **Implementation and test sources are present; compilation and runtime acceptance are pending.** Local Python/source grammar checks are not Kotlin/Java compilation, JVM JUnit, Android instrumentation, or a security/reproducibility certification. Both flavors must pass the existing build/lint/packaged-manifest/independent-release gates and instrumentation matrix on API 28 and 36 before release. Network and IPC protections remain separate gates, not properties granted by sealed types.
 
@@ -43,7 +43,7 @@ Legacy `LoadResult`, boolean write APIs and metadata callback adapters remain fo
 
 `TaskController` models one-shot Ready -> Running -> Completed -> Delivered, or cancellation. It contains metadata only. It supports one delivery claim, including a retained cancellation notification, and rejects stale pending completions after generation change.
 
-`UiBasedBackgroundTask` keeps Android scheduling in Java:
+`UiBasedBackgroundTask` keeps Android scheduling to executor threads plus main-loop posting (the runner itself is now Kotlin — see the [conversion record](kotlin-extracted-helpers.md); its contract is unchanged):
 
 - A pending outcome survives callback detachment. Posted delivery captures the task, not a result or Activity.
 - Revocation/key replacement cancels old-generation work and disposes pending Value payloads even while callbacks are detached. Delivery checks generation under the mutation lock.

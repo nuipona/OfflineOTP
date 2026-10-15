@@ -27,6 +27,14 @@ manifest.
 | `Utilities/SecretKeyWrapper.kt` | Real RSA wrap/unwrap round trip with a generated `KeyPair`; no platform crypto is stubbed. |
 | `Utilities/DimensionConverter.kt` | Parse/unit/rounding cases; the density formula lives in the `TypedValue` stub (see caveats). |
 | `View/SimpleDoubleClickListener.kt` | Single/double tap discrimination against a fake `View` that captures posted callbacks. |
+| `View/ItemTouchHelper/ItemTouchHelperAdapter.kt` | Drag/move contract implemented by the Java card adapter; compiled and shape-checked. |
+| `View/ItemTouchHelper/ItemTouchHelperViewHolder.kt` | Select/clear callbacks for the entry cards; compiled and shape-checked. |
+| `View/ItemTouchHelper/SimpleItemTouchHelperCallback.kt` | Movement flags, move forwarding, select/clear wiring and the swipe fade against fake holders (the `makeMovementFlags` composition lives in the stub; see caveats). |
+| `Utilities/UIHelper.kt` | Dialog confirm callback and keyboard show/hide wiring against a fake `InputMethodManager`. |
+| `Utilities/ConfirmedPasswordTransformationHelper.kt` | Show/hide toggle wiring between password and confirm fields against fake inputs. |
+| `Tasks/BackupTaskResult.kt` | Factories, public-field defaults, `ResultType` constants and redacted diagnostics. |
+| `Tasks/UiBasedBackgroundTask.kt` | The real runner lifecycle on real executors: value/failure/cancelled delivery, one-shot execution, explicit and session-revocation cancellation, owned-result disposal and the legacy fallback adapter, against a queued fake main loop. |
+| `Utilities/VaultSession.kt` | Compiled with the runner and driven live (generation advances, change listeners, mutation lock); the static facade shapes are asserted. |
 
 `Checks.kt` reproduces the intent of the repository's own tests — `ApplicationTest` (RFC vectors),
 `InputPolicyTest`, `BoundedInputReaderTest`, `EncryptedBackupHeaderTest`,
@@ -50,8 +58,9 @@ transformation actually in use.
 Still **not** covered, and therefore still dependent on the Gradle/device gates:
 
 - `Utilities/OtpUriParser.kt` and `Utilities/VaultContracts.kt`: the stub set has no `Base32`/`Entry`.
-- `Utilities/VaultRestoreOperation.kt`, `Utilities/VaultSession.kt`, `Utilities/EntryPersistence.kt`:
-  they pull in `DatabaseHelper`, `Settings` and the task runners.
+- `Utilities/VaultRestoreOperation.kt`, `Utilities/EntryPersistence.kt`:
+  they pull in `DatabaseHelper`, `Settings` and the task runners. (`Utilities/VaultSession.kt`
+  turned out to be Android-free and is now compiled and exercised above.)
 - `Database/EntryList.kt`, `View/EntryActionDialogs.kt`, `View/EntryActionTarget.kt`,
   `View/EntryListPresentation.kt`: Android views/dialogs or the `Entry` model.
 - Every activity, fragment, adapter, preference, receiver and worker (all still Java).
@@ -79,6 +88,18 @@ expectations for `DimensionConverter` are only as good as that formula), and `Vi
 overridden that way, and no platform timing is exercised). Kotlin objects also add an
 `INSTANCE` field and static forwarders, and a private constructor produces one synthetic
 `public` bridge — both are inherent to Kotlin, not tested here.
+
+For the runner checks the `Handler` stand-in queues `post` calls into a process-wide fake main
+loop that the checks drain deterministically (the worker threads are real, so delivery order is
+polled, not assumed); `Log` is a sink. The fake loop is another approximation: no real looper,
+message ordering or ANR semantics exist here.
+
+Three more stub approximations matter for the earlier checks: `ItemTouchHelper.Callback.makeMovementFlags`
+reimplements the documented androidx flag composition (`(swipe|drag) | swipe << 8 | drag << 16`), so
+the drag-flag expectations decode those bit fields; the RecyclerView/View stand-ins expose writable
+`alpha`/`translationX`/`width`/type/position state that the platform keeps final; and the
+`AlertDialog`/`TextInputLayout`/`InputMethodManager` fakes merely record what the helpers wire up.
+No real layout, drawing, window or input-method behaviour is exercised.
 
 ## Running it
 
@@ -111,5 +132,5 @@ curl -sS -o /tmp/kt.tgz https://registry.npmjs.org/kotlin-compiler/-/kotlin-comp
 tar xzf /tmp/kt.tgz -C /tmp && chmod +x /tmp/package/bin/kotlinc*
 ```
 
-Verified with Kotlin `2.4.21` and Temurin `25.0.2` on 2026-10-15 (22 checks). Pin your own compiler
+Verified with Kotlin `2.4.21` and Temurin `25.0.2` on 2026-10-15 (34 checks). Pin your own compiler
 when recording results; the check is only as meaningful as the versions you run it with.

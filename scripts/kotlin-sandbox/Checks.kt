@@ -4,6 +4,7 @@
 // gate, and no Android behaviour (Handler, KeyEvent, resources) is exercised here.
 import org.shadowice.flocke.andotp.Tasks.AuthenticationError
 import org.shadowice.flocke.andotp.Tasks.AuthenticationOutcome
+import org.shadowice.flocke.andotp.Tasks.BackupTaskResult
 import org.shadowice.flocke.andotp.Tasks.TaskCancellation
 import org.shadowice.flocke.andotp.Tasks.TaskCompletion
 import org.shadowice.flocke.andotp.Tasks.TaskController
@@ -11,7 +12,9 @@ import org.shadowice.flocke.andotp.Tasks.TaskFailure
 import org.shadowice.flocke.andotp.Tasks.TaskOutcome
 import org.shadowice.flocke.andotp.Tasks.TaskStart
 import org.shadowice.flocke.andotp.Tasks.TaskState
+import org.shadowice.flocke.andotp.Tasks.UiBasedBackgroundTask
 import org.shadowice.flocke.andotp.Utilities.BoundedInputReader
+import org.shadowice.flocke.andotp.Utilities.ConfirmedPasswordTransformationHelper
 import org.shadowice.flocke.andotp.Utilities.DimensionConverter
 import org.shadowice.flocke.andotp.Utilities.SecretKeyWrapper
 import org.shadowice.flocke.andotp.Utilities.BoundedOutput
@@ -30,13 +33,36 @@ import org.shadowice.flocke.andotp.Utilities.SessionLockReason
 import org.shadowice.flocke.andotp.Utilities.SessionRejection
 import org.shadowice.flocke.andotp.Utilities.SessionState
 import org.shadowice.flocke.andotp.Utilities.ValidatedOtp
+import org.shadowice.flocke.andotp.Utilities.VaultSession
 import org.shadowice.flocke.andotp.Utilities.ScreenTimerController
 import org.shadowice.flocke.andotp.Utilities.TokenCalculator
 import org.shadowice.flocke.andotp.Utilities.Tools
+import org.shadowice.flocke.andotp.Utilities.UIHelper
+import org.shadowice.flocke.andotp.View.ItemTouchHelper.ItemTouchHelperAdapter
+import org.shadowice.flocke.andotp.View.ItemTouchHelper.ItemTouchHelperViewHolder
+import org.shadowice.flocke.andotp.View.ItemTouchHelper.SimpleItemTouchHelperCallback
 import org.shadowice.flocke.andotp.View.SimpleDoubleClickListener
+import org.shadowice.flocke.andotp.R
 
+import android.app.AlertDialog
+import android.content.Context
+import android.content.DialogInterface
+import android.content.Intent
+import android.graphics.Canvas
+import android.net.Uri
+import android.os.Handler
+import android.os.IBinder
+import android.text.method.PasswordTransformationMethod
+import android.text.method.TransformationMethod
 import android.util.DisplayMetrics
 import android.view.View
+import android.view.inputmethod.InputMethodManager
+import androidx.recyclerview.widget.GridLayoutManager
+import androidx.recyclerview.widget.ItemTouchHelper
+import androidx.recyclerview.widget.LinearLayoutManager
+import androidx.recyclerview.widget.RecyclerView
+import com.google.android.material.textfield.TextInputEditText
+import com.google.android.material.textfield.TextInputLayout
 
 import java.io.ByteArrayInputStream
 import java.io.IOException
@@ -49,6 +75,9 @@ import java.security.GeneralSecurityException
 import java.security.KeyPairGenerator
 import java.security.MessageDigest
 import java.util.Arrays
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicInteger
 import javax.crypto.Cipher
 import javax.crypto.Mac
 import javax.crypto.spec.SecretKeySpec
@@ -135,6 +164,8 @@ private fun publicMethods(type: Class<*>): List<String> =
 
 private val INT_TYPE: Class<*> = Int::class.javaPrimitiveType!!
 private val LONG_TYPE: Class<*> = Long::class.javaPrimitiveType!!
+private val FLOAT_TYPE: Class<*> = Float::class.javaPrimitiveType!!
+private val BOOLEAN_TYPE: Class<*> = Boolean::class.javaPrimitiveType!!
 
 private fun field(type: Class<*>, name: String): java.lang.reflect.Field? =
         type.declaredFields.firstOrNull { it.name == name }
@@ -229,6 +260,131 @@ private class RecordingListener : SimpleDoubleClickListener() {
     override fun onDoubleClick(v: View) {
         doubles++
     }
+}
+
+// --- fakes for the drag & drop, dialog and password helper checks -------------------------------
+
+private class RecordingDragAdapter : ItemTouchHelperAdapter {
+    val moves = ArrayList<Pair<Int, Int>>()
+
+    override fun onItemMove(fromPosition: Int, toPosition: Int): Boolean {
+        moves.add(Pair(fromPosition, toPosition))
+        return true
+    }
+}
+
+private class DragViewHolder(view: View, viewType: Int, position: Int) : RecyclerView.ViewHolder(view) {
+    override val itemViewType: Int = viewType
+    override val adapterPosition: Int = position
+}
+
+private class SelectableViewHolder(view: View) : RecyclerView.ViewHolder(view), ItemTouchHelperViewHolder {
+    var selections = 0
+    var clears = 0
+
+    override fun onItemSelected() {
+        selections++
+    }
+
+    override fun onItemClear() {
+        clears++
+    }
+}
+
+private class RecordingInputMethodManager : InputMethodManager() {
+    val shownViews = ArrayList<View>()
+    val hiddenTokens = ArrayList<IBinder?>()
+    var toggles = 0
+
+    override fun showSoftInput(view: View, flags: Int): Boolean {
+        shownViews.add(view)
+        return true
+    }
+
+    override fun hideSoftInputFromWindow(windowToken: IBinder?, flags: Int): Boolean {
+        hiddenTokens.add(windowToken)
+        return true
+    }
+
+    override fun toggleSoftInput(showFlags: Int, hideFlags: Int) {
+        toggles++
+    }
+}
+
+private class FakeUiContext : Context() {
+    val imm = RecordingInputMethodManager()
+
+    override fun getSystemService(name: String): Any? {
+        return if (name == Context.INPUT_METHOD_SERVICE) imm else null
+    }
+}
+
+private class FakePasswordInput : TextInputEditText() {
+    val selections = ArrayList<Int>()
+
+    override var transformationMethod: TransformationMethod? = null
+    override val selectionEnd: Int = 7
+
+    override fun setSelection(index: Int) {
+        selections.add(index)
+    }
+}
+
+// --- fakes for the background runner checks ----------------------------------------------------
+
+/** Waits until the worker thread has queued its delivery on the fake main loop. */
+private fun awaitQueuedDelivery() {
+    val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5)
+    while (Handler.posted.isEmpty() && System.nanoTime() < deadline) Thread.sleep(10)
+    expect(!Handler.posted.isEmpty(), { "the runner never queued a delivery" })
+}
+
+/** Synchronously runs what the runner posted until the fake main queue stays empty. */
+private fun drainMainThreadDeliveries() {
+    var rounds = 0
+    while (rounds++ < 50) {
+        var ran = false
+        while (true) {
+            val runnable = Handler.posted.poll() ?: break
+            ran = true
+            runnable.run()
+        }
+        if (!ran) break
+    }
+}
+
+private class BlockingRunnerTask(fallback: String) : UiBasedBackgroundTask<String>(fallback) {
+    val started = CountDownLatch(1)
+    val release = CountDownLatch(1)
+    val discarded = AtomicInteger(0)
+    val discardedOnce = CountDownLatch(1)
+    val cleanupRuns = AtomicInteger(0)
+
+    override fun doInBackground(): String {
+        started.countDown()
+        try {
+            release.await(5, TimeUnit.SECONDS)
+        } catch (interrupted: InterruptedException) {
+            // Unwind after the interrupt; the late value must still be disposed, like on device.
+        }
+        return "late-value"
+    }
+
+    override fun discardResult(result: String) {
+        if (discarded.incrementAndGet() == 1) discardedOnce.countDown()
+    }
+
+    override fun onCancellation() {
+        cleanupRuns.incrementAndGet()
+    }
+}
+
+private class FailingRunnerTask(fallback: String, private val failure: IllegalStateException) : UiBasedBackgroundTask<String>(fallback) {
+    override fun doInBackground(): String = throw failure
+}
+
+private class NullRunnerTask(fallback: String?) : UiBasedBackgroundTask<String?>(fallback) {
+    override fun doInBackground(): String? = null
 }
 
 fun main() {
@@ -772,6 +928,275 @@ fun main() {
         }
     }
 
+    check("drag & drop callback forwards moves and wires the view holder callbacks") {
+        val recyclerView = RecyclerView()
+        recyclerView.layoutManager = LinearLayoutManager()
+        val adapter = RecordingDragAdapter()
+        val callback = SimpleItemTouchHelperCallback(adapter)
+
+        // Long-press dragging starts enabled and can be switched off, like the sorted/search flows do.
+        expect(callback.isLongPressDragEnabled(), { "dragging must start enabled" })
+        callback.setDragEnabled(false)
+        expect(!callback.isLongPressDragEnabled(), { "setDragEnabled(false) did not disable dragging" })
+        callback.setDragEnabled(true)
+        expect(callback.isLongPressDragEnabled(), { "setDragEnabled(true) did not re-enable dragging" })
+        expect(!callback.isItemViewSwipeEnabled(), { "swiping must stay disabled" })
+
+        // Vertical list: UP|DOWN only; grid: all four axes. The flag composition lives in the
+        // stub (documented replication), so the assertions decode the documented bit fields:
+        // the low byte carries swipe|drag and the swipe byte (bits 8-15) must stay empty.
+        val listFlags = callback.getMovementFlags(recyclerView, DragViewHolder(View(), 0, 0))
+        expect(((listFlags shr 16) and 0xFF) == (ItemTouchHelper.UP or ItemTouchHelper.DOWN), { "list drag flags $listFlags" })
+        expect((listFlags and 0xFF) == (ItemTouchHelper.UP or ItemTouchHelper.DOWN) &&
+                ((listFlags shr 8) and 0xFF) == 0, { "list must not enable swiping" })
+        recyclerView.layoutManager = GridLayoutManager()
+        val gridFlags = callback.getMovementFlags(recyclerView, DragViewHolder(View(), 0, 0))
+        expect(((gridFlags shr 16) and 0xFF) ==
+                (ItemTouchHelper.UP or ItemTouchHelper.DOWN or ItemTouchHelper.LEFT or ItemTouchHelper.RIGHT),
+                { "grid drag flags $gridFlags" })
+        expect(((gridFlags shr 8) and 0xFF) == 0, { "grid must not enable swiping" })
+
+        // Moves between items of the same type are forwarded; mixed types are rejected.
+        val source = DragViewHolder(View(), 0, 2)
+        val target = DragViewHolder(View(), 0, 5)
+        expect(callback.onMove(recyclerView, source, target), { "same-type move rejected" })
+        expect(adapter.moves == listOf(Pair(2, 5)), { "move not forwarded: ${adapter.moves}" })
+        val foreign = DragViewHolder(View(), 1, 6)
+        expect(!callback.onMove(recyclerView, source, foreign), { "cross-type move accepted" })
+        expect(adapter.moves.size == 1, { "cross-type move was forwarded" })
+
+        // Select/clear lifecycle only fires for item-touch-holders and non-idle states.
+        val selectable = SelectableViewHolder(View())
+        callback.onSelectedChanged(selectable, ItemTouchHelper.ACTION_STATE_DRAG)
+        expect(selectable.selections == 1, { "active item was not selected" })
+        callback.onSelectedChanged(selectable, ItemTouchHelper.ACTION_STATE_IDLE)
+        expect(selectable.selections == 1, { "idle state re-selected the item" })
+        callback.onSelectedChanged(null, ItemTouchHelper.ACTION_STATE_DRAG)
+        selectable.itemView.alpha = 0.3f
+        callback.clearView(recyclerView, selectable)
+        expect(selectable.clears == 1 && selectable.itemView.alpha == SimpleItemTouchHelperCallback.ALPHA_FULL,
+                { "clearView did not restore the idle alpha" })
+
+        // The swipe fade (unreachable while swiping is disabled) keeps its arithmetic, and the
+        // non-swipe branch still delegates to the super class.
+        val swiped = SelectableViewHolder(View())
+        swiped.itemView.width = 200
+        callback.onChildDraw(Canvas(), recyclerView, swiped, -50f, 0f, ItemTouchHelper.ACTION_STATE_SWIPE, true)
+        expect(swiped.itemView.alpha == 0.75f, { "swipe alpha ${swiped.itemView.alpha}" })
+        expect(swiped.itemView.translationX == -50f, { "swipe translation" })
+        callback.onChildDraw(Canvas(), recyclerView, swiped, -50f, 0f, ItemTouchHelper.ACTION_STATE_DRAG, true)
+        expect(swiped.itemView.translationX == -50f, { "drag draw changed the view" })
+        callback.onSwiped(swiped, ItemTouchHelper.DOWN) // disabled feature: must stay a no-op
+    }
+
+    check("generic dialogs and keyboard helpers keep their wiring") {
+        val context = FakeUiContext()
+        val view = FakeView()
+
+        var okRuns = 0
+        UIHelper.showGenericDialog(context, 11, 13)
+        val plain = AlertDialog.Builder.lastCreated ?: throw AssertionError("no dialog was created")
+        expect(plain.shown, { "dialog was not shown" })
+        plain.positiveButtonListener!!.onClick(plain, DialogInterface.BUTTON_POSITIVE)
+        expect(okRuns == 0, { "a missing handler was invoked" })
+
+        UIHelper.showGenericDialog(context, 11, 13) { okRuns++ }
+        val withOk = AlertDialog.Builder.lastCreated ?: throw AssertionError("no second dialog")
+        withOk.positiveButtonListener!!.onClick(withOk, DialogInterface.BUTTON_POSITIVE)
+        expect(okRuns == 1, { "confirmed action did not run" })
+
+        UIHelper.showKeyboard(context, view)
+        expect(context.imm.shownViews == listOf<View>(view) && context.imm.toggles == 0,
+                { "default showKeyboard must request, not toggle" })
+
+        UIHelper.showKeyboard(context, view, true)
+        expect(context.imm.toggles == 1, { "forced showKeyboard must toggle" })
+
+        // A null flag was never passed; the Java unboxing would have thrown for one.
+        expectThrows(NullPointerException::class.java) { UIHelper.showKeyboard(context, view, null) }
+
+        UIHelper.hideKeyboard(context, view)
+        expect(context.imm.hiddenTokens.size == 1, { "hideKeyboard did not hide" })
+
+        // A missing view stays a no-op, exactly like the original null guards.
+        UIHelper.showKeyboard(context, null)
+        UIHelper.hideKeyboard(context, null)
+        expect(context.imm.shownViews.size == 1 && context.imm.hiddenTokens.size == 1 && context.imm.toggles == 1,
+                { "a missing view must stay a no-op" })
+    }
+
+    check("password visibility toggles keep both fields and the cursor in sync") {
+        val layout = TextInputLayout()
+        val password = FakePasswordInput()
+        val confirm = FakePasswordInput()
+
+        ConfirmedPasswordTransformationHelper.setup(layout, password, confirm)
+        expect(password.transformationMethod is PasswordTransformationMethod &&
+                confirm.transformationMethod is PasswordTransformationMethod,
+                { "setup must start with both fields masked" })
+        expect(layout.endIconClickListener != null, { "no end-icon listener was installed" })
+
+        val listener = layout.endIconClickListener!!
+        listener.onClick(layout)
+        expect(password.transformationMethod == null && confirm.transformationMethod == null,
+                { "first toggle must unmask both fields" })
+        expect(password.selections == listOf(7) && confirm.selections == listOf(7),
+                { "cursor position was not restored" })
+        expect(layout.refreshCount == 1, { "layout was not refreshed" })
+
+        listener.onClick(layout)
+        expect(password.transformationMethod is PasswordTransformationMethod &&
+                confirm.transformationMethod is PasswordTransformationMethod,
+                { "second toggle must re-mask both fields" })
+        expect(password.selections == listOf(7, 7), { "cursor position was not kept on re-mask" })
+        expect(layout.refreshCount == 2, { "second toggle did not refresh the layout" })
+    }
+
+    check("backup task results keep their factories, defaults and redaction") {
+        val success = BackupTaskResult.success(BackupTaskResult.ResultType.BACKUP, "andotp-backup.json")
+        expect(success.success && success.resultType == BackupTaskResult.ResultType.BACKUP,
+                { "success reports the wrong state" })
+        expect(success.payload == "andotp-backup.json", { "file name payload changed" })
+        expect(success.messageId == R.string.backup_toast_export_success, { "success message id changed" })
+        expect(!success.isPGP && success.decryptIntent == null && success.uri == null, { "PGP defaults changed" })
+
+        val failure = BackupTaskResult.failure(BackupTaskResult.ResultType.RESTORE, 4242)
+        expect(!failure.success && failure.payload == null && failure.messageId == 4242,
+                { "failure reports the wrong state" })
+
+        val decryptIntent = Intent()
+        val uri = Uri()
+        val pgp = BackupTaskResult(BackupTaskResult.ResultType.RESTORE, true, "decrypted", 0, true, decryptIntent, uri)
+        expect(pgp.isPGP && pgp.decryptIntent === decryptIntent && pgp.uri === uri, { "PGP constructor changed" })
+        pgp.isPGP = false
+        expect(!pgp.isPGP, { "isPGP is no longer writable" })
+
+        // payload can be the whole parsed database; the default toString must not broadcast it.
+        expect(!success.toString().contains("andotp-backup"), { "payload leaked through toString" })
+        expect(BackupTaskResult.ResultType.values().map { it.name } == listOf("NONE", "BACKUP", "RESTORE"),
+                { "ResultType constants changed" })
+        expect(BackupTaskResult.ResultType.valueOf("NONE") == BackupTaskResult.ResultType.NONE, { "valueOf broke" })
+    }
+
+    check("background runner delivers one owned value through the fake main loop") {
+        Handler.posted.clear()
+        val task = BlockingRunnerTask("fallback")
+        val delivered = ArrayList<TaskOutcome<String>>()
+        task.setOutcomeCallback { delivered.add(it) }
+        task.setOutcomeCallback(null) // rebinding before start must be a no-op, not a delivery leak
+        task.setOutcomeCallback { delivered.add(it) }
+        task.execute()
+        expect(task.started.await(5, TimeUnit.SECONDS), { "background work never started" })
+        task.release.countDown()
+        awaitQueuedDelivery()
+        drainMainThreadDeliveries()
+        expect(delivered.size == 1, { "delivered ${delivered.size} outcomes" })
+        val value = delivered[0] as? TaskOutcome.Value<*> ?: throw AssertionError("not a value: ${delivered[0]}")
+        expect(value.value == "late-value", { "wrong payload ${value.value}" })
+        expect(task.getState() is TaskState.Delivered, { "state ${task.getState()}" })
+
+        // A binding after the delivery was consumed is ignored instead of replaying it.
+        val late = ArrayList<TaskOutcome<String>>()
+        task.setOutcomeCallback { late.add(it) }
+        drainMainThreadDeliveries()
+        expect(late.isEmpty(), { "a consumed delivery was replayed" })
+        expectThrows(IllegalStateException::class.java) { task.execute() }
+    }
+
+    check("null and thrown results become failures and legacy clients get the fallback") {
+        Handler.posted.clear()
+        val nullTask = NullRunnerTask("fallback")
+        val outcomes = ArrayList<TaskOutcome<String?>>()
+        nullTask.setOutcomeCallback { outcomes.add(it) }
+        nullTask.execute()
+        awaitQueuedDelivery()
+        drainMainThreadDeliveries()
+        expect(outcomes.size == 1 && outcomes[0] is TaskOutcome.Failure, { "a null result was not a typed failure" })
+        expect((outcomes[0] as TaskOutcome.Failure<*>).error == TaskFailure.NULL_RESULT, { "wrong failure code" })
+
+        val legacyNull = NullRunnerTask("fallback")
+        var legacyResult: String? = "unset"
+        legacyNull.setCallback { legacyResult = it }
+        legacyNull.execute()
+        awaitQueuedDelivery()
+        drainMainThreadDeliveries()
+        expect(legacyResult == "fallback", { "legacy callback received $legacyResult" })
+
+        val failing = FailingRunnerTask("legacy-fallback", IllegalStateException("synthetic-provider-failure"))
+        val typed = ArrayList<TaskOutcome<String>>()
+        failing.setOutcomeCallback { typed.add(it) }
+        failing.execute()
+        awaitQueuedDelivery()
+        drainMainThreadDeliveries()
+        expect(typed.size == 1 && typed[0] is TaskOutcome.Failure, { "a thrown result was not a typed failure" })
+        expect((typed[0] as TaskOutcome.Failure<*>).error == TaskFailure.UNEXPECTED_EXCEPTION,
+                { "wrong failure kind ${typed[0]}" })
+        expect(failing.getState() is TaskState.Delivered, { "failure was not delivered" })
+    }
+
+    check("cancellation is one-shot, cleans up once and disposes the fallback") {
+        val task = BlockingRunnerTask("fallback")
+        val delivered = ArrayList<TaskOutcome<String>>()
+        task.setOutcomeCallback { delivered.add(it) }
+        task.cancel()
+        expect(task.cleanupRuns.get() == 1, { "cancel() did not run owned-input cleanup" })
+        task.release.countDown() // the worker never started; this is harmless
+        drainMainThreadDeliveries()
+        expect(delivered.size == 1 && delivered[0] is TaskOutcome.Cancelled, { "cancel did not deliver cancellation" })
+        expect((delivered[0] as TaskOutcome.Cancelled<*>).reason == TaskCancellation.EXPLICIT, { "wrong reason" })
+
+        // A cancelled task can still be started once: the CANCELED path disposes the fallback,
+        // keeps the cleanup idempotent and does not deliver again (the callback was consumed).
+        task.execute()
+        expect(task.cleanupRuns.get() == 1, { "cleanup must stay idempotent" })
+        expect(task.discarded.get() == 1, { "the cancelled start did not dispose the fallback" })
+        drainMainThreadDeliveries()
+        expect(delivered.size == 1, { "a cancelled start delivered again" })
+        expectThrows(IllegalStateException::class.java) { task.execute() }
+    }
+
+    check("explicit cancellation disposes the late result and never calls the legacy callback") {
+        val task = BlockingRunnerTask("fallback")
+        val legacy = AtomicInteger(0)
+        task.setCallback { legacy.incrementAndGet() }
+        task.execute()
+        expect(task.started.await(5, TimeUnit.SECONDS), { "work never started" })
+        task.cancel()
+        task.release.countDown()
+        expect(task.discardedOnce.await(5, TimeUnit.SECONDS), { "the late value was never disposed" })
+        drainMainThreadDeliveries()
+        expect(legacy.get() == 0, { "a cancelled task delivered a legacy result" })
+        expect(task.discarded.get() == 1, { "unexpected disposal count ${task.discarded.get()}" })
+    }
+
+    check("session revocation cancels in-flight work and disposes its result") {
+        val task = BlockingRunnerTask("fallback")
+        val delivered = ArrayList<TaskOutcome<String>>()
+        task.setOutcomeCallback { delivered.add(it) }
+        task.execute()
+        expect(task.started.await(5, TimeUnit.SECONDS), { "work never started" })
+        VaultSession.lock() // advances the generation; the captured one is stale now
+        task.release.countDown()
+        expect(task.discardedOnce.await(5, TimeUnit.SECONDS), { "the produced value was never disposed" })
+        drainMainThreadDeliveries()
+        expect(delivered.size == 1 && delivered[0] is TaskOutcome.Cancelled, { "revocation did not deliver cancellation" })
+        expect((delivered[0] as TaskOutcome.Cancelled<*>).reason == TaskCancellation.SESSION_REVOKED, { "wrong reason" })
+        expect(task.cleanupRuns.get() == 1, { "revocation cleanup ran ${task.cleanupRuns.get()} times" })
+    }
+
+    check("a task captured before revocation is cancelled before its work begins") {
+        val task = BlockingRunnerTask("fallback")
+        VaultSession.lock() // stale generation before start
+        val delivered = ArrayList<TaskOutcome<String>>()
+        task.setOutcomeCallback { delivered.add(it) }
+        task.execute()
+        drainMainThreadDeliveries()
+        expect(task.cleanupRuns.get() == 1, { "cancelled start did not run cleanup" })
+        expect(delivered.size == 1 && delivered[0] is TaskOutcome.Cancelled, { "stale start was not cancelled" })
+        expect((delivered[0] as TaskOutcome.Cancelled<*>).reason == TaskCancellation.SESSION_REVOKED, { "wrong reason" })
+        expect(task.discarded.get() == 1, { "the fallback was not disposed on the cancelled start" })
+    }
+
     check("converted classes keep the Java-visible API shapes") {
         expectPublicFieldValue(BoundedInputReader::class.java, "MAX_DOCUMENT_BYTES", 16 * 1024 * 1024, INT_TYPE, true)
         expectMethod(BoundedInputReader::class.java, "static byte[] read(InputStream,int)")
@@ -900,6 +1325,112 @@ fun main() {
         expectMethod(InputPolicy::class.java, "static void jsonDepth(String)")
         expectMethod(InputPolicy::class.java, "static boolean validImage(int,int)")
         expectMethod(InputPolicy::class.java, "static void tokenParameters(int,int,long)")
+    }
+
+    check("the drag/drop trio and dialog/task helpers keep the Java-visible API shapes") {
+        val moveAdapter = ItemTouchHelperAdapter::class.java
+        expect(moveAdapter.isInterface, { "ItemTouchHelperAdapter is no longer an interface" })
+        expectMethod(moveAdapter, "boolean onItemMove(int,int)")
+
+        val selectHolder = ItemTouchHelperViewHolder::class.java
+        expect(selectHolder.isInterface, { "ItemTouchHelperViewHolder is no longer an interface" })
+        expectMethod(selectHolder, "void onItemSelected()")
+        expectMethod(selectHolder, "void onItemClear()")
+
+        val callback = SimpleItemTouchHelperCallback::class.java
+        expect(!Modifier.isFinal(callback.modifiers), { "SimpleItemTouchHelperCallback must stay extendable" })
+        expect(ItemTouchHelper.Callback::class.java.isAssignableFrom(callback), { "callback lost its super class" })
+        expectPublicFieldValue(callback, "ALPHA_FULL", 1.0f, FLOAT_TYPE, true)
+        expectMethod(callback, "void setDragEnabled(boolean)")
+        expectMethod(callback, "boolean isLongPressDragEnabled()")
+        expectMethod(callback, "boolean isItemViewSwipeEnabled()")
+        val callbackConstructors = callback.declaredConstructors.filter { !it.isSynthetic }
+        expect(callbackConstructors.size == 1 &&
+                callbackConstructors[0].parameterTypes.contentEquals(arrayOf<Class<*>>(ItemTouchHelperAdapter::class.java)),
+                { "callback constructor parameter changed" })
+
+        // Static-only utilities became objects: the same deliberate, documented delta as the
+        // earlier Tools/InputPolicy/DimensionConverter conversions.
+        for (utility in listOf(UIHelper::class.java, ConfirmedPasswordTransformationHelper::class.java)) {
+            expect(Modifier.isFinal(utility.modifiers), { "${utility.simpleName} object is not final" })
+            expect(utility.declaredFields.any { it.name == "INSTANCE" },
+                    { "${utility.simpleName} object is missing INSTANCE" })
+            expect(utility.declaredConstructors.all { Modifier.isPrivate(it.modifiers) },
+                    { "${utility.simpleName} should not be instantiable after conversion" })
+        }
+        expectMethod(UIHelper::class.java, "static void showGenericDialog(Context,int,int)")
+        expectMethod(UIHelper::class.java, "static void showGenericDialog(Context,int,int,Runnable)")
+        expectMethod(UIHelper::class.java, "static void showKeyboard(Context,View)")
+        expectMethod(UIHelper::class.java, "static void showKeyboard(Context,View,Boolean)")
+        expectMethod(UIHelper::class.java, "static void hideKeyboard(Context,View)")
+        expectMethod(ConfirmedPasswordTransformationHelper::class.java,
+                "static void setup(TextInputLayout,TextInputEditText,EditText)")
+
+        val result = BackupTaskResult::class.java
+        expect(!Modifier.isFinal(result.modifiers), { "BackupTaskResult must stay extendable" })
+        expectField(result, "success", BOOLEAN_TYPE, false)
+        expectField(result, "payload", String::class.java, false)
+        expectField(result, "messageId", INT_TYPE, false)
+        expectField(result, "resultType", BackupTaskResult.ResultType::class.java, false)
+        val isPgp = field(result, "isPGP") ?: throw AssertionError("Missing field BackupTaskResult.isPGP")
+        expect(isPgp.type == BOOLEAN_TYPE && !Modifier.isFinal(isPgp.modifiers),
+                { "isPGP must stay a writable public field" })
+        expectField(result, "decryptIntent", Intent::class.java, false)
+        expectField(result, "uri", Uri::class.java, false)
+        expectMethod(result, "static BackupTaskResult success(ResultType,String)")
+        expectMethod(result, "static BackupTaskResult failure(ResultType,int)")
+        expect(result.declaredConstructors.any { !it.isSynthetic && it.parameterCount == 7 },
+                { "missing the seven-argument constructor" })
+        expect(result.declaredConstructors.any { !it.isSynthetic && it.parameterCount == 4 },
+                { "missing the four-argument constructor" })
+        expect(BackupTaskResult.ResultType::class.java.isEnum, { "ResultType is not an enum" })
+    }
+
+    check("the background runner keeps its Java-visible API shapes") {
+        val runner = UiBasedBackgroundTask::class.java
+        expect(!Modifier.isFinal(runner.modifiers), { "the runner must stay extendable by task subclasses" })
+        val constructors = runner.declaredConstructors.filter { !it.isSynthetic }
+        expect(constructors.size == 1 &&
+                constructors[0].parameterTypes.contentEquals(arrayOf<Class<*>>(Object::class.java)),
+                { "the runner constructor changed: ${constructors.map { it.toGenericString() }}" })
+        expectMethod(runner, "void setCallback(UiCallback)")
+        expectMethod(runner, "void setOutcomeCallback(OutcomeCallback)")
+        expectMethod(runner, "TaskState getState()")
+        expectMethod(runner, "boolean isCanceled()")
+        expectMethod(runner, "void cancel()")
+        expectMethod(runner, "void execute()")
+        expectMethod(runner, "void disposeOutcome(TaskOutcome)")
+
+        val background = runner.declaredMethods.first { it.name == "doInBackground" }
+        expect(Modifier.isProtected(background.modifiers) && Modifier.isAbstract(background.modifiers),
+                { "doInBackground must stay protected and abstract" })
+        expect(background.exceptionTypes.contains(Exception::class.java), { "doInBackground lost its throws clause" })
+        for (overridable in listOf("onCancellation", "discardResult")) {
+            val method = runner.declaredMethods.first { it.name == overridable }
+            expect(Modifier.isProtected(method.modifiers) && !Modifier.isFinal(method.modifiers) &&
+                    !Modifier.isStatic(method.modifiers),
+                    { "$overridable must stay protected and overridable" })
+        }
+        for (helper in listOf("wasCanceled", "taskGeneration")) {
+            val method = runner.declaredMethods.first { it.name == helper }
+            expect(Modifier.isProtected(method.modifiers) && Modifier.isFinal(method.modifiers),
+                    { "$helper must stay protected final" })
+        }
+
+        val nested = runner.declaredClasses.filter { it.isInterface }.map { it.simpleName }.sorted()
+        expect(nested == listOf("OutcomeCallback", "UiCallback"), { "nested interfaces changed: $nested" })
+        val outcomeCallback = runner.declaredClasses.first { it.simpleName == "OutcomeCallback" }
+        expect(outcomeCallback.declaredMethods.single { !it.isSynthetic && Modifier.isAbstract(it.modifiers) }.name == "onOutcome",
+                { "OutcomeCallback abstract method changed" })
+        val uiCallback = runner.declaredClasses.first { it.simpleName == "UiCallback" }
+        expect(uiCallback.declaredMethods.single { !it.isSynthetic && Modifier.isAbstract(it.modifiers) }.name == "onResult",
+                { "UiCallback abstract method changed" })
+
+        // The runner reads the live session through the real VaultSession facade.
+        expectField(VaultSession::class.java, "MutationLock", Any::class.java, true)
+        expectMethod(VaultSession::class.java, "static long generation()")
+        expectMethod(VaultSession::class.java, "static void addChangeListener(Runnable)")
+        expectMethod(VaultSession::class.java, "static void removeChangeListener(Runnable)")
     }
 
     if (failures == 0) {
