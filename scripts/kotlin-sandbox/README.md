@@ -34,7 +34,24 @@ manifest.
 | `Utilities/ConfirmedPasswordTransformationHelper.kt` | Show/hide toggle wiring between password and confirm fields against fake inputs. |
 | `Tasks/BackupTaskResult.kt` | Factories, public-field defaults, `ResultType` constants and redacted diagnostics. |
 | `Tasks/UiBasedBackgroundTask.kt` | The real runner lifecycle on real executors: value/failure/cancelled delivery, one-shot execution, explicit and session-revocation cancellation, owned-result disposal and the legacy fallback adapter, against a queued fake main loop. |
+| `Tasks/AuthenticationTask.kt` | Type-checked against the real `Settings`/`EncryptionHelper` Java declarations; constructor and protected-member shapes asserted (its bodies call Java-only classes, so they are not executed here). |
+| `Tasks/GenericBackupTask.kt`, `Tasks/GenericRestoreTask.kt` | The abstract backup/restore bases, type-checked against the real `BackupHelper`/`StorageAccessHelper`; abstractness, constructor and (where reflection can see them) member shapes asserted. |
+| `Tasks/PGPBackupTask.kt`, `Tasks/PGPRestoreTask.kt` | Constructor shapes and (for the restore task) the protected `doInBackground` override asserted. |
+| `Tasks/EncryptedBackupTask.kt` | Both Java constructors (generic erasure makes them reflectable), the `Mode` enum and the class-level extendability asserted; the snapshot/canWrite policy stays source-guarded. |
+| `Tasks/EncryptedRestoreTask.kt` | Constructor and protected-member shapes asserted against the real `EncryptedBackupHeader`/`EncryptionHelper` declarations. |
+| `Tasks/ChangeEncryptionTask.kt`, `Tasks/ChangeCredentialsTask.kt`, `Tasks/FinishIntroTask.kt` | Class-level shapes and (for the intro result DTO, whose fields are JDK types) both constructors and public final fields asserted; the credential/encryption-change members reference Java-only signature types and are covered by the Python source guards. |
+| `Utilities/OtpUriParser.kt`, `Utilities/VaultContracts.kt` | Now compilable here: the stub set gained `Base32`/JSON stand-ins and the real `Entry.java` is a resolution source. |
+| `Utilities/EntryPersistence.kt` | Type-checked against the real `DatabaseHelper`/`BackupHelper` declarations, including its Kotlin construction of the converted `EncryptedBackupTask`; not executed here. |
+| `Utilities/VaultRestoreOperation.kt` | Type-checked against the real `DatabaseHelper`/`Settings` declarations; its merge/destroy policy stays covered by the Python source guards and the repository's tests. |
 | `Utilities/VaultSession.kt` | Compiled with the runner and driven live (generation advances, change listeners, mutation lock); the static facade shapes are asserted. |
+
+The task subclasses are compiled **against the real Java declarations** they call: `run.sh` passes
+`Settings.java`, `EncryptionHelper.java`, `BackupHelper.java`, `StorageAccessHelper.java`,
+`DatabaseHelper.java`, `KeyStoreHelper.java`, `FileHelper.java`, `EntryThumbnail.java`,
+`LetterBitmap.java` and `Entry.java` to `kotlinc` for resolution (the same mechanism already used
+for `Constants.java`). No class files are produced for them, so their bodies cannot be *executed*
+here, and reflection can only see members whose signatures avoid those Java-only types; the
+remaining shapes are enforced by the Python source guards in `scripts/tests/`.
 
 `Checks.kt` reproduces the intent of the repository's own tests — `ApplicationTest` (RFC vectors),
 `InputPolicyTest`, `BoundedInputReaderTest`, `EncryptedBackupHeaderTest`,
@@ -57,16 +74,17 @@ transformation actually in use.
 
 Still **not** covered, and therefore still dependent on the Gradle/device gates:
 
-- `Utilities/OtpUriParser.kt` and `Utilities/VaultContracts.kt`: the stub set has no `Base32`/`Entry`.
-- `Utilities/VaultRestoreOperation.kt`, `Utilities/EntryPersistence.kt`:
-  they pull in `DatabaseHelper`, `Settings` and the task runners. (`Utilities/VaultSession.kt`
-  turned out to be Android-free and is now compiled and exercised above.)
 - `Database/EntryList.kt`, `View/EntryActionDialogs.kt`, `View/EntryActionTarget.kt`,
-  `View/EntryListPresentation.kt`: Android views/dialogs or the `Entry` model.
+  `View/EntryListPresentation.kt`: Android views/dialogs or the `Entry` model internals.
 - Every activity, fragment, adapter, preference, receiver and worker (all still Java).
+- **Execution** of the task subclass bodies (and of `EntryPersistence`/`VaultRestoreOperation`):
+  the Java resolution sources produce no class files, so `Settings`/`DatabaseHelper`/
+  `EncryptionHelper` calls inside them cannot run on the desktop JVM here; only their compile-time
+  agreement with those real declarations is checked.
 - Java *compilation*: there is no `javac` in this environment, so no Java class file is produced and
   the Java callers' own compilation is never checked. `run.sh` does pass real Java sources
-  (`Utilities/Constants.java`) to `kotlinc` for resolution, which is why the Kotlin code is checked
+  (`Utilities/Constants.java`, `Settings.java`, `EncryptionHelper.java`, ... — the full list is in
+  the script) to `kotlinc` for resolution, which is why the Kotlin code is checked
   against the actual declarations rather than a copy — including the package-private
   `ALGORITHM_ASYMMETRIC` constant, which Kotlin in the same package can read.
 
@@ -132,5 +150,5 @@ curl -sS -o /tmp/kt.tgz https://registry.npmjs.org/kotlin-compiler/-/kotlin-comp
 tar xzf /tmp/kt.tgz -C /tmp && chmod +x /tmp/package/bin/kotlinc*
 ```
 
-Verified with Kotlin `2.4.21` and Temurin `25.0.2` on 2026-10-15 (34 checks). Pin your own compiler
+Verified with Kotlin `2.4.21` and Temurin `25.0.2` on 2026-10-15 (35 checks). Pin your own compiler
 when recording results; the check is only as meaningful as the versions you run it with.

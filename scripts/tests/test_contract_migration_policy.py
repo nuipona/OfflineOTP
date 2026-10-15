@@ -38,11 +38,13 @@ class ContractMigrationSourceTest(unittest.TestCase):
     def test_production_vault_callers_do_not_project_read_failures_to_empty_lists(self):
         forbidden = ("DatabaseHelper.loadDatabase(", "DatabaseHelper.loadDatabaseResult(",
                      "DatabaseHelper.saveDatabase(", "DatabaseHelper.changeEncryption(")
-        for file in JAVA.rglob("*.java"):
-            if file.name == "DatabaseHelper.java":
-                continue
-            for old_api in forbidden:
-                self.assertNotIn(old_api, file.read_text(), str(file))
+        # The task/vault conversions live in Kotlin now, so both trees must stay scanned.
+        for tree in (JAVA, KOTLIN):
+            for file in tree.rglob("*.java" if tree == JAVA else "*.kt"):
+                if file.name == "DatabaseHelper.java":
+                    continue
+                for old_api in forbidden:
+                    self.assertNotIn(old_api, file.read_text(), str(file))
 
     def test_uncertain_commit_and_recovery_remain_explicit(self):
         contract = (KOTLIN / "Utilities/VaultContracts.kt").read_text()

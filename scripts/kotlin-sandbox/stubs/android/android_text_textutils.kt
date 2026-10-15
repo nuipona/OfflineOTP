@@ -1,0 +1,8 @@
+// Sandbox-only stand-ins, see android_content.kt.
+package android.text
+
+/** Inert stand-in for the empty-check the thumbnail selection branches on. */
+object TextUtils {
+    @JvmStatic
+    fun isEmpty(text: CharSequence?): Boolean = text == null || text.length == 0
+}

@@ -4,7 +4,16 @@
 // gate, and no Android behaviour (Handler, KeyEvent, resources) is exercised here.
 import org.shadowice.flocke.andotp.Tasks.AuthenticationError
 import org.shadowice.flocke.andotp.Tasks.AuthenticationOutcome
+import org.shadowice.flocke.andotp.Tasks.AuthenticationTask
 import org.shadowice.flocke.andotp.Tasks.BackupTaskResult
+import org.shadowice.flocke.andotp.Tasks.ChangeCredentialsTask
+import org.shadowice.flocke.andotp.Tasks.EncryptedBackupTask
+import org.shadowice.flocke.andotp.Tasks.EncryptedRestoreTask
+import org.shadowice.flocke.andotp.Tasks.FinishIntroTask
+import org.shadowice.flocke.andotp.Tasks.GenericBackupTask
+import org.shadowice.flocke.andotp.Tasks.GenericRestoreTask
+import org.shadowice.flocke.andotp.Tasks.PGPBackupTask
+import org.shadowice.flocke.andotp.Tasks.PGPRestoreTask
 import org.shadowice.flocke.andotp.Tasks.TaskCancellation
 import org.shadowice.flocke.andotp.Tasks.TaskCompletion
 import org.shadowice.flocke.andotp.Tasks.TaskController
@@ -1397,6 +1406,10 @@ fun main() {
         expectMethod(runner, "void setOutcomeCallback(OutcomeCallback)")
         expectMethod(runner, "TaskState getState()")
         expectMethod(runner, "boolean isCanceled()")
+        // The Java method was overridable and EncryptedBackupTask overrides it; a final isCanceled
+        // would not even compile against the (Java or Kotlin) subclass.
+        expect(!Modifier.isFinal(runner.declaredMethods.first { it.name == "isCanceled" }.modifiers),
+                { "isCanceled() must stay overridable for broadcast-mode tasks" })
         expectMethod(runner, "void cancel()")
         expectMethod(runner, "void execute()")
         expectMethod(runner, "void disposeOutcome(TaskOutcome)")
@@ -1431,6 +1444,97 @@ fun main() {
         expectMethod(VaultSession::class.java, "static long generation()")
         expectMethod(VaultSession::class.java, "static void addChangeListener(Runnable)")
         expectMethod(VaultSession::class.java, "static void removeChangeListener(Runnable)")
+    }
+
+    check("converted task subclasses keep their Java-visible API shapes") {
+        /*
+         * Reflection can only see signatures whose referenced types are on this classpath: the
+         * Java resolution sources (Settings, EncryptionHelper, Constants, Entry, ...) are read by
+         * kotlinc but produce no class files. Members mentioning them (getBackupType's
+         * Constants.BackupType, the credential tasks' constructors) are covered by the Python
+         * source guards instead. Generic erasure is why EncryptedBackupTask's constructors are
+         * still checkable: ArrayList<Entry> erases to ArrayList.
+         */
+        val runner = UiBasedBackgroundTask::class.java
+        // ChangeEncryptionTask implements the Java-only EncryptionHelper.EncryptionChangeCallback;
+        // merely defining its Class object resolves that interface, which has no class file here.
+        // It is covered by the Python source guards instead.
+        for (task in listOf(AuthenticationTask::class.java, GenericBackupTask::class.java,
+                GenericRestoreTask::class.java, PGPBackupTask::class.java, PGPRestoreTask::class.java,
+                EncryptedBackupTask::class.java, EncryptedRestoreTask::class.java,
+                ChangeCredentialsTask::class.java, FinishIntroTask::class.java)) {
+            expect(Modifier.isPublic(task.modifiers), { "${task.simpleName} is not public" })
+            expect(!Modifier.isFinal(task.modifiers),
+                    { "${task.simpleName} must stay extendable like the Java class" })
+            expect(runner.isAssignableFrom(task), { "${task.simpleName} no longer extends the runner" })
+        }
+        expect(Modifier.isAbstract(GenericBackupTask::class.java.modifiers), { "GenericBackupTask must stay abstract" })
+        expect(Modifier.isAbstract(GenericRestoreTask::class.java.modifiers), { "GenericRestoreTask must stay abstract" })
+
+        fun constructorParameters(type: Class<*>, parameterCount: Int): List<Class<*>> {
+            val constructor = type.declaredConstructors.single { !it.isSynthetic && it.parameterCount == parameterCount }
+            return constructor.parameterTypes.toList()
+        }
+
+        // The backup bases keep the (Context, Uri) constructor the concrete tasks delegate to.
+        for (base in listOf(GenericBackupTask::class.java, GenericRestoreTask::class.java)) {
+            expect(constructorParameters(base, 2) == listOf(Context::class.java, Uri::class.java),
+                    { "${base.simpleName} constructor changed" })
+        }
+
+        // EncryptedBackupTask: both Java constructors survive (erasure drops the Entry element type).
+        expect(constructorParameters(EncryptedBackupTask::class.java, 4) ==
+                listOf(Context::class.java, java.util.ArrayList::class.java, String::class.java, Uri::class.java),
+                { "EncryptedBackupTask(Context,ArrayList,String,Uri) changed" })
+        expect(constructorParameters(EncryptedBackupTask::class.java, 6) ==
+                listOf(Context::class.java, java.util.ArrayList::class.java, String::class.java, Uri::class.java,
+                        EncryptedBackupTask.Mode::class.java, java.util.function.BooleanSupplier::class.java),
+                { "EncryptedBackupTask(Context,ArrayList,String,Uri,Mode,BooleanSupplier) changed" })
+        expect(EncryptedBackupTask.Mode::class.java.isEnum, { "Mode is not an enum" })
+        expect(EncryptedBackupTask.Mode.values().map { it.name } == listOf("USER", "AUTO_EDIT", "BROADCAST"),
+                { "Mode constants changed" })
+
+        // Tasks whose signatures reference only compiled types keep their full member shapes.
+        expect(constructorParameters(AuthenticationTask::class.java, 4) ==
+                listOf(Context::class.java, BOOLEAN_TYPE, String::class.java, String::class.java),
+                { "AuthenticationTask(Context,boolean,String,String) changed" })
+        expect(constructorParameters(EncryptedRestoreTask::class.java, 4) ==
+                listOf(Context::class.java, Uri::class.java, String::class.java, BOOLEAN_TYPE),
+                { "EncryptedRestoreTask(Context,Uri,String,boolean) changed" })
+        expect(constructorParameters(PGPRestoreTask::class.java, 3) ==
+                listOf(Context::class.java, Uri::class.java, Intent::class.java),
+                { "PGPRestoreTask(Context,Uri,Intent) changed" })
+        expect(constructorParameters(PGPBackupTask::class.java, 3) ==
+                listOf(Context::class.java, String::class.java, Uri::class.java),
+                { "PGPBackupTask(Context,String,Uri) changed" })
+
+        fun expectProtected(type: Class<*>, name: String, returnType: Class<*>) {
+            // Generic overrides also produce public volatile bridge methods; assert the real one.
+            val method = type.declaredMethods.first { it.name == name && !it.isBridge && !it.isSynthetic }
+            expect(Modifier.isProtected(method.modifiers) && !Modifier.isStatic(method.modifiers),
+                    { "${type.simpleName}.$name must stay a protected instance method" })
+            expect(method.returnType == returnType, { "${type.simpleName}.$name return type changed" })
+            expect(!Modifier.isFinal(method.modifiers), { "${type.simpleName}.$name must stay overridable" })
+        }
+        expectProtected(AuthenticationTask::class.java, "doInBackground", AuthenticationOutcome::class.java)
+        expectProtected(AuthenticationTask::class.java, "discardResult", Void.TYPE)
+        expectProtected(EncryptedRestoreTask::class.java, "doInBackground", BackupTaskResult::class.java)
+        expectProtected(PGPRestoreTask::class.java, "doInBackground", BackupTaskResult::class.java)
+
+        // The intro result keeps both Java constructors and its public final fields.
+        val introResult = FinishIntroTask.Result::class.java
+        expect(constructorParameters(introResult, 2) == listOf(BOOLEAN_TYPE, ByteArray::class.java),
+                { "FinishIntroTask.Result(boolean,byte[]) changed" })
+        expect(constructorParameters(introResult, 3) ==
+                listOf(BOOLEAN_TYPE, ByteArray::class.java, LONG_TYPE),
+                { "FinishIntroTask.Result(boolean,byte[],long) changed" })
+        for ((name, fieldType) in listOf("saveSuccessful" to BOOLEAN_TYPE,
+                "encryptionKey" to ByteArray::class.java, "generation" to LONG_TYPE)) {
+            val found = introResult.declaredFields.first { it.name == name }
+            expect(Modifier.isPublic(found.modifiers) && Modifier.isFinal(found.modifiers),
+                    { "FinishIntroTask.Result.$name must stay a public final field" })
+            expect(found.type == fieldType, { "FinishIntroTask.Result.$name type changed" })
+        }
     }
 
     if (failures == 0) {

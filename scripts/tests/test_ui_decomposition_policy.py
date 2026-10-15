@@ -87,7 +87,11 @@ class UiDecompositionSourceTest(unittest.TestCase):
                      "View/ItemTouchHelper/ItemTouchHelperViewHolder",
                      "View/ItemTouchHelper/SimpleItemTouchHelperCallback",
                      "Utilities/UIHelper", "Utilities/ConfirmedPasswordTransformationHelper",
-                     "Tasks/BackupTaskResult", "Tasks/UiBasedBackgroundTask"):
+                     "Tasks/BackupTaskResult", "Tasks/UiBasedBackgroundTask",
+                     "Tasks/AuthenticationTask", "Tasks/GenericBackupTask", "Tasks/GenericRestoreTask",
+                     "Tasks/PGPBackupTask", "Tasks/PGPRestoreTask", "Tasks/EncryptedBackupTask",
+                     "Tasks/EncryptedRestoreTask", "Tasks/ChangeEncryptionTask",
+                     "Tasks/ChangeCredentialsTask", "Tasks/FinishIntroTask"):
             self.assertTrue((KOTLIN / (stem + ".kt")).is_file())
             self.assertFalse((JAVA / (stem + ".java")).exists())
         timer = (KOTLIN / "Utilities/ScreenTimerController.kt").read_text()
@@ -264,3 +268,124 @@ class UiDecompositionSourceTest(unittest.TestCase):
         self.assertIn("mainThreadHandler.post { deliverPending() }", source)
         for forbidden in ("data class", "Parcelable", "Serializable"):
             self.assertNotIn(forbidden, source)
+        # The Java isCanceled() was overridable (EncryptedBackupTask replaces it for broadcast
+        # mode); a final declaration could not even compile against the subclass override.
+        self.assertIn("open fun isCanceled(): Boolean", source)
+
+    def test_converted_task_subclasses_keep_the_java_api_and_security_shapes(self):
+        """Source guards for members whose signatures reference the Java-only resolution classes
+        (Constants.BackupType, Settings.PreparedCredentials, EncryptionHelper callback): the
+        sandbox reflects what it can, these pin the rest."""
+
+        def read(name):
+            return (KOTLIN / ("Tasks/" + name)).read_text()
+
+        runner = read("UiBasedBackgroundTask.kt")
+        self.assertIn("open fun isCanceled(): Boolean", runner)
+
+        # Every Java class was non-final: the conversions stay open instead of silently final.
+        for name in ("AuthenticationTask.kt", "GenericBackupTask.kt", "GenericRestoreTask.kt",
+                     "PGPBackupTask.kt", "PGPRestoreTask.kt", "EncryptedBackupTask.kt",
+                     "EncryptedRestoreTask.kt", "ChangeEncryptionTask.kt",
+                     "ChangeCredentialsTask.kt", "FinishIntroTask.kt"):
+            source = read(name)
+            self.assertIn("open class " if "Generic" not in name else "abstract class ", source, name)
+            self.assertNotIn("data class", source, name)
+            self.assertNotIn("!!", source, name)
+            self.assertNotIn("Parcelable", source, name)
+            self.assertNotIn("Serializable", source, name)
+
+        backup = read("GenericBackupTask.kt")
+        # The abstract hooks and the overridable write policy keep their protected visibility.
+        for api in ("protected val applicationContext: Context", "protected val settings: Settings",
+                    "protected val type: Constants.BackupType = getBackupType()",
+                    "protected var uri: Uri? = uri",
+                    "protected override fun doInBackground(): BackupTaskResult",
+                    "protected abstract fun getBackupType(): Constants.BackupType",
+                    "protected abstract fun doBackup(): Boolean",
+                    "protected open fun canWrite(): Boolean",
+                    "VaultSession.getKey() != null"):
+            self.assertIn(api, backup)
+        # A failed backup deletes a file it created; the finally block survives the conversion.
+        self.assertIn("if (!success && created != null)", backup)
+        self.assertIn("try { created.delete() } catch (ignored: RuntimeException) { }", backup)
+        self.assertIn("catch (error: RuntimeException)", backup)
+
+        restore = read("GenericRestoreTask.kt")
+        self.assertIn("protected abstract override fun doInBackground(): BackupTaskResult", restore)
+
+        encrypted = read("EncryptedBackupTask.kt")
+        # Both Java constructors, the broadcast/user cancellation split and the snapshot ownership.
+        self.assertIn("constructor(context: Context, entries: ArrayList<Entry>, password: String?, uri: Uri?) :", encrypted)
+        self.assertIn("constructor(context: Context, entries: ArrayList<Entry>, password: String?, uri: Uri?, mode: Mode,", encrypted)
+        self.assertIn("enum class Mode { USER, AUTO_EDIT, BROADCAST }", encrypted)
+        self.assertIn("this.entries = DatabaseHelper.stringToEntries(DatabaseHelper.entriesToString(entries))", encrypted)
+        self.assertIn("override fun isCanceled(): Boolean", encrypted)
+        self.assertIn("return if (mode == Mode.BROADCAST) wasCanceled() else super.isCanceled()", encrypted)
+        self.assertIn("protected override fun onCancellation() { destroySnapshot() }", encrypted)
+        self.assertIn("protected override fun discardResult(result: BackupTaskResult) { destroySnapshot() }", encrypted)
+        self.assertIn("protected override fun doInBackground(): BackupTaskResult", encrypted)
+        self.assertIn("try {\n            return super.doInBackground()\n        } finally {\n            destroySnapshot()\n        }", encrypted)
+        # Key material and snapshot entries are destroyed exactly once per path.
+        self.assertIn("private fun destroySnapshot()", encrypted)
+        self.assertIn("synchronized(entries) {", encrypted)
+        self.assertIn("for (entry in entries) entry.destroy()", encrypted)
+        self.assertNotIn("settings.getBackupPasswordEnc() == null", encrypted)
+
+        pgp_backup = read("PGPBackupTask.kt")
+        self.assertIn("this::canWrite", pgp_backup)
+        self.assertIn("Constants.BackupType.OPEN_PGP", pgp_backup)
+        pgp_restore = read("PGPRestoreTask.kt")
+        # The Java multi-catch (IOException | RuntimeException) stays two clauses, not one broadened catch.
+        self.assertIn("catch (error: IOException)", pgp_restore)
+        self.assertIn("catch (error: RuntimeException)", pgp_restore)
+        self.assertIn("catch (error: Exception)", read("EncryptedRestoreTask.kt"))
+
+        auth = read("AuthenticationTask.kt")
+        # The legacy upgrade keeps its guard lambda; the confirmed path wipes both derived halves.
+        self.assertIn("!isCanceled()", auth)
+        self.assertIn("settings.getAuthCredentials().isEmpty()", auth)
+        self.assertIn("existingAuthCredentials == settings.getOldCredentials(settings.getAuthMethod())", auth)
+        self.assertIn("MessageDigest.isEqual(passwordArray, derived.password)", auth)
+        self.assertIn("AuthenticationOutcome.verified(key, taskGeneration())", auth)
+        self.assertIn("Arrays.fill(key, 0.toByte())", auth)
+        for error in ("NoSuchAlgorithmException", "InvalidKeySpecException",
+                      "IllegalArgumentException", "IllegalStateException"):
+            self.assertIn(f"catch (error: {error})", auth)
+        self.assertIn("AuthenticationOutcome.Rejected(AuthenticationError.INVALID_CONFIGURATION)", auth)
+
+        change_encryption = read("ChangeEncryptionTask.kt")
+        # The Java callback interface stays implemented with a public override (interface methods
+        # are public; a protected override would not compile), and key material is wiped.
+        self.assertIn("EncryptionChangeCallback", change_encryption)
+        self.assertIn("override fun onSuccessfulEncryptionChange(newEncryptionType: Constants.EncryptionType, newEncryptionKey: SecretKey?)", change_encryption)
+        self.assertIn("newKey?.clone()", change_encryption)
+        self.assertIn("newKeyMaterial?.fill(0.toByte())", change_encryption)
+        self.assertIn("EncryptionHelper.tryEncryptionChange(context, oldEncryptionKey, newEncryptionType, newKeyMaterial, this) { !isCanceled() }", change_encryption)
+        self.assertIn("open class Result(@JvmField val result: EncryptionChangeResult", change_encryption)
+        self.assertIn("@JvmField val newEncryptionKey: SecretKey?", change_encryption)
+        self.assertIn("@JvmField val encryptionType: Constants.EncryptionType?", change_encryption)
+
+        change_credentials = read("ChangeCredentialsTask.kt")
+        # Session authority stays reference identity (Java !=), not structural equality.
+        self.assertIn("VaultSession.getKey() !== oldEncryptionKey", change_credentials)
+        self.assertIn("synchronized(DatabaseHelper.DatabaseFileLock)", change_credentials)
+        self.assertIn("if (isCanceled() || !VaultSession.isCurrent(epoch)) VaultCommitDecision.CANCELED", change_credentials)
+        self.assertIn("VaultCommitDecision.fromCommit(settings.commitVaultSettings(id, encryptionType, newAuthMethod, credentials, false))", change_credentials)
+        self.assertIn("prepared?.destroy()", change_credentials)
+        self.assertIn("write is VaultWriteResult.Saved", change_credentials)
+        self.assertIn("open class Result(@JvmField val success: Boolean", change_credentials)
+
+        finish = read("FinishIntroTask.kt")
+        self.assertIn("DatabaseHelper.canInitialize(settingsContext)", finish)
+        self.assertIn("KeyStoreHelper.createEncryptionKey(settingsContext)", finish)
+        self.assertIn("VaultCommitDecision.fromCommit(settings.commitVaultSettings(id, encryptionType, authMethod, credentials, true))", finish)
+        self.assertIn("result.encryptionKey?.fill(0.toByte())", finish)
+        self.assertIn("prepared?.destroy()", finish)
+        # Both Java result constructors survive: (boolean, byte[]) and (boolean, byte[], long).
+        self.assertIn("open class Result(saveSuccessful: Boolean, encryptionKey: ByteArray?, generation: Long)", finish)
+        self.assertIn("this(saveSuccessful, encryptionKey, VaultSession.generation())", finish)
+        for field in ("@JvmField val generation: Long = generation",
+                      "@JvmField val saveSuccessful: Boolean = saveSuccessful",
+                      "@JvmField val encryptionKey: ByteArray? = encryptionKey"):
+            self.assertIn(field, finish)

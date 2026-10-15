@@ -187,7 +187,13 @@ abstract class UiBasedBackgroundTask<Result>(private val failedResult: Result) {
         return state is TaskState.Cancelled && state.reason == TaskCancellation.EXPLICIT
     }
 
-    fun isCanceled(): Boolean {
+    /*
+     * The Java method was public and non-final, and EncryptedBackupTask overrides it (a broadcast
+     * backup ignores session generation changes). Kotlin methods are final by default, so this
+     * stays explicitly open; the override could not compile — and javac would reject the Java one
+     * — against a final declaration.
+     */
+    open fun isCanceled(): Boolean {
         controller.observeGeneration(VaultSession.generation())
         return controller.snapshot() is TaskState.Cancelled
     }

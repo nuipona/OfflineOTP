@@ -2,7 +2,7 @@
 
 ## Scope and acceptance status
 
-This extends the OTP parser pilot with Kotlin contract envelopes and Android-free session/task controllers. The Java UI, storage implementation, WorkManager entry points and JCA crypto remain in place; the executor/Handler scheduling adapter (`UiBasedBackgroundTask`) is now Kotlin with an unchanged contract. There is no coroutine, Compose, serialization or bulk UI migration. Ciphertext, JSON, encrypted backup and staged UUID formats and cryptographic algorithms are unchanged.
+This extends the OTP parser pilot with Kotlin contract envelopes and Android-free session/task controllers. The Java UI, storage implementation, WorkManager entry points and JCA crypto remain in place; the executor/Handler scheduling adapter (`UiBasedBackgroundTask`) and the task subclasses over it are now Kotlin with unchanged contracts (see the [conversion record](kotlin-extracted-helpers.md)). There is no coroutine, Compose, serialization or bulk UI migration. Ciphertext, JSON, encrypted backup and staged UUID formats and cryptographic algorithms are unchanged.
 
 **Implementation and test sources are present; compilation and runtime acceptance are pending.** Local Python/source grammar checks are not Kotlin/Java compilation, JVM JUnit, Android instrumentation, or a security/reproducibility certification. Both flavors must pass the existing build/lint/packaged-manifest/independent-release gates and instrumentation matrix on API 28 and 36 before release. Network and IPC protections remain separate gates, not properties granted by sealed types.
 

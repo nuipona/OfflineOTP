@@ -39,4 +39,34 @@ object TypedValue {
 object Log {
     @JvmStatic
     fun e(tag: String?, msg: String?): Int = 0
+    @JvmStatic
+    fun w(tag: String?, msg: String?): Int = 0
+}
+
+/** Constant/inert stand-in for the Base64 flags used by the auth and settings code paths. */
+object Base64 {
+    const val DEFAULT: Int = 0
+    const val NO_WRAP: Int = 2
+    const val URL_SAFE: Int = 8
+
+    @JvmStatic
+    fun encode(input: ByteArray?, flags: Int): ByteArray = ByteArray(0)
+
+    @JvmStatic
+    fun encodeToString(input: ByteArray?, flags: Int): String = ""
+
+    @JvmStatic
+    fun decode(str: String?, flags: Int): ByteArray = ByteArray(0)
+
+    @JvmStatic
+    fun decode(input: ByteArray?, flags: Int): ByteArray = ByteArray(0)
+}
+
+/** Type-only stand-in for the atomic private-file helper the resolved Java sources use. */
+class AtomicFile(private val file: java.io.File) {
+    fun delete() {}
+    fun openRead(): java.io.InputStream = file.inputStream()
+    fun startWrite(): java.io.FileOutputStream = java.io.FileOutputStream(file)
+    fun finishWrite(output: java.io.FileOutputStream?) {}
+    fun failWrite(output: java.io.FileOutputStream?) {}
 }
