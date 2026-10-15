@@ -80,7 +80,9 @@ class UiDecompositionSourceTest(unittest.TestCase):
                      "View/EntryActionDialogs", "Utilities/VaultSession",
                      "Utilities/BoundedInputReader", "Utilities/BoundedOutput",
                      "Utilities/EncryptedBackupHeader", "Utilities/TokenCalculator",
-                     "Utilities/EditorActionHelper", "Utilities/HandlerTimerScheduler"):
+                     "Utilities/EditorActionHelper", "Utilities/HandlerTimerScheduler",
+                     "Utilities/SecretKeyWrapper", "Utilities/DimensionConverter",
+                     "View/SimpleDoubleClickListener"):
             self.assertTrue((KOTLIN / (stem + ".kt")).is_file())
             self.assertFalse((JAVA / (stem + ".java")).exists())
         timer = (KOTLIN / "Utilities/ScreenTimerController.kt").read_text()
@@ -150,3 +152,41 @@ class UiDecompositionSourceTest(unittest.TestCase):
         scheduler = (KOTLIN / "Utilities/HandlerTimerScheduler.kt").read_text()
         self.assertIn("class HandlerTimerScheduler : ScreenTimerController.Scheduler", scheduler)
         self.assertIn("private val handler = Handler(Looper.getMainLooper())", scheduler)
+
+    def test_converted_crypto_tap_and_dimension_helpers_keep_their_boundaries(self):
+        wrapper = (KOTLIN / "Utilities/SecretKeyWrapper.kt").read_text()
+        # Non-final class, both checked exceptions and the RSA transformation suppression are kept.
+        self.assertIn("open class SecretKeyWrapper", wrapper)
+        self.assertIn('@SuppressLint("GetInstance")', wrapper)
+        self.assertIn("@Throws(GeneralSecurityException::class, IOException::class)", wrapper)
+        self.assertIn("Cipher.getInstance(Constants.ALGORITHM_ASYMMETRIC)", wrapper)
+        self.assertEqual(2, wrapper.count("@Throws(GeneralSecurityException::class)"),
+                         "wrap()/unwrap() must keep their checked exception for Java callers")
+        self.assertIn("cipher.init(Cipher.WRAP_MODE, pair.public)", wrapper)
+        self.assertIn("cipher.init(Cipher.UNWRAP_MODE, pair.private)", wrapper)
+        self.assertIn('cipher.unwrap(blob, "AES", Cipher.SECRET_KEY) as SecretKey', wrapper)
+        for forbidden in ("data class", "Parcelable", "Serializable"):
+            self.assertNotIn(forbidden, wrapper)
+
+        listener = (KOTLIN / "View/SimpleDoubleClickListener.kt").read_text()
+        # The Java class was abstract with a public no-argument constructor and two abstract callbacks.
+        self.assertIn("abstract class SimpleDoubleClickListener : View.OnClickListener", listener)
+        self.assertIn("override fun onClick(v: View)", listener)
+        self.assertIn("abstract fun onSingleClick(v: View)", listener)
+        self.assertIn("abstract fun onDoubleClick(v: View)", listener)
+        self.assertIn("const val DOUBLE_CLICK_TIME_DELTA = 300L", listener)
+        # The pending callback re-reads firstTap, so a second tap suppresses the single click.
+        self.assertIn("v.postDelayed({ if (firstTap) onSingleClick(v) }, DOUBLE_CLICK_TIME_DELTA)", listener)
+        self.assertNotIn("!!", listener)
+
+        dimensions = (KOTLIN / "Utilities/DimensionConverter.kt").read_text()
+        # Static-only utility: members stay Java-callable, the lookup table stays unmodifiable.
+        for api in ("object DimensionConverter", "@JvmField", "val dimensionConstantLookup: Map<String, Int>",
+                    "Collections.unmodifiableMap(m)", "@JvmStatic",
+                    "fun stringToDimensionPixelSize(dimension: String, metrics: DisplayMetrics): Int",
+                    "fun stringToDimension(dimension: String, metrics: DisplayMetrics): Float",
+                    "throw NumberFormatException()"):
+            self.assertIn(api, dimensions)
+        # The default-locale lower-casing of the unit suffix is inherited from the Java implementation.
+        self.assertIn("matcher.group(3).lowercase(Locale.getDefault())", dimensions)
+        self.assertIn(r'Pattern.compile("^\\s*(\\d+(\\.\\d+)*)\\s*([a-zA-Z]+)\\s*$")', dimensions)

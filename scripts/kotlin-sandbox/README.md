@@ -24,12 +24,28 @@ manifest.
 | `Utilities/EncryptedBackupHeader.kt` | Backup framing validated before password derivation. |
 | `Utilities/EditorActionHelper.kt` | Only compiled and shape-checked (`KeyEvent` is a stub). |
 | `Utilities/HandlerTimerScheduler.kt` | Only compiled and shape-checked (`Handler`/`Looper` are stubs). |
+| `Utilities/SecretKeyWrapper.kt` | Real RSA wrap/unwrap round trip with a generated `KeyPair`; no platform crypto is stubbed. |
+| `Utilities/DimensionConverter.kt` | Parse/unit/rounding cases; the density formula lives in the `TypedValue` stub (see caveats). |
+| `View/SimpleDoubleClickListener.kt` | Single/double tap discrimination against a fake `View` that captures posted callbacks. |
 
 `Checks.kt` reproduces the intent of the repository's own tests — `ApplicationTest` (RFC vectors),
 `InputPolicyTest`, `BoundedInputReaderTest`, `EncryptedBackupHeaderTest`,
 `ScreenTimerControllerTest`, `EntryActionTargetTest` — for the classes above, and adds reflection
 assertions that the Java-visible API shapes survived the conversion (`@JvmStatic` forwarders,
-`@JvmField`/`const` fields, checked exceptions, `synchronized` methods, enum constants).
+`@JvmField`/`const` fields, checked exceptions, `synchronized` methods, enum constants, abstract
+callbacks, a **non-final** class where the Java one was extendable, and the deliberate
+`object`-conversion delta for static-only utilities).
+
+`Constants.java` is resolved, not shadowed: `scripts/tests/test_kotlin_sandbox_harness.py` fails if a
+stub of the same name as a production class appears, so the sandbox cannot drift from the real
+declarations. It also records *why* `Constants` stays Java — its crypto/backup parameters are
+package-private and Kotlin has no package-private visibility — while confirming that same-package
+Kotlin can read them.
+
+The RSA round trip is real cryptography: `SecretKeyWrapper` is exercised against a JVM-generated
+`KeyPair`, including a tampered blob, a wrong private key and wrong-length input, and one case
+decrypts the wrapped bytes with an independent `RSA/ECB/PKCS1Padding` cipher to prove the
+transformation actually in use.
 
 Still **not** covered, and therefore still dependent on the Gradle/device gates:
 
@@ -39,6 +55,11 @@ Still **not** covered, and therefore still dependent on the Gradle/device gates:
 - `Database/EntryList.kt`, `View/EntryActionDialogs.kt`, `View/EntryActionTarget.kt`,
   `View/EntryListPresentation.kt`: Android views/dialogs or the `Entry` model.
 - Every activity, fragment, adapter, preference, receiver and worker (all still Java).
+- Java *compilation*: there is no `javac` in this environment, so no Java class file is produced and
+  the Java callers' own compilation is never checked. `run.sh` does pass real Java sources
+  (`Utilities/Constants.java`) to `kotlinc` for resolution, which is why the Kotlin code is checked
+  against the actual declarations rather than a copy — including the package-private
+  `ALGORITHM_ASYMMETRIC` constant, which Kotlin in the same package can read.
 
 ## What it proves, and what it does not
 
@@ -49,11 +70,30 @@ what Java callers expect.
 Does **not** prove: anything about Android runtime behaviour (the stubs are approximations, not the
 platform), resource/manifest wiring, `Looper`/`Handler` timing on a real main thread, `KeyEvent`
 delivery, `commons-codec` behaviour (the `Hex` stub is a stand-in), Java-side compilation of the
-callers (no `javac` here), lint, packaging, signing or reproducibility. Kotlin objects also add an
+callers (no `javac` here), lint, packaging, signing or reproducibility.
+
+Two stubs are *replications* rather than inert types and are called out for that reason:
+`TypedValue.applyDimension` reimplements the documented AOSP density formula (so the density-dependent
+expectations for `DimensionConverter` are only as good as that formula), and `View.postDelayed` is
+`open` so the tap listener's posted callback can be captured (the platform method cannot be
+overridden that way, and no platform timing is exercised). Kotlin objects also add an
 `INSTANCE` field and static forwarders, and a private constructor produces one synthetic
 `public` bridge — both are inherent to Kotlin, not tested here.
 
 ## Running it
+
+On a machine without a JDK or Kotlin compiler, `bootstrap-toolchain.sh` fetches both from package
+mirrors (PyPI `jdk4py`, the npm `kotlin-compiler` distribution), verifies the pinned SHA-256 digests,
+unpacks them outside the repository and prints the environment to use:
+
+```sh
+bash scripts/kotlin-sandbox/bootstrap-toolchain.sh            # default: ${TMPDIR:-/tmp}/kotlin-sandbox-toolchain
+eval "$(bash scripts/kotlin-sandbox/bootstrap-toolchain.sh | grep ^export)"
+bash scripts/kotlin-sandbox/run.sh
+```
+
+Those digests are trust-on-first-use against the mirrors over TLS — not an independent provenance
+check. Prefer a package manager or a verified archive where one is available.
 
 ```sh
 KOTLINC=/path/to/kotlinc-jvm JAVA_BIN=/path/to/java bash scripts/kotlin-sandbox/run.sh
@@ -71,5 +111,5 @@ curl -sS -o /tmp/kt.tgz https://registry.npmjs.org/kotlin-compiler/-/kotlin-comp
 tar xzf /tmp/kt.tgz -C /tmp && chmod +x /tmp/package/bin/kotlinc*
 ```
 
-Verified with Kotlin `2.4.21` and Temurin `25.0.2` on 2026-10-15. Pin your own compiler when
-recording results; the check is only as meaningful as the versions you run it with.
+Verified with Kotlin `2.4.21` and Temurin `25.0.2` on 2026-10-15 (22 checks). Pin your own compiler
+when recording results; the check is only as meaningful as the versions you run it with.

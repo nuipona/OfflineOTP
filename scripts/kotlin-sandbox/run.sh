@@ -55,11 +55,21 @@ APP_SOURCES=(
     "$KOTLIN_APP/Utilities/EncryptedBackupHeader.kt"
     "$KOTLIN_APP/Utilities/EditorActionHelper.kt"
     "$KOTLIN_APP/Utilities/HandlerTimerScheduler.kt"
+    "$KOTLIN_APP/Utilities/SecretKeyWrapper.kt"
+    "$KOTLIN_APP/Utilities/DimensionConverter.kt"
+    "$KOTLIN_APP/View/SimpleDoubleClickListener.kt"
 )
 
 STUBS=("$SANDBOX"/stubs/android/*.kt
     "$SANDBOX/stubs/org/shadowice/flocke/andotp/R.kt"
     "$SANDBOX/stubs/org/apache/commons/codec/binary/Hex.kt")
+
+# Real Java sources, used for resolution only: kotlinc reads them so the Kotlin code is checked
+# against the actual declarations, and no Java class file is produced or verified here. Listed
+# explicitly instead of by directory so that adding one is a deliberate choice.
+JAVA_SOURCES=(
+    "$ROOT/app/src/main/java/org/shadowice/flocke/andotp/Utilities/Constants.java"
+)
 
 rm -rf "$OUT"
 mkdir -p "$OUT"
@@ -69,5 +79,5 @@ echo "java:    $JAVA_BIN"
 echo "stdlib:  $STDLIB"
 echo "output:  $OUT"
 
-"$KOTLINC" -jvm-target 1.8 -nowarn "${APP_SOURCES[@]}" "${STUBS[@]}" "$SANDBOX/Checks.kt" -d "$OUT"
+"$KOTLINC" -jvm-target 1.8 -nowarn "${APP_SOURCES[@]}" "${STUBS[@]}" "${JAVA_SOURCES[@]}" "$SANDBOX/Checks.kt" -d "$OUT"
 "$JAVA_BIN" -cp "$OUT:$STDLIB" ChecksKt

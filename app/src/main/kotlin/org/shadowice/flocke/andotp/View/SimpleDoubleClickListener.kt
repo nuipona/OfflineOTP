@@ -20,45 +20,43 @@
  * SOFTWARE.
  */
 
-package org.shadowice.flocke.andotp.View;
+package org.shadowice.flocke.andotp.View
 
-import android.view.View;
+import android.view.View
 
 /**
  * Distinguishes single and double taps; the single click is delayed by
- * {@code DOUBLE_CLICK_TIME_DELTA} ms to wait for a possible second tap.
+ * `DOUBLE_CLICK_TIME_DELTA` ms to wait for a possible second tap.
+ *
+ * The pending delayed callback reads [firstTap] when it runs, so a second tap that arrives before
+ * it runs suppresses the single click. Java subclasses keep overriding the same callbacks.
  */
-public abstract class SimpleDoubleClickListener implements View.OnClickListener {
+abstract class SimpleDoubleClickListener : View.OnClickListener {
 
-    private static final long DOUBLE_CLICK_TIME_DELTA = 300; // Milliseconds
+    private var lastClickTime = 0L
+    private var firstTap = true
 
-    private long lastClickTime = 0;
-    private boolean firstTap = true;
-
-    @Override
-    public void onClick(View v) {
-        long clickTime = System.currentTimeMillis();
+    override fun onClick(v: View) {
+        val clickTime = System.currentTimeMillis()
 
         if (clickTime - lastClickTime < DOUBLE_CLICK_TIME_DELTA) {
             if (firstTap)
-                onDoubleClick(v);
+                onDoubleClick(v)
 
-            firstTap = false;
+            firstTap = false
         } else {
-            firstTap = true;
+            firstTap = true
 
-            v.postDelayed(new Runnable() {
-                @Override
-                public void run() {
-                    if (firstTap)
-                        onSingleClick(v);
-                }
-            }, DOUBLE_CLICK_TIME_DELTA);
+            v.postDelayed({ if (firstTap) onSingleClick(v) }, DOUBLE_CLICK_TIME_DELTA)
         }
 
-        lastClickTime = clickTime;
+        lastClickTime = clickTime
     }
 
-    public abstract void onSingleClick(View v);
-    public abstract void onDoubleClick(View v);
+    abstract fun onSingleClick(v: View)
+    abstract fun onDoubleClick(v: View)
+
+    private companion object {
+        const val DOUBLE_CLICK_TIME_DELTA = 300L // Milliseconds
+    }
 }

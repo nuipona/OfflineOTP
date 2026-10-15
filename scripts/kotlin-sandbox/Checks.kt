@@ -12,6 +12,8 @@ import org.shadowice.flocke.andotp.Tasks.TaskOutcome
 import org.shadowice.flocke.andotp.Tasks.TaskStart
 import org.shadowice.flocke.andotp.Tasks.TaskState
 import org.shadowice.flocke.andotp.Utilities.BoundedInputReader
+import org.shadowice.flocke.andotp.Utilities.DimensionConverter
+import org.shadowice.flocke.andotp.Utilities.SecretKeyWrapper
 import org.shadowice.flocke.andotp.Utilities.BoundedOutput
 import org.shadowice.flocke.andotp.Utilities.EditorActionHelper
 import org.shadowice.flocke.andotp.Utilities.EncryptedBackupHeader
@@ -31,6 +33,10 @@ import org.shadowice.flocke.andotp.Utilities.ValidatedOtp
 import org.shadowice.flocke.andotp.Utilities.ScreenTimerController
 import org.shadowice.flocke.andotp.Utilities.TokenCalculator
 import org.shadowice.flocke.andotp.Utilities.Tools
+import org.shadowice.flocke.andotp.View.SimpleDoubleClickListener
+
+import android.util.DisplayMetrics
+import android.view.View
 
 import java.io.ByteArrayInputStream
 import java.io.IOException
@@ -39,8 +45,11 @@ import java.lang.reflect.Method
 import java.lang.reflect.Modifier
 import java.nio.ByteBuffer
 import java.nio.charset.StandardCharsets
+import java.security.GeneralSecurityException
+import java.security.KeyPairGenerator
 import java.security.MessageDigest
 import java.util.Arrays
+import javax.crypto.Cipher
 import javax.crypto.Mac
 import javax.crypto.spec.SecretKeySpec
 
@@ -194,6 +203,32 @@ private class FakeScheduler : ScreenTimerController.Scheduler {
     }
 
     fun scheduledCount(): Int = pending.size
+}
+
+/** Captures what a listener posts; the platform view would schedule it on its handler. */
+private class FakeView : View() {
+    val posted = ArrayList<Runnable>()
+    var lastDelay = -1L
+        private set
+
+    override fun postDelayed(runnable: Runnable, delayMillis: Long): Boolean {
+        posted.add(runnable)
+        lastDelay = delayMillis
+        return true
+    }
+}
+
+private class RecordingListener : SimpleDoubleClickListener() {
+    var singles = 0
+    var doubles = 0
+
+    override fun onSingleClick(v: View) {
+        singles++
+    }
+
+    override fun onDoubleClick(v: View) {
+        doubles++
+    }
 }
 
 fun main() {
@@ -635,6 +670,108 @@ fun main() {
                 { "rejected outcome" })
     }
 
+    check("secret key wrapper round-trips AES keys through real RSA wrapping") {
+        val generator = KeyPairGenerator.getInstance("RSA")
+        generator.initialize(2048)
+        val pair = generator.generateKeyPair()
+        val wrapper = SecretKeyWrapper(pair)
+
+        val raw = ByteArray(16) { (it + 1).toByte() }
+        val wrapped = wrapper.wrap(SecretKeySpec(raw, "AES"))
+        expect(wrapped.size == 256, { "wrapped length ${wrapped.size} is not the RSA modulus size" })
+        expect(!wrapped.contentEquals(raw), { "wrapped blob exposes the key" })
+
+        val unwrapped = wrapper.unwrap(wrapped)
+        expect(unwrapped.algorithm == "AES", { "unwrapped algorithm ${unwrapped.algorithm}" })
+        expect(unwrapped.encoded.contentEquals(raw), { "round trip changed the key bytes" })
+
+        // Proves the transformation is the mirrored RSA/PKCS#1 v1.5 constant, not just any round trip.
+        val manual = Cipher.getInstance("RSA/ECB/PKCS1Padding")
+        manual.init(Cipher.DECRYPT_MODE, pair.private)
+        expect(manual.doFinal(wrapped).contentEquals(raw), { "wrapped bytes are not RSA/PKCS1Padding output" })
+
+        val tampered = wrapped.copyOf()
+        tampered[10] = (tampered[10].toInt() xor 0x01).toByte()
+        expectThrows(GeneralSecurityException::class.java) { wrapper.unwrap(tampered) }
+        expectThrows(GeneralSecurityException::class.java) { SecretKeyWrapper(generator.generateKeyPair()).unwrap(wrapped) }
+        expectThrows(GeneralSecurityException::class.java) { wrapper.unwrap(ByteArray(8)) }
+        expectThrows(GeneralSecurityException::class.java) { wrapper.unwrap(ByteArray(300)) }
+
+        // A 32-byte key (the largest AES size used by the vault) still round-trips.
+        val longKey = ByteArray(32) { (it * 7 + 3).toByte() }
+        expect(wrapper.unwrap(wrapper.wrap(SecretKeySpec(longKey, "AES"))).encoded.contentEquals(longKey),
+                { "AES-256 round trip changed the key bytes" })
+    }
+
+    check("double-click listener separates single and double taps") {
+        val view = FakeView()
+        val listener = RecordingListener()
+
+        listener.onClick(view)
+        expect(listener.singles == 0 && listener.doubles == 0, { "a tap fired immediately" })
+        expect(view.posted.size == 1 && view.lastDelay == 300L, { "single tap not delayed by 300ms" })
+        view.posted[0].run()
+        expect(listener.singles == 1 && listener.doubles == 0, { "pending single click did not fire" })
+
+        val doubleView = FakeView()
+        val doubleListener = RecordingListener()
+        doubleListener.onClick(doubleView)
+        doubleListener.onClick(doubleView)
+        expect(doubleListener.doubles == 1 && doubleListener.singles == 0, { "second tap did not become a double click" })
+        doubleView.posted.forEach { it.run() }
+        expect(doubleListener.singles == 0, { "suppressed single click still fired" })
+
+        // A third rapid tap is not a second double click, matching the original firstTap guard.
+        doubleListener.onClick(doubleView)
+        expect(doubleListener.doubles == 1, { "third rapid tap produced another double click" })
+
+        // A pause longer than the delta makes the next tap a fresh single click.
+        Thread.sleep(350)
+        doubleListener.onClick(doubleView)
+        doubleView.posted.last().run()
+        expect(doubleListener.singles == 1, { "slow tap after a double click was not a single click" })
+    }
+
+    check("dimension strings convert with the documented units and rounding") {
+        val metrics = DisplayMetrics()
+        metrics.density = 2.0f
+        metrics.scaledDensity = 2.5f
+        metrics.xdpi = 320f
+        metrics.ydpi = 320f
+
+        expect(DimensionConverter.stringToDimensionPixelSize("12dp", metrics) == 24, { "12dp" })
+        expect(DimensionConverter.stringToDimensionPixelSize("12dip", metrics) == 24, { "12dip" })
+        expect(DimensionConverter.stringToDimensionPixelSize("12px", metrics) == 12, { "12px" })
+        expect(DimensionConverter.stringToDimensionPixelSize("12DP", metrics) == 24, { "12DP" })
+        expect(DimensionConverter.stringToDimensionPixelSize(" 12 dp ", metrics) == 24, { "padded input" })
+        expect(DimensionConverter.stringToDimensionPixelSize("1.5sp", metrics) == 4, { "1.5sp rounding" })
+        expect(DimensionConverter.stringToDimensionPixelSize("2in", metrics) == 640, { "2in" })
+        expect(DimensionConverter.stringToDimensionPixelSize("72pt", metrics) == 320, { "72pt" })
+        expect(DimensionConverter.stringToDimensionPixelSize("25.4mm", metrics) == 320, { "25.4mm" })
+        expect(DimensionConverter.stringToDimensionPixelSize("0dp", metrics) == 0, { "0dp" })
+        expect(DimensionConverter.stringToDimension("12dp", metrics) == 24.0f, { "stringToDimension" })
+
+        // Values that round to zero pixels still become one pixel when positive.
+        val sparse = DisplayMetrics()
+        sparse.density = 0.001f
+        expect(DimensionConverter.stringToDimensionPixelSize("12dp", sparse) == 1, { "sub-pixel value" })
+
+        for (invalid in listOf("12", "12zz", "", "dp12", "12.5.5dp", "-12dp", "12 dp x")) {
+            expectThrows(NumberFormatException::class.java) {
+                DimensionConverter.stringToDimensionPixelSize(invalid, metrics)
+            }
+        }
+
+        val lookup = DimensionConverter.dimensionConstantLookup
+        expect(lookup.size == 7, { "lookup size ${lookup.size}" })
+        expect(lookup["px"] == 0 && lookup["dip"] == 1 && lookup["dp"] == 1 && lookup["sp"] == 2
+                && lookup["pt"] == 3 && lookup["in"] == 4 && lookup["mm"] == 5, { "unit mapping changed" })
+        expectThrows(UnsupportedOperationException::class.java) {
+            @Suppress("UNCHECKED_CAST")
+            (lookup as MutableMap<String, Int>)["xx"] = 1
+        }
+    }
+
     check("converted classes keep the Java-visible API shapes") {
         expectPublicFieldValue(BoundedInputReader::class.java, "MAX_DOCUMENT_BYTES", 16 * 1024 * 1024, INT_TYPE, true)
         expectMethod(BoundedInputReader::class.java, "static byte[] read(InputStream,int)")
@@ -678,6 +815,60 @@ fun main() {
                 { "BoundedOutput lost its monitor: ${boundedWrites.map { methodSignature(it) }}" })
         expect(BoundedOutput::class.java.declaredConstructors.any { it.parameterTypes.contentEquals(arrayOf<Class<*>>(INT_TYPE)) },
                 { "missing BoundedOutput(int)" })
+
+        val wrapper = SecretKeyWrapper::class.java
+        expect(Modifier.isPublic(wrapper.modifiers), { "SecretKeyWrapper is not public" })
+        expect(!Modifier.isFinal(wrapper.modifiers), { "SecretKeyWrapper must stay extendable like the Java class" })
+        val wrapperConstructor = wrapper.declaredConstructors.single { !it.isSynthetic }
+        expect(Modifier.isPublic(wrapperConstructor.modifiers), { "SecretKeyWrapper constructor is not public" })
+        expect(wrapperConstructor.parameterTypes.contentEquals(arrayOf<Class<*>>(java.security.KeyPair::class.java)),
+                { "SecretKeyWrapper constructor parameter changed" })
+        expect(wrapperConstructor.exceptionTypes.contains(GeneralSecurityException::class.java)
+                && wrapperConstructor.exceptionTypes.contains(java.io.IOException::class.java),
+                { "SecretKeyWrapper constructor lost its checked exceptions" })
+        expectMethod(wrapper, "byte[] wrap(SecretKey)")
+        expectMethod(wrapper, "SecretKey unwrap(byte[])")
+        for (name in listOf("wrap", "unwrap")) {
+            val method = wrapper.declaredMethods.first { it.name == name }
+            expect(method.exceptionTypes.contains(GeneralSecurityException::class.java),
+                    { "SecretKeyWrapper.$name lost its checked exception" })
+        }
+
+        val listener = SimpleDoubleClickListener::class.java
+        expect(Modifier.isAbstract(listener.modifiers), { "SimpleDoubleClickListener is not abstract" })
+        expect(View.OnClickListener::class.java.isAssignableFrom(listener),
+                { "SimpleDoubleClickListener no longer implements View.OnClickListener" })
+        expect(listener.declaredConstructors.any { Modifier.isPublic(it.modifiers) && it.parameterCount == 0 },
+                { "SimpleDoubleClickListener lost its public no-argument constructor" })
+        expectMethod(listener, "void onSingleClick(View)")
+        expectMethod(listener, "void onDoubleClick(View)")
+        expectMethod(listener, "void onClick(View)")
+        expect(listener.declaredMethods.filter { Modifier.isPublic(it.modifiers) && it.name.startsWith("on") }
+                .all { !Modifier.isStatic(it.modifiers) },
+                { "public click callbacks must stay instance methods" })
+        expect(listener.declaredMethods.filter { it.name == "onSingleClick" || it.name == "onDoubleClick" }
+                .all { Modifier.isAbstract(it.modifiers) },
+                { "click callbacks must stay abstract for Java subclasses" })
+        // Kotlin's SAM conversion of the posted Runnable adds a private static lambda helper, like
+        // the lambdas already used by the Java sources; it must stay private.
+        expect(listener.declaredMethods.filter { it.name.contains("\$") }.all { Modifier.isPrivate(it.modifiers) },
+                { "synthetic lambda helpers must stay private" })
+
+        val dimensions = DimensionConverter::class.java
+        expectMethod(dimensions, "static int stringToDimensionPixelSize(String,DisplayMetrics)")
+        expectMethod(dimensions, "static float stringToDimension(String,DisplayMetrics)")
+        expectPublicFieldValue(dimensions, "dimensionConstantLookup", DimensionConverter.dimensionConstantLookup,
+                Map::class.java, true)
+        // Converting a static-only utility to a Kotlin object removes the public constructor and
+        // makes the class final. That is the deliberate, documented delta shared by this conversion
+        // and the earlier Tools/InputPolicy ones; every call site uses only the static members.
+        for (utility in listOf(dimensions, InputPolicy::class.java, TokenCalculator::class.java)) {
+            expect(utility.declaredConstructors.all { Modifier.isPrivate(it.modifiers) },
+                    { "${utility.simpleName} should not be instantiable after conversion" })
+            expect(Modifier.isFinal(utility.modifiers), { "${utility.simpleName} object is not final" })
+            expect(utility.declaredFields.any { it.name == "INSTANCE" },
+                    { "${utility.simpleName} object is missing INSTANCE" })
+        }
 
         expectMethod(OwnedSecret::class.java, "static OwnedSecret copyOf(byte[])")
         expectMethod(SessionController::class.java, "SessionState snapshot()")

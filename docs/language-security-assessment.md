@@ -24,7 +24,7 @@ This is **static source analysis, not a penetration test or a security certifica
 
 | Area | Observed state | Implication |
 | --- | --- | --- |
-| Application language | 61 main-source Java files, about 11,933 lines including comments/blank lines, plus 22 converted Kotlin files (about 1,754 lines) and two flavor-specific Java files; 12 Java instrumentation test files | A mixed Java/Kotlin migration is feasible; there is no in-repository C/C++ memory-unsafe core to replace. Counts are a 2026-10-15 snapshot of this review, not a target |
+| Application language | 58 main-source Java files, about 11,688 lines including comments/blank lines, plus 25 converted Kotlin files (about 1,986 lines) and two flavor-specific Java files; 12 Java instrumentation test files | A mixed Java/Kotlin migration is feasible; there is no in-repository C/C++ memory-unsafe core to replace. Counts are a 2026-10-15 snapshot of this review, not a target |
 | Native/other runtimes | Kotlin (JVM) sources are checked in under `app/src/main/kotlin`; no Rust, C, or C++ implementation | Rust would introduce JNI, native packaging and a second toolchain rather than remove existing native exposure |
 | Build | Three Groovy Gradle files; Gradle 8.13 wrapper; Android Gradle Plugin 8.13.2; Kotlin plugin 2.3.20 pinned with `jvmTarget` 1.8 | Kotlin is added; keep plugin/AGP/Gradle compatibility verified, and note that no Gradle build has been executed in this environment |
 | Android contract | `minSdkVersion 28`, `targetSdkVersion 35`, `compileSdk 36`; Java source/target 8 and core-library desugaring | Declared support begins at Android 9, not the older Android versions supported by historical upstream releases |
