@@ -102,7 +102,7 @@ After committing the baseline, rerun all CI checks in clean environments. Consid
 
 `VaultSessionTest` covers key/generation revocation, one-use non-aliasing handoffs and listener removal. `InputPolicyTest` covers image arithmetic, OTP bounds, JSON nesting and bounded provider output.
 
-`OtpUriParserTest` exercises the production Kotlin URI parser, explicit failure categories, immutable validated metadata/owned seeds, strict decoding, all supported variants and a deterministic malformed corpus without Android mocks. `KotlinOtpInteropTest` checks the generated API from Java, Entry round trips, Android decoding and an RFC leading-zero vector. See [Kotlin OTP parser pilot](kotlin-otp-parser-pilot.md) for compatibility changes and ownership rules.
+`OtpUriParserTest` exercises the production Kotlin URI parser, explicit failure categories, immutable validated metadata/owned seeds, strict decoding, all supported variants and a deterministic malformed corpus without Android mocks. `KotlinOtpInteropTest` checks the generated API from Java, Entry round trips, Android decoding and an RFC leading-zero vector. `EntryJsonTest` characterizes the Java/Android document boundary: the serialized field order and defaults (compared byte-for-byte), the malformed-field matrix with its closed error set, the seed-ownership rules, the `Entry` adapter's failure messages, its URI parameter set and the token calculators. See [Kotlin OTP parser pilot](kotlin-otp-parser-pilot.md) for compatibility changes and ownership rules.
 
 These exercise production helpers without Android mocks or Robolectric. The helpers are used by actual document reads and restore tasks, rather than being test-only copies.
 
@@ -146,7 +146,7 @@ The stdlib Python suite mutates synthetic manifests to prove that these checks f
 
 ### Vault and independently signed IPC regression tests
 
-`VaultFailureSecurityTest`, `CredentialLifecycleSecurityTest`, `EntryInputSecurityTest`, `BackgroundTaskCancellationSecurityTest` and `IpcAuthorizationSecurityTest` exercise strict vault failures, crash-recovery markers, credentials/ciphertext consistency, malformed inputs, cancellation and a different-UID/different-certificate attacker. The IPC assertion checks denied panic, unchanged vault/settings and no backup work queued with automation enabled. These are Android tests prepared for CI, **not locally executed results**.
+`VaultFailureSecurityTest`, `CredentialLifecycleSecurityTest`, `EntryInputSecurityTest`, `EntryJsonTest`, `BackgroundTaskCancellationSecurityTest` and `IpcAuthorizationSecurityTest` exercise strict vault failures, crash-recovery markers, credentials/ciphertext consistency, malformed inputs, the stored entry-document format with its owned one-use seed, cancellation and a different-UID/different-certificate attacker. The IPC assertion checks denied panic, unchanged vault/settings and no backup work queued with automation enabled. These are Android tests prepared for CI, **not locally executed results**.
 
 See [Vault security hardening](vault-security-hardening.md) for the intentional IPC/platform-backup compatibility breaks and implementation details. Further runtime review is needed for UI/rotation/process death, authorized same-signer integrations, OEM restore behavior and storage-provider failure injection. The manifest gate checks caller-permission configuration; only execution of the separately signed client exercises the Android authorization boundary.
 

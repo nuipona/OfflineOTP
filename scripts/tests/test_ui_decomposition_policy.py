@@ -1,4 +1,5 @@
 from pathlib import Path
+import re
 import unittest
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -91,7 +92,8 @@ class UiDecompositionSourceTest(unittest.TestCase):
                      "Tasks/AuthenticationTask", "Tasks/GenericBackupTask", "Tasks/GenericRestoreTask",
                      "Tasks/PGPBackupTask", "Tasks/PGPRestoreTask", "Tasks/EncryptedBackupTask",
                      "Tasks/EncryptedRestoreTask", "Tasks/ChangeEncryptionTask",
-                     "Tasks/ChangeCredentialsTask", "Tasks/FinishIntroTask"):
+                     "Tasks/ChangeCredentialsTask", "Tasks/FinishIntroTask",
+                     "Database/Entry", "Database/EntryJson", "Database/EntryJsonResult"):
             self.assertTrue((KOTLIN / (stem + ".kt")).is_file())
             self.assertFalse((JAVA / (stem + ".java")).exists())
         timer = (KOTLIN / "Utilities/ScreenTimerController.kt").read_text()
@@ -106,6 +108,143 @@ class UiDecompositionSourceTest(unittest.TestCase):
         self.assertIn('"EntryActionTarget(redacted)"', target)
         for forbidden in ("import android.", "Parcelable", "Serializable"):
             self.assertNotIn(forbidden, target)
+
+    def test_converted_entry_model_and_document_boundary_keep_their_shapes(self):
+        """Entry is executed by Gradle/instrumentation only: its thumbnail members stay Java, so the
+        Java-visible shapes and the preserved semantics are pinned here at source level."""
+        entry = (KOTLIN / "Database/Entry.kt").read_text()
+        codec = (KOTLIN / "Database/EntryJson.kt").read_text()
+        contract = (KOTLIN / "Database/EntryJsonResult.kt").read_text()
+
+        # The Java class was extendable, exposed a public tags field and a nested enum.
+        self.assertIn("open class Entry {", entry)
+        self.assertIn("enum class OTPType {\n        TOTP, HOTP, MOTP, STEAM\n    }", entry)
+        self.assertIn("@JvmField\n    var tags: MutableList<String>", entry)
+        self.assertIn("fun getTags(): MutableList<String> = tags", entry)
+        self.assertIn("fun setTags(tags: MutableList<String>) {", entry)
+        self.assertIn("const val COLOR_RED = 1", entry)
+        self.assertIn("@JvmStatic\n        fun validateSecret(secret: String?, type: OTPType?): Boolean", entry)
+
+        # Both legacy adapters keep the checked exception their Java callers catch, and their
+        # failure text carries the closed error name instead of the rejected input.
+        self.assertEqual(2, entry.count("@Throws(Exception::class)\n    constructor("))
+        self.assertIn('throw IllegalArgumentException("Invalid OTP URI: " + result.error.name)', entry)
+        self.assertIn('throw IllegalArgumentException("Invalid entry JSON: " + result.error.name)', entry)
+        self.assertIn("@Throws(JSONException::class)\n    fun toJSON(): JSONObject = EntryJson.serialize(", entry)
+
+        # One definition of the stored format: the document field names live in the boundary only.
+        for json_key in ("last_used", "used_frequency", "thumbnail", "type", "label"):
+            self.assertNotIn(f'"{json_key}"', entry)
+            self.assertIn(f'"{json_key}"', codec)
+        self.assertNotIn("Base32().decode", entry)
+        for signature in ("@JvmStatic\n    fun parse(json: JSONObject): EntryJsonResult",
+                          "@JvmStatic\n    @Throws(JSONException::class)\n    fun serialize(",
+                          "@JvmStatic\n    fun decodeBase32Secret(encoded: String?): ByteArray?"):
+            self.assertIn(signature, codec)
+        for import_line in ("import android.", "import androidx.", "import javax.crypto."):
+            self.assertNotIn(import_line, codec)
+            self.assertNotIn(import_line, contract)
+        # The serialized field order is part of the stored format and of the JSON round-trip test.
+        body = codec[codec.index("fun serialize("):]
+        self.assertEqual(["JSON_SECRET", "JSON_ISSUER", "JSON_LABEL", "JSON_DIGITS", "JSON_TYPE",
+                          "JSON_ALGORITHM", "JSON_THUMBNAIL", "JSON_LAST_USED", "JSON_USED_FREQUENCY",
+                          "JSON_PERIOD", "JSON_COUNTER", "JSON_TAGS"],
+                         re.findall(r"jsonObj\.put\((JSON_\w+)", body))
+
+        # A closed failure set, an owned one-use seed and redacted diagnostics. No generated
+        # data-class members: they would add seed-based equality/copy/destructuring.
+        self.assertIn("INVALID_TEXT, TEXT_TOO_LONG, MISSING_SECRET, INVALID_SECRET, INVALID_NUMBER,\n"
+                      "    MISSING_COUNTER, INVALID_PARAMETERS, UNSUPPORTED_TYPE, INVALID_ALGORITHM,\n"
+                      "    INVALID_TAGS, TOO_MANY_TAGS", contract)
+        self.assertNotIn("data class ValidatedEntry", contract)
+        self.assertNotIn("data class Entry", entry)
+        self.assertIn('"ValidatedEntry(redacted)"', contract)
+        self.assertIn('"EntryJsonResult.Success(redacted)"', contract)
+        self.assertIn("private val seed: ByteArray =", contract)
+        self.assertIn('check(!closed) { "Entry value already closed" }', contract)
+
+        # Semantics a mechanical conversion could silently drop.
+        self.assertIn("if (type == OTPType.HOTP || type == OTPType.TOTP) {", entry)
+        self.assertIn("Objects.hash(type, period, counter, digits, algorithm, secret, label, issuer)", entry)
+        self.assertIn('secret ?: throw NullPointerException("Entry has no secret")', entry)
+        self.assertIn("if (!json.has(JSON_SECRET)) reject(EntryJsonError.MISSING_SECRET)", codec)
+        self.assertIn("InputPolicy.tokenParameters(period, digits, counter)", codec)
+        self.assertIn("private fun thumbnailFromName(name: String?): EntryThumbnail.EntryThumbnails", entry)
+        self.assertIn("fun updateOTP(updateNow: Boolean): Boolean", entry)
+        self.assertIn('private const val MOTP_NO_PIN_CODE = "PINREQ"', entry)
+
+    def test_converted_entry_keeps_the_whole_java_member_inventory(self):
+        """The sandbox cannot reflect Entry's members (its members reference the Java
+        EntryThumbnail), so the complete Java surface and the member policies it encoded are pinned
+        here, at source level, member by member."""
+        entry = (KOTLIN / "Database/Entry.kt").read_text()
+
+        # Every public member the Java class exposed is still declared with the same JVM name.
+        members = """validate destroy toJSON toUri isTimeBased isCounterBased getType setType getSecret
+        getSecretEncoded setSecret getIssuer setIssuer getLabel setLabel getPeriod setPeriod getCounter
+        setCounter getDigits setDigits getTags setTags getThumbnail setThumbnail getAlgorithm
+        hasNonDefaultPeriod isVisible setVisible setHideTask getHideTask getLastUsed setLastUsed
+        getUsedFrequency setUsedFrequency getCurrentOTP getPrevOTP getPin setPin getListId setListId
+        updateOTP hasColorChanged equals hashCode setColor getColor validateSecret""".split()
+        for member in members:
+            self.assertRegex(entry, rf"\bfun {member}\s*\(", f"Entry.{member} disappeared")
+        self.assertIn("fun toUri(): Uri?", entry)
+        self.assertIn("fun getSecret(): ByteArray?", entry)
+        self.assertIn("fun getSecretEncoded(): String {", entry)
+        self.assertIn("if (type == OTPType.MOTP) String(seed) else String(Base32().encode(seed))", entry)
+        self.assertIn("fun setSecret(secret: ByteArray?)", entry)
+        self.assertIn("this.secret = secret?.clone()", entry)
+        self.assertIn("fun getHideTask(): Runnable?", entry)
+        self.assertIn("fun setHideTask(newTask: Runnable?)", entry)
+
+        # `setIssuer` was the only Java setter that re-validated; the others must not start to.
+        self.assertIn("fun setIssuer(issuer: String?, updateThumbnail: Boolean) {", entry)
+        self.assertIn("if (updateThumbnail && issuer != null)", entry)
+        for setter in ("setType", "setSecret", "setLabel", "setPeriod", "setCounter", "setDigits",
+                       "setTags", "setThumbnail", "setVisible", "setHideTask", "setLastUsed",
+                       "setUsedFrequency", "setPin", "setListId", "setColor"):
+            body = re.search(rf"fun {setter}\([^)]*\)[^{{]*{{(.*?)\n    }}", entry, re.S)
+            self.assertIsNotNone(body, f"missing body for {setter}")
+            self.assertNotIn("validate()", body.group(1), f"{setter} must not validate, as Java did not")
+        issuer = re.search(r"fun setIssuer\([^)]*\)[^{]*{(.*?)\n    }", entry, re.S)
+        self.assertIn("validate()", issuer.group(1))
+
+        # destroy() keeps the Java reset list: previously shown tokens and metadata are cleared.
+        destroy = re.search(r"fun destroy\(\)[^{]*{(.*?)\n    }", entry, re.S).group(1)
+        for reset in ("secret?.fill(0)", "secret = null", 'currentOTP = ""', 'prevOTP = ""', 'pin = ""',
+                      'issuer = ""', 'label = ""', "tags = ArrayList()", "visible = false",
+                      "hideTask = null"):
+            self.assertIn(reset, destroy)
+
+        # The URI writer keeps the Java parameter policy, including the HOTP fall-through that also
+        # emits a non-default period, and the default-digest/default-digit omissions.
+        to_uri = entry[entry.index("fun toUri()"):entry.index("fun isTimeBased()")]
+        for written in ('builder.appendQueryParameter("secret", String(ownedSecret()))',
+                        'builder.appendQueryParameter("secret", Base32().encodeAsString(ownedSecret()))',
+                        'builder.appendQueryParameter("issuer", issuer)',
+                        'builder.appendQueryParameter("counter", counter.toString())',
+                        'builder.appendQueryParameter("period", period.toString())',
+                        'builder.appendQueryParameter("digits", digits.toString())',
+                        'builder.appendQueryParameter("algorithm", algorithm.name)',
+                        'builder.appendQueryParameter("tags", tag)'):
+            self.assertIn(written, to_uri)
+        for guard_line in ("if (type == OTPType.HOTP || type == OTPType.TOTP) {",
+                           "if (period != TokenCalculator.TOTP_DEFAULT_PERIOD)",
+                           "if (digits != TokenCalculator.TOTP_DEFAULT_DIGITS)",
+                           "if (algorithm != TokenCalculator.DEFAULT_ALGORITHM)"):
+            self.assertIn(guard_line, to_uri)
+        self.assertIn('.scheme("otpauth")', to_uri)
+        self.assertIn(".appendPath(label)", to_uri)
+
+        # updateOTP keeps the Java early return, its timeout guard and the mOTP PIN placeholder.
+        update = entry[entry.index("fun updateOTP("):entry.index("fun hasColorChanged()")]
+        self.assertIn("val seed = secret ?: return false", update)
+        self.assertIn("if (updateNow || counter > last_update)", update)
+        self.assertIn("prevOTP = if (currentOTP.isNullOrEmpty()) \"\" else currentOTP", update)
+        self.assertIn("currentOTP = MOTP_NO_PIN_CODE", update)
+        self.assertIn("currentOTP = TokenCalculator.HOTP(seed, counter, digits, algorithm)", update)
+        self.assertIn("last_update = counter", update)
+        self.assertIn("setColor(COLOR_DEFAULT)", update)
 
     def test_converted_io_and_otp_utilities_keep_java_visible_shapes(self):
         reader = (KOTLIN / "Utilities/BoundedInputReader.kt").read_text()

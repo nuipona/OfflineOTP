@@ -62,11 +62,26 @@ Sixth batch (the task subclasses over that runner):
   that this batch exposed is described under [task runner and `isCanceled()`](#task-runner-and-iscanceled).
 - `Utilities/OtpUriParser.kt`, `Utilities/VaultContracts.kt`, `Utilities/EntryPersistence.kt` and
   `Utilities/VaultRestoreOperation.kt` joined the sandbox compile set unchanged: with the stub set
-  grown (`Base32`/JSON stand-ins, resolver/keystore/graphics surface) and `Entry.java` a resolution
-  source, they now type-check against the real declarations instead of being excluded.
+  grown (`Base32`/JSON stand-ins, resolver/keystore/graphics surface) and the then-Java `Entry` a
+  resolution source, they now type-check against the real declarations instead of being excluded.
   `EntryPersistence`'s Kotlin construction of the converted `EncryptedBackupTask` is verified by
   that compile; none of them is *executed* in the sandbox (their bodies call the Java-only
   helpers, which produce no class files there).
+
+Seventh batch (the validated entry model — the assessment's first conversion target):
+
+- `Database/EntryJsonResult.kt`: the closed parse-error set and the one-use `ValidatedEntry` value
+  that owns its seed (`copySecret()`/`close()`, redacted diagnostics, no generated `data class`
+  members).
+- `Database/EntryJson.kt`: the stored-document codec — `parse(JSONObject)` returning that result and
+  `serialize(...)` writing the same fields in the same order as the Java serializer.
+- `Database/Entry.kt` (replacing `Entry.java`): the mutable token/display metadata plus the two Java
+  adapters, delegating parsing to `OtpUriParser`/`EntryJson` instead of parsing itself.
+- `Database/EntryList.kt` predates this batch as Kotlin and is unchanged; it is compiled with it.
+
+`Utilities/EntryThumbnail.java` and `Utilities/LetterBitmap.java` stay Java: their constants are
+Android resource ids (`R.drawable`/`R.mipmap`) and their bitmaps are platform graphics. `Entry`
+therefore keeps `EntryThumbnail.EntryThumbnails` as its thumbnail type, exactly as the Java did.
 
 No activity, list adapter, fragment, preference, receiver, worker, dialog renderer or persistence
 implementation is converted (the task runner and its subclasses are). No coroutine, Compose, new
@@ -302,6 +317,54 @@ sandbox check asserts the method stays overridable. This is exactly the kind of 
 Gradle gate would have caught; the sandbox now compiles the subclass against the real runner and
 would fail again if the override were dropped or the base were re-finalized.
 
+### Entry model and document codec
+
+Parsing is no longer `Entry`'s job. The URI path stays in `OtpUriParser` and the document path is the
+new `EntryJson`; both return a closed result instead of throwing from inside the model, and both
+enforce `InputPolicy` on the same parameters. `Entry(String)` and `Entry(JSONObject)` remain as thin
+adapters: they delegate, throw `IllegalArgumentException` carrying only the error name (never the
+rejected input, which may be a secret), and close the parsed value on every path — including the
+`destroy()` of an entry that fails later in construction. Java callers see the same constructors,
+the same exception type and the same messages' shape.
+
+- The stored format is byte-compatible with the Java serializer: the same field names in the same
+  order (`secret, issuer, label, digits, type, algorithm, thumbnail, last_used, used_frequency`, then
+  `period` for TOTP or `counter` for HOTP, then `tags`), the secret re-encoded as padded Base32, and
+  `period`/`counter` omitted when the entry does not use them. `ApplicationTest.testEntry` compares
+  that string exactly, so an ordering or naming change fails there.
+- Document numbers must be integral and in range (`InputPolicy.tokenParameters`: `period` 1…86400,
+  `digits` 1…9, counter non-negative and not `Long.MAX_VALUE`); a decimal, a string too large for a
+  long, or a wrong type is rejected rather than coerced. Steam keeps its own digit default and the
+  TOTP/HOTP defaults (`30`/`6`, `HOTP_INITIAL_COUNTER`) come from `TokenCalculator`.
+- A document with no `secret` key is reported as `MISSING_SECRET`, matching the URI parser's error for
+  a URI without a secret; a non-string secret is `INVALID_TEXT`, an empty or non-canonical Base32
+  secret `INVALID_SECRET`. mOTP still requires even-length hex. Rejections are values, not exceptions,
+  so `DatabaseHelper.entriesToString` keeps mapping any failure to `VaultException(CORRUPT)`.
+- `ValidatedEntry` owns its seed: `copySecret()` returns a copy, `close()` wipes the stored array and
+  is idempotent, use after close throws `IllegalStateException`, and no `toString()`, `equals`,
+  `hashCode`, `copy` or destructuring is generated from it. `Entry.getSecret()` still returns a copy,
+  `destroy()` still wipes and empties the entry, and `ownedSecret()` after `destroy()` still throws
+  `NullPointerException` as the Java did.
+- Display metadata stays best-effort and unvalidated: an unknown or oversized thumbnail name and an
+  unreadable `last_used`/`used_frequency` are tolerated (defaults) rather than rejecting an otherwise
+  valid entry, because they are not security-relevant and a rejection would lose the entry.
+- The Java-visible surface is unchanged: `public enum OTPType`, `public static final int COLOR_RED`,
+  the public `tags` list (field, not a Kotlin `MutableList` property), `@JvmStatic validateSecret`,
+  both 8-argument constructors, `getSecretEncoded()` (raw hex for mOTP, Base32 otherwise),
+  `toUri()` (including the Java switch's HOTP fall-through that also writes `period`), and
+  value-based `equals`/`hashCode`. `hashCode` keeps the Java array-identity byte (`java.util.Objects`
+  over the seed array), so equal entries stay equal and the vault's `ArrayList.contains` dedupe is
+  unchanged; `EntryList.addEntry` depends on exactly that.
+- Nullability follows the Java contracts where they were real: `getSecret()` returns null for a
+  destroyed entry, `getCurrentOTP()`/`getPrevOTP()`/`getHideTask()` stay nullable, and the two legacy
+  adapters still declare `throws Exception`. A null tag list, `OTPType` or `HashAlgorithm` argument
+  now fails fast at construction (Kotlin's parameter check) instead of surfacing later as
+  `IllegalArgumentException` — the same documented trade-off as the task batch. A null *issuer* or
+  *label* argument, which the Java stored as null and then omitted from the serialized document, is
+  normalized to the empty string that every other path (URI parser, document parser, dialogs)
+  already produces.
+- `Entry` is `open`, not final: it was extendable Java, and `EntryList`/the views hold it as a model.
+
 ## Tests and acceptance
 
 Existing Java/Kotlin characterization tests remain in place and unchanged: the RFC vector tests in
@@ -315,14 +378,25 @@ and the existing architecture guard reads the moved `HandlerTimerScheduler.kt`. 
 it also pins the task subclasses' constructors, `Mode`/`Result` DTOs, the reference-identity session
 checks, the wipe paths and the runner's `open isCanceled()`; the contract-migration guard now scans
 the Kotlin tree for legacy vault APIs as well, since the tasks moved there; and the sandbox harness
-test verifies the `R` stand-in still matches what `run.sh` compiles.
+test verifies the `R` stand-in still matches what `run.sh` compiles. With the entry batch it adds
+`Entry`, `EntryJson` and `EntryJsonResult` to the converted-stem list and pins the model's shapes
+(non-final class, nested `OTPType`, `@JvmField` tags with its getter/setter pair, `COLOR_RED`,
+`@JvmStatic validateSecret`, both `@Throws(Exception::class)` adapters), the single definition of the
+document field names and their order, the closed error set, the one-use/redacted value, and the
+semantics a mechanical conversion could drop (the HOTP/TOTP branch in `ownedSecret`, the value-based
+`hashCode`, the `MISSING_SECRET` check, `InputPolicy.tokenParameters`, thumbnail resolution,
+`updateOTP`'s `Boolean`, the mOTP PIN placeholder). A new instrumentation test,
+`app/src/androidTest/.../Database/EntryJsonTest.java`, characterizes the boundary on a device:
+stored-format equality for a round-tripped document, the malformed-field matrix, the seed ownership
+rules, the `Entry` adapter's round trip and failure messages, the URI parameter set, the token
+calculators and the manual-entry secret validator.
 
 ### Executed here: partial sandbox compile/run check
 
 `scripts/kotlin-sandbox/` compiles the converted platform-free/low-platform sources against
 hand-written platform stubs and runs `Checks.kt` on a desktop JVM; `bootstrap-toolchain.sh` fetches
 a JDK and the Kotlin compiler from package mirrors when the machine has neither. Executed on
-2026-10-15 with **Kotlin 2.4.21 and Temurin 25.0.2** (`-jvm-target 1.8`), it reports 35 passing
+2026-10-15 with **Kotlin 2.4.21 and Temurin 25.0.2** (`-jvm-target 1.8`), it reports 40 passing
 checks:
 
 - RFC 6238 TOTP vectors (SHA-1/256/512, six timestamps, eight digits) and RFC 4226 HOTP vectors.
@@ -351,10 +425,18 @@ checks:
   and a stale captured generation being cancelled before work begins.
 - `VaultSession` facade shapes (mutation lock field, static generation/listener forwarders) read
   live by the runner.
+- The entry document boundary executed against functional `org.json`/`Base32`/`Hex` replicas: the
+  stored field order and defaults (including a reserialization that equals the legacy string
+  byte-for-byte), the malformed-field matrix with its closed error set, the `ValidatedEntry`
+  one-use/redacted ownership, and the Base32/mOTP-hex secret rules.
+- The converted `Entry` class **reflected, not instantiated** (its members reference the Java,
+  resource-backed `EntryThumbnail`, so no `Entry` object can exist in this sandbox): public and
+  non-final class, the six constructors including both `Exception`-declaring adapters, the `OTPType`
+  constants, `COLOR_RED`, and `validateSecret` for Base32/mOTP secrets.
 - The ten converted task subclasses are **type-checked against the real Java declarations** they
   call: `run.sh` passes `Settings.java`, `EncryptionHelper.java`, `BackupHelper.java`,
   `StorageAccessHelper.java`, `DatabaseHelper.java`, `KeyStoreHelper.java`, `FileHelper.java`,
-  `EntryThumbnail.java`, `LetterBitmap.java` and `Entry.java` to `kotlinc` for resolution, so the
+  `EntryThumbnail.java` and `LetterBitmap.java` to `kotlinc` for resolution, so the
   Kotlin calls are verified against the actual parameter/return types instead of stub copies. Their
   bodies are not executed (the Java sources produce no class files on the desktop JVM), and
   reflection covers the members whose signatures avoid those Java-only types: constructor parameter
@@ -381,8 +463,9 @@ Both flavors must compile and pass host tests, focused lint and packaged-manifes
 28/36 instrumentation matrix, plus the independent release/reproducibility and dependency
 comparisons. Java-side compilation of the callers, `Handler`/`Looper` timing on a real main thread,
 `KeyEvent` delivery, `TypedValue.applyDimension` (the stub replicates the documented density formula),
-the real `View.postDelayed` scheduling and `commons-codec` behavior are not covered by the sandbox
-check. See
+the real `View.postDelayed` scheduling, `Entry`'s thumbnail-dependent members and the real
+`org.json`/`commons-codec`/`android.net.Uri` behaviour beyond the documented replicated subsets are
+not covered by the sandbox check. See
 [build commands](build-and-security-tests.md). Remaining decomposition and UI conversion work is
 tracked in the [decomposition plan](ui-decomposition-plan.md).
 
@@ -395,6 +478,10 @@ tracked in the [decomposition plan](ui-decomposition-plan.md).
   resolution source (see the sandbox check) confirms that same-package Kotlin reads the
   package-private `ALGORITHM_ASYMMETRIC` constant, and the harness now resolves that Java source
   instead of mirroring it.
+- `Utilities/EntryThumbnail.java`: it is a resource catalogue — its enum constants are
+  `R.drawable`/`R.mipmap` ids and the class returns platform drawables/bitmaps — so it needs the
+  Android build regardless of language. Converting it would neither remove platform code nor shrink
+  the Java-visible API, so it stays Java and the sandbox resolves it for `Entry`'s compile check.
 - `Utilities/LetterBitmap.java`: same package-private policy — the class itself is package-private,
   and a Kotlin conversion would have to publish it to at least `public`/`internal` bytecode.
 - `Tasks/EncryptedBackupWorker.java`: it is a WorkManager `Worker` — an Android-scheduled entry
