@@ -24,7 +24,7 @@ This is **static source analysis, not a penetration test or a security certifica
 
 | Area | Observed state | Implication |
 | --- | --- | --- |
-| Application language | 30 main-source Java files, about 8,350 lines including comments/blank lines, plus 55 converted Kotlin files (about 5,600 lines) and two flavor-specific Java files; 18 Java instrumentation test files | A mixed Java/Kotlin migration is feasible; there is no in-repository C/C++ memory-unsafe core to replace. Counts are a 2026-10-15 snapshot, updated after the document/backup I/O batch, not a target |
+| Application language | 28 main-source Java files, about 8,090 lines including comments/blank lines, plus 57 converted Kotlin files (about 5,880 lines) and two flavor-specific Java files; 19 Java instrumentation test files | A mixed Java/Kotlin migration is feasible; there is no in-repository C/C++ memory-unsafe core to replace. Counts are a 2026-10-15 snapshot, updated after the notification/QR-image batch, not a target |
 | Native/other runtimes | Kotlin (JVM) sources are checked in under `app/src/main/kotlin`; no Rust, C, or C++ implementation | Rust would introduce JNI, native packaging and a second toolchain rather than remove existing native exposure |
 | Build | Three Groovy Gradle files; Gradle 8.13 wrapper; Android Gradle Plugin 8.13.2; Kotlin plugin 2.3.20 pinned with `jvmTarget` 1.8 | Kotlin is added; keep plugin/AGP/Gradle compatibility verified, and note that no Gradle build has been executed in this environment |
 | Android contract | `minSdkVersion 28`, `targetSdkVersion 35`, `compileSdk 36`; Java source/target 8 and core-library desugaring | Declared support begins at Android 9, not the older Android versions supported by historical upstream releases |
@@ -88,7 +88,7 @@ Evidence: [MainActivity, lines 378–407 and 944–955](../app/src/main/java/org
 
 **Action:** Enforce byte limits during reading, regardless of provider-reported size; inspect image dimensions before decoding and subsample/reject large images; check null results and multiplication overflow; validate minimum backup length and bounded KDF parameters before work begins. Enforce entry/tag/secret limits after decrypting as well. Allow valid historical backup parameters under an explicit compatibility policy rather than simply requiring the current writer's exact range.
 
-Evidence: [StorageAccessHelper.loadFile](../app/src/main/kotlin/org/shadowice/flocke/andotp/Utilities/StorageAccessHelper.kt) (Kotlin since the twelfth conversion batch; now bounded by `BoundedInputReader`); [ScanQRCodeFromFile, lines 73–98](../app/src/main/java/org/shadowice/flocke/andotp/Utilities/ScanQRCodeFromFile.java); [EncryptedRestoreTask.doInBackground](../app/src/main/kotlin/org/shadowice/flocke/andotp/Tasks/EncryptedRestoreTask.kt) (Kotlin since the sixth batch; the header is parsed by `EncryptedBackupHeader`).
+Evidence: [StorageAccessHelper.loadFile](../app/src/main/kotlin/org/shadowice/flocke/andotp/Utilities/StorageAccessHelper.kt) (Kotlin since the twelfth conversion batch; now bounded by `BoundedInputReader`); [ScanQRCodeFromFile.scanQRImage](../app/src/main/kotlin/org/shadowice/flocke/andotp/Utilities/ScanQRCodeFromFile.kt) (Kotlin since the thirteenth batch; bounds-checked before and after decoding); [EncryptedRestoreTask.doInBackground](../app/src/main/kotlin/org/shadowice/flocke/andotp/Tasks/EncryptedRestoreTask.kt) (Kotlin since the sixth batch; the header is parsed by `EncryptedBackupHeader`).
 
 ### D. Separate vault failures from a valid empty vault — high priority
 

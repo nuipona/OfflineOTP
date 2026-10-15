@@ -57,6 +57,8 @@ APP_SOURCES=(
     "$KOTLIN_APP/Utilities/DatabaseHelper.kt"
     "$KOTLIN_APP/Utilities/StorageAccessHelper.kt"
     "$KOTLIN_APP/Utilities/BackupHelper.kt"
+    "$KOTLIN_APP/Utilities/NotificationHelper.kt"
+    "$KOTLIN_APP/Utilities/ScanQRCodeFromFile.kt"
     "$KOTLIN_APP/Utilities/InputPolicy.kt"
     "$KOTLIN_APP/Utilities/OtpParseResult.kt"
     "$KOTLIN_APP/Utilities/OtpUriParser.kt"
@@ -102,7 +104,12 @@ STUBS=("$SANDBOX"/stubs/android/*.kt
     "$SANDBOX"/stubs/androidx/documentfile/provider/*.kt
     "$SANDBOX"/stubs/androidx/appcompat/app/*.kt
     "$SANDBOX"/stubs/androidx/appcompat/content/res/*.kt
+    "$SANDBOX"/stubs/androidx/core/app/*.kt
+    "$SANDBOX"/stubs/androidx/core/content/*.kt
     "$SANDBOX"/stubs/com/google/android/material/textfield/*.kt
+    "$SANDBOX"/stubs/com/google/zxing/*.kt
+    "$SANDBOX"/stubs/com/google/zxing/common/*.kt
+    "$SANDBOX"/stubs/com/google/zxing/qrcode/*.kt
     "$SANDBOX/stubs/org/shadowice/flocke/andotp/R.kt"
     "$SANDBOX"/stubs/org/json/*.kt
     "$SANDBOX"/stubs/org/apache/commons/codec/binary/*.kt

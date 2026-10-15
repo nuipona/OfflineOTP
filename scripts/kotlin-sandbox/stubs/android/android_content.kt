@@ -13,6 +13,10 @@ open class Context {
     val theme: Resources.Theme get() = Resources.Theme()
     val resources: Resources get() = Resources()
     fun getString(resId: Int): String = "stub"
+    /** Resolves to a recognisable placeholder so the checks can tell which resource was read. */
+    fun getText(resId: Int): CharSequence = "text:$resId"
+    /** `open` so a fake activity can grant or deny; the default denies, like an ungranted app. */
+    open fun checkSelfPermission(permission: String): Int = android.content.pm.PackageManager.PERMISSION_DENIED
     /** `open` so checks can return a recording service instead of the null default. */
     open fun getSystemService(name: String): Any? = null
     /** The task classes keep only the application context; the checks substitute their own. */
@@ -26,6 +30,7 @@ open class Context {
     companion object {
         const val CLIPBOARD_SERVICE = "clipboard"
         const val INPUT_METHOD_SERVICE = "input_method"
+        const val NOTIFICATION_SERVICE = "notification"
     }
 }
 

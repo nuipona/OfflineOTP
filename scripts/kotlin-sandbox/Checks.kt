@@ -32,6 +32,8 @@ import org.shadowice.flocke.andotp.Utilities.LetterBitmap
 import org.shadowice.flocke.andotp.Utilities.BoundedInputReader
 import org.shadowice.flocke.andotp.Utilities.BackupHelper
 import org.shadowice.flocke.andotp.Utilities.StorageAccessHelper
+import org.shadowice.flocke.andotp.Utilities.NotificationHelper
+import org.shadowice.flocke.andotp.Utilities.ScanQRCodeFromFile
 import org.shadowice.flocke.andotp.Utilities.DatabaseHelper
 import org.shadowice.flocke.andotp.Utilities.VaultReadError
 import org.shadowice.flocke.andotp.Utilities.VaultReadResult
@@ -77,7 +79,11 @@ import android.app.AlertDialog
 import android.content.Context
 import android.content.DialogInterface
 import android.content.Intent
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import android.graphics.Canvas
+import android.content.pm.PackageManager
+import android.widget.Toast
 import android.net.Uri
 import android.database.Cursor
 import android.os.ParcelFileDescriptor
@@ -95,6 +101,13 @@ import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.google.android.material.textfield.TextInputEditText
 import com.google.android.material.textfield.TextInputLayout
+import com.google.zxing.BarcodeFormat
+import com.google.zxing.ChecksumException
+import com.google.zxing.DecodeHintType
+import com.google.zxing.FormatException
+import com.google.zxing.NotFoundException
+import com.google.zxing.RGBLuminanceSource
+import com.google.zxing.qrcode.QRCodeReader
 
 import org.json.JSONObject
 
@@ -1575,6 +1588,174 @@ fun main() {
         expect(fresh.file == null && fresh.errorMessage == 0, { "BackupFile defaults changed" })
         expect(backupFile.declaredMethods.none { it.name.startsWith("get") || it.name.startsWith("set") },
                 { "BackupFile grew accessors instead of fields" })
+    }
+
+    check("QR image decoding keeps its bounds, two decode passes and the last failure's message") {
+        val resolver = FakeResolver()
+        val context = FakeStorageContext(resolver, File("."))
+        val image = contentUri("document", "qr.png")
+        val decodes = ArrayList<Boolean>()        // inJustDecodeBounds of every BitmapFactory call
+        var fullDecodeConfig: Bitmap.Config? = null
+        fun serve(boundsWidth: Int, boundsHeight: Int, bitmap: Bitmap?) {
+            resolver.input = ByteArrayInputStream(byteArrayOf(1, 2, 3))
+            decodes.clear()
+            BitmapFactory.decoder = { bounds, options ->
+                decodes.add(bounds)
+                if (bounds) {
+                    options.outWidth = boundsWidth
+                    options.outHeight = boundsHeight
+                    null
+                } else {
+                    fullDecodeConfig = options.inPreferredConfig
+                    bitmap
+                }
+            }
+        }
+        fun scan(uri: Uri? = image): Pair<String?, List<Int>> {
+            Toast.shown.clear()
+            QRCodeReader.calls.clear()
+            val contents = ScanQRCodeFromFile.scanQRImage(context, uri)
+            return contents to ArrayList(Toast.shown)
+        }
+        val loadError = null to listOf(R.string.toast_file_load_error)
+        val stderr = System.err
+        val printed = java.io.ByteArrayOutputStream()
+        System.setErr(java.io.PrintStream(printed, true))
+        try {
+            // Unreadable documents: an IOException (no URI) and a provider RuntimeException.
+            serve(4, 3, Bitmap(4, 3))
+            expect(scan(null) == loadError, { "missing document" })
+            resolver.failure = SecurityException("revoked grant")
+            expect(scan() == loadError, { "provider failure" })
+            resolver.failure = null
+            expect(decodes.isEmpty(), { "an unreadable document reached the decoder" })
+
+            // Bounds are checked before the full decode: undecodable, empty and oversized images.
+            for ((width, height) in listOf(-1 to -1, 0 to 3, InputPolicy.MAX_IMAGE_DIMENSION + 1 to 3, 3000 to 3000)) {
+                serve(width, height, Bitmap(4, 3))
+                expect(scan() == loadError, { "bounds ${width}x$height were accepted" })
+                expect(decodes == listOf(true), { "the full decode ran after rejected bounds ${width}x$height" })
+            }
+            // The full decode may still fail, or disagree with the bounds; the bitmap is recycled.
+            serve(4, 3, null)
+            expect(scan() == loadError && decodes == listOf(true, false), { "a failed full decode" })
+            val shrunk = Bitmap(0, 3)
+            serve(4, 3, shrunk)
+            expect(scan() == loadError && shrunk.isRecycled(), { "an invalid decoded bitmap was kept" })
+            expect(QRCodeReader.calls.isEmpty(), { "a rejected image reached the QR reader" })
+
+            // First pass: ARGB_8888 pixels copied row by row, the bitmap recycled, QR-only hints.
+            val pixels = IntArray(12) { it * 7 + 1 }
+            val bitmap = Bitmap(4, 3, pixels)
+            serve(4, 3, bitmap)
+            QRCodeReader.script.add(com.google.zxing.Result("otpauth://totp/synthetic?secret=GEZDGNBVGY3TQOJQ"))
+            expect(scan() == ("otpauth://totp/synthetic?secret=GEZDGNBVGY3TQOJQ" to emptyList<Int>()), { "first pass" })
+            expect(bitmap.isRecycled() && fullDecodeConfig == Bitmap.Config.ARGB_8888, { "decode config or recycling" })
+            expect(QRCodeReader.calls.size == 1, { "a successful first pass was retried" })
+            val (decoded, firstHints) = QRCodeReader.calls[0]
+            val source = decoded.binarizerForChecks().getLuminanceSource() as RGBLuminanceSource
+            expect(source.getWidth() == 4 && source.getHeight() == 3 && source.pixels.contentEquals(pixels),
+                    { "the luminance source does not carry the bitmap's pixels" })
+            expect(firstHints == mapOf(DecodeHintType.POSSIBLE_FORMATS to listOf(BarcodeFormat.QR_CODE)),
+                    { "first-pass hints $firstHints" })
+
+            // Second pass with TRY_HARDER on the same binary bitmap, after a failure or a textless result.
+            for (first in listOf<Any>(NotFoundException.getNotFoundInstance(), com.google.zxing.Result(null))) {
+                serve(4, 3, Bitmap(4, 3, IntArray(12)))
+                QRCodeReader.script.add(first)
+                QRCodeReader.script.add(com.google.zxing.Result("second"))
+                expect(scan() == ("second" to emptyList<Int>()), { "retry after $first" })
+                expect(QRCodeReader.calls.size == 2 && QRCodeReader.calls[0].first === QRCodeReader.calls[1].first,
+                        { "the retry decoded a different bitmap" })
+                expect(QRCodeReader.calls[1].second == mapOf(DecodeHintType.POSSIBLE_FORMATS to listOf(BarcodeFormat.QR_CODE),
+                        DecodeHintType.TRY_HARDER to true), { "retry hints ${QRCodeReader.calls[1].second}" })
+            }
+
+            // Both passes fail: the last ReaderException decides the message; none means "not found".
+            val checksum = ChecksumException.getChecksumInstance()
+            val format = FormatException.getFormatInstance()
+            val notFound = NotFoundException.getNotFoundInstance()
+            for ((outcomes, message) in listOf(
+                    listOf<Any>(checksum, format) to R.string.toast_qr_format_error,
+                    listOf<Any>(format, checksum) to R.string.toast_qr_checksum_exception,
+                    listOf<Any>(notFound, notFound) to R.string.toast_qr_error,
+                    listOf<Any>(checksum, com.google.zxing.Result(null)) to R.string.toast_qr_checksum_exception,
+                    listOf<Any>(com.google.zxing.Result(null), com.google.zxing.Result(null)) to R.string.toast_qr_error)) {
+                serve(4, 3, Bitmap(4, 3, IntArray(12)))
+                QRCodeReader.script.addAll(outcomes)
+                expect(scan() == (null to listOf(message)), { "failure message for $outcomes" })
+            }
+            expect(R.string.toast_qr_error != R.string.toast_qr_format_error, { "resource stand-ins are not distinct" })
+            // The Java printed each reported failure's stack trace; that is kept.
+            expect(printed.toString().contains("com.google.zxing.FormatException") &&
+                    printed.toString().contains("com.google.zxing.NotFoundException"), { "stack traces no longer printed" })
+        } finally {
+            System.setErr(stderr)
+            BitmapFactory.decoder = null
+            QRCodeReader.script.clear()
+            QRCodeReader.calls.clear()
+            Toast.shown.clear()
+        }
+    }
+
+    check("the notification permission request is gated on Android 13 and a missing grant") {
+        class FakeActivity(private val granted: Boolean) : android.app.Activity() {
+            override fun checkSelfPermission(permission: String): Int =
+                if (granted && permission == android.Manifest.permission.POST_NOTIFICATIONS) PackageManager.PERMISSION_GRANTED
+                else PackageManager.PERMISSION_DENIED
+        }
+        class FakeFragment(private val host: android.app.Activity?) : android.app.Fragment() {
+            override fun getActivity(): android.app.Activity? = host
+        }
+        val sdk = android.os.Build.VERSION.SDK_INT
+        try {
+            android.os.Build.VERSION.SDK_INT = 32
+            val beforeTiramisu = FakeFragment(FakeActivity(granted = false))
+            NotificationHelper.requestNotificationPermission(beforeTiramisu)
+            expect(beforeTiramisu.requested.isEmpty(), { "asked for a runtime permission before Android 13" })
+
+            android.os.Build.VERSION.SDK_INT = 33
+            val missing = FakeFragment(FakeActivity(granted = false))
+            NotificationHelper.requestNotificationPermission(missing)
+            expect(missing.requested == listOf(listOf("android.permission.POST_NOTIFICATIONS") to 1),
+                    { "request ${missing.requested}" })
+            val granted = FakeFragment(FakeActivity(granted = true))
+            NotificationHelper.requestNotificationPermission(granted)
+            expect(granted.requested.isEmpty(), { "asked again although granted" })
+            val detached = FakeFragment(null)
+            NotificationHelper.requestNotificationPermission(detached)
+            expect(detached.requested.isEmpty(), { "a detached fragment asked" })
+        } finally {
+            android.os.Build.VERSION.SDK_INT = sdk
+        }
+    }
+
+    check("the QR and notification helpers keep their static Java surface") {
+        val qr = ScanQRCodeFromFile::class.java
+        expectPublicFieldValue(qr, "INSTANCE", ScanQRCodeFromFile, qr, true)
+        expect(publicMethods(qr) == listOf("static String scanQRImage(Context,Uri)"), { "QR surface ${publicMethods(qr)}" })
+        // The hint maps are built once: QR only, and the retry map is a copy that adds TRY_HARDER.
+        fun hints(name: String): Map<*, *> = field(qr, name)!!.let {
+            it.isAccessible = true
+            it.get(null) as Map<*, *>
+        }
+        val normal = hints("HINTS")
+        val harder = hints("HINTS_HARDER")
+        expect(normal is java.util.EnumMap<*, *> && harder is java.util.EnumMap<*, *> && normal !== harder,
+                { "hint maps are not separate EnumMaps" })
+        expect(normal[DecodeHintType.POSSIBLE_FORMATS] is java.util.Vector<*>, { "barcode formats container changed" })
+        expect(normal == mapOf(DecodeHintType.POSSIBLE_FORMATS to listOf(BarcodeFormat.QR_CODE)), { "normal hints $normal" })
+        expect(harder == mapOf(DecodeHintType.POSSIBLE_FORMATS to listOf(BarcodeFormat.QR_CODE),
+                DecodeHintType.TRY_HARDER to true), { "harder hints $harder" })
+
+        // NotificationHelper's members take the Java Constants.NotificationChannel, which has no class
+        // file here, so only its fields can be reflected; the rest is pinned by the Python guards.
+        val notifications = NotificationHelper::class.java
+        expectPublicFieldValue(notifications, "INSTANCE", NotificationHelper, notifications, true)
+        val permission = field(notifications, "POST_NOTIFICATIONS_PERMISSION")!!
+        permission.isAccessible = true
+        expect(Modifier.isPrivate(permission.modifiers) && permission.get(null) == "android.permission.POST_NOTIFICATIONS",
+                { "permission constant changed" })
     }
 
     check("bounded document reads reject oversize input and keep the caller's stream") {

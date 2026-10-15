@@ -5,14 +5,20 @@ import android.content.Context
 import android.text.method.TransformationMethod
 import android.view.View
 
-class Toast private constructor() {
-    fun show() {}
+/** Records the resource id of every toast shown, so checks can assert the user-facing message. */
+class Toast private constructor(private val resId: Int) {
+    fun show() {
+        shown.add(resId)
+    }
 
     companion object {
         const val LENGTH_LONG = 1
 
+        @JvmField
+        val shown: MutableList<Int> = ArrayList()
+
         @JvmStatic
-        fun makeText(context: Context, resId: Int, duration: Int): Toast = Toast()
+        fun makeText(context: Context, resId: Int, duration: Int): Toast = Toast(resId)
     }
 }
 

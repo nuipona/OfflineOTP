@@ -145,7 +145,8 @@ Tenth batch (number preference and hideable notice):
   preference against recording fake widgets/persistence/listeners and reflects the dialog API only;
   it cannot instantiate `HideableDialog` because `Settings` has no runtime class file there.
   Sandbox resource generation now emits styleable arrays and distinct deterministic attribute slots
-  from `declare-styleable` XML, not scalar stand-ins for arrays. These slots are **not aapt IDs or
+  from `declare-styleable` XML, not scalar stand-ins for arrays. (Since the thirteenth batch the
+  scalar ids are distinct deterministic stand-ins too, so checks can tell resources apart.) These slots are **not aapt IDs or
   ordering**, and fake typed arrays do not resolve real XML, references or themes.
 - Added Java instrumentation tests cover real picker configuration from application XML, summary
   updates, cancel/veto/accept listeners, default/restore hooks, notice layout listeners and immediate
@@ -179,9 +180,20 @@ Twelfth batch (document and backup I/O helpers):
   `BackupHelper` compiles against the real `Settings`/`EncryptionHelper`/`Constants` declarations
   but its members take the Java-only `Constants.BackupType`, so only its holder runs here.
 
+Thirteenth batch (notification and QR-image helpers):
+
+- `Utilities/NotificationHelper.kt` and `Utilities/ScanQRCodeFromFile.kt` replace the Java helpers that
+  `MainActivity`, `SettingsActivity`, the encrypted-backup receiver and the backup worker call: the
+  Android 13 notification-permission request, the two backup channels and their notifications, and
+  QR decoding from a user-chosen image. Both were static-only, so both are the documented `object`
+  delta; the receiver and worker that post the notifications stay Java (components).
+- The sandbox **executes** the whole QR pipeline against scripted zxing/`BitmapFactory` stand-ins
+  and the permission gate against fake fragments; the channel/notification members take the
+  Java-only `Constants.NotificationChannel`, so they only compile here.
+
 No activity, entry-card list adapter/view holder, fragment, credential preference, receiver, worker
 or larger dialog renderer is converted; the task runner and its subclasses are, and so are the entry
-model, the vault repository and the document/backup helpers above. The repository's own storage primitives
+model, the vault repository and the document/backup, notification and QR-image helpers above. The repository's own storage primitives
 (`Utilities/FileHelper.java`) and the Android file/preference surface it uses stay Java and are
 resolved by the sandbox rather than converted. No coroutine, Compose, new
 dependency, SDK/bytecode target, storage format or crypto change is included.
@@ -573,6 +585,37 @@ and refusal exactly where the Java had it.
   no-argument constructor, stays non-final, and its `file`/`errorMessage` remain public mutable
   fields (`@JvmField`), not accessors.
 
+### Notifications and QR images
+
+- **The permission gate keeps its shape**: no request without an attached activity or before API 33
+  (`TIRAMISU`), then a request for `POST_NOTIFICATIONS` with request code 1 only when the permission
+  is not granted. The early-return `SDK_INT` check is kept in the same form, because lint's `NewApi`/
+  `InlinedApi` gates (warnings are errors in this build) analyse exactly that flow; the permission
+  name stays a class-level constant as in the Java.
+- **Channels are unchanged**: ids are `"andOTP_"` plus the enum name lower-cased with the **default
+  locale**, as the Java `toLowerCase()` did — Kotlin's `lowercase()` would use the root locale and
+  silently rename the channel under a Turkish locale. That pre-existing locale dependence
+  (`andOTP_backup_faıled` there) is documented, not fixed: a fix needs a channel migration. Names,
+  descriptions, `IMPORTANCE_HIGH`/`IMPORTANCE_LOW` and the default importance for the initial
+  constructor are the same, and every notification still reuses id 1.
+- **One documented API delta**: the Java built `NotificationCompat.Builder(context, null)` and set the
+  channel id after creating the channel. The AndroidX constructor's channel id is `@NonNull` for
+  Kotlin, so the converted code passes the same id to the constructor; the builder only stores the
+  id, so the posted notification is identical. The `String` body stays nullable (`bigText` accepts
+  null and the Java never dereferenced it).
+- **QR decoding keeps its pipeline and messages**: a bounded `StorageAccessHelper.loadFile` (either
+  failure kind → the load-error toast), a bounds-only decode checked by `InputPolicy.validImage`
+  before any pixel allocation, the full `ARGB_8888` decode checked again (and recycled when
+  rejected), the pixel copy followed by recycling in `finally`, then a QR-only decode and a retry
+  with `TRY_HARDER` on the same binary bitmap. The Java threw the saved failure and caught it by
+  type; the Kotlin picks the message with a `when` over the same types in the same order, so the
+  **last** decode failure still decides between the checksum, format and generic toasts, a missing
+  failure still means "not found", and the stack trace is still printed. The hint maps are built
+  once as `EnumMap`s, the retry map being a copy.
+- **Nullability**: the image URI stays nullable (a missing intent URI becomes the load-error toast),
+  the decoded contents stay a nullable return; `context`, `fragment` and the notification channel
+  fail fast when null — the Java dereferenced each of them without a check.
+
 ## Tests and acceptance
 
 Existing Java/Kotlin characterization tests remain in place and unchanged: the RFC vector tests in
@@ -621,14 +664,24 @@ missing provider), content-only writes, missing-provider failures and refused pe
 display-name fallback and control-character stripping, the missing-tree creation message, the
 settings-driven file names and the encrypted-backup refusals. It has **not been compiled or run**
 here; no test provider is registered, so a successful provider write is not covered by it either.
+With the notification/QR batch the stem list gains `Utilities/NotificationHelper` and
+`Utilities/ScanQRCodeFromFile`, and `scripts/tests/test_kotlin_notification_qr_conversion.py` pins the
+permission gate's exact form, the default-locale channel ids, names and importances, the single
+notification id, the constructor-time channel id, the QR pipeline order, both recycling points, the
+four load-error toasts, the last-failure-wins bookkeeping, the type order of the failure messages,
+the hint maps and the distinct resource stand-ins. `KotlinNotificationQrInteropTest` (Java,
+instrumentation) round-trips a QR code generated with zxing's own writer through the real
+`BitmapFactory`/zxing path, checks blank, undecodable, refused and missing images, the real channels'
+names and importances, and that both `notify` overloads are callable from Java. It has **not been
+compiled or run** here.
 
 ### Executed here: partial sandbox compile/run check
 
 `scripts/kotlin-sandbox/` compiles the converted platform-free/low-platform sources against
 hand-written platform stubs and runs `Checks.kt` on a desktop JVM; `bootstrap-toolchain.sh` fetches
 a JDK and the Kotlin compiler from package mirrors when the machine has neither. Executed on
-2026-10-15 with **Kotlin 2.4.21 and Temurin 25.0.2** (`-jvm-target 1.8`), it reports 57 passing
-checks after the twelfth batch:
+2026-10-15 with **Kotlin 2.4.21 and Temurin 25.0.2** (`-jvm-target 1.8`), it reports 60 passing
+checks after the thirteenth batch:
 
 - RFC 6238 TOTP vectors (SHA-1/256/512, six timestamps, eight digits) and RFC 4226 HOTP vectors.
 - TOTP/HOTP agreement with an independent HMAC implementation, including offsets and 1/30/60/86400 s periods.
@@ -692,6 +745,18 @@ checks after the twelfth batch:
   `IOException` declared on `loadFile` only, and `BackupHelper.BackupFile` as a non-final static
   nested class with public mutable fields and its defaults. `BackupHelper`'s own methods take the
   Java-only `Constants.BackupType`, so they are pinned by the Python guards instead.
+- `ScanQRCodeFromFile` **executed** against scripted stand-ins (a recording `BitmapFactory` hook, a
+  pixel-holding `Bitmap`, a replaying zxing `QRCodeReader`, recorded toasts): both load-failure
+  kinds, rejected bounds (undecodable, empty, oversized, too many pixels) never reaching the full
+  decode, a failed or disagreeing full decode (recycled), a first-pass success with the bitmap's
+  pixels handed to the luminance source and the bitmap recycled, the `TRY_HARDER` retry on the same
+  binary bitmap after a failure or a textless result, the last-failure-wins message matrix, and the
+  still-printed stack traces. The hint maps are reflected (separate `EnumMap`s, a `Vector` of
+  `QR_CODE`, `TRY_HARDER` only in the copy).
+- `NotificationHelper`'s permission gate executed with a runtime `SDK_INT` stand-in and fake
+  fragments/activities (below API 33, missing and granted permission, detached fragment); its
+  channel/notification members take the Java-only `Constants.NotificationChannel` and are pinned by
+  the Python guards.
 - The entry document boundary executed against functional `org.json`/`Base32`/`Hex` replicas: the
   stored field order and defaults (including a reserialization that equals the legacy string
   byte-for-byte), the malformed-field matrix with its closed error set, the `ValidatedEntry`
@@ -737,7 +802,8 @@ transaction itself (`FileHelper`/`AtomicFile`, `SharedPreferences`, `EncryptionH
 staged-promotion choreography all need a device), real Storage Access Framework providers (the
 platform `ContentResolver`/`ParcelFileDescriptor`, `DocumentFile` tree creation, URI grants and
 provider write semantics), the encrypted-backup writer and settings-driven backup names (which need
-`EncryptionHelper`/`Settings`) and the real
+`EncryptionHelper`/`Settings`), real image decoding, zxing, notification channels/posting and the
+runtime-permission flow, and the real
 `org.json`/`commons-codec`/`android.net.Uri` behaviour beyond the documented replicated subsets are
 not covered by the sandbox check. See
 [build commands](build-and-security-tests.md). Remaining decomposition and UI conversion work is
@@ -767,6 +833,6 @@ components remain Java.
 
 The thumbnail pair has also left this list (eighth batch). The small visibility widenings are
 explicitly recorded above; these leaf renderers still need Android acceptance despite their sandbox
-compile. Latest local check after the twelfth batch: 74 Python guards and 57 sandbox checks passed. The both-flavor Gradle
+compile. Latest local check after the thirteenth batch: 78 Python guards and 60 sandbox checks passed. The both-flavor Gradle
 host/lint/instrumentation-APK build was attempted but stopped at the Gradle 8.13 distribution download
 (`SSLHandshakeException` from `services.gradle.org`); no Android acceptance result is claimed.

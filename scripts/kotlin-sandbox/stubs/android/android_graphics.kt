@@ -15,13 +15,30 @@ class PorterDuff private constructor() {
     enum class Mode { CLEAR, SRC, DST, SRC_OVER, DST_OVER, SRC_IN, DST_IN, SRC_OUT, DST_OUT, SRC_ATOP, DST_ATOP, XOR, DARKEN, LIGHTEN, MULTIPLY, SCREEN, ADD, OVERLAY }
 }
 
-/** Type-only stand-ins for the letter-tile/bitmap surface the resolved Java sources mention. */
-class Bitmap {
+/**
+ * Bitmap stand-in: a size plus an optional pixel array, so the QR check can compare the pixels
+ * handed to the decoder and observe recycling. No real pixel storage or drawing is modelled.
+ */
+class Bitmap(private val width: Int = 1, private val height: Int = 1, private val pixels: IntArray? = null) {
     enum class Config { ARGB_8888, RGB_565, ALPHA_8 }
 
-    fun getWidth(): Int = 1
-    fun getHeight(): Int = 1
-    fun recycle() {}
+    private var recycled = false
+
+    fun getWidth(): Int = width
+    fun getHeight(): Int = height
+    fun isRecycled(): Boolean = recycled
+    fun recycle() {
+        recycled = true
+    }
+
+    /** Copies row by row like the platform method; refuses a recycled bitmap. */
+    fun getPixels(pixels: IntArray, offset: Int, stride: Int, x: Int, y: Int, width: Int, height: Int) {
+        check(!recycled) { "Can't call getPixels() on a recycled bitmap" }
+        val source = this.pixels ?: return
+        for (row in 0 until height) {
+            System.arraycopy(source, (y + row) * this.width + x, pixels, offset + row * stride, width)
+        }
+    }
 
     companion object {
         @JvmStatic
@@ -30,11 +47,33 @@ class Bitmap {
 }
 
 object BitmapFactory {
+    /** The public option fields the QR helper sets and reads. */
+    class Options {
+        @JvmField var inJustDecodeBounds: Boolean = false
+        @JvmField var inPreferredConfig: Bitmap.Config? = Bitmap.Config.ARGB_8888
+        @JvmField var outWidth: Int = 0
+        @JvmField var outHeight: Int = 0
+    }
+
+    /**
+     * Sandbox hook for the options overload: receives a snapshot of `inJustDecodeBounds` and the
+     * options, fills the `out*` fields and returns the bitmap. Unset, nothing decodes (`null`).
+     */
+    @JvmField
+    var decoder: ((Boolean, Options) -> Bitmap?)? = null
+
     @JvmStatic
     fun decodeResource(res: android.content.res.Resources?, id: Int): Bitmap? = null
 
     @JvmStatic
     fun decodeByteArray(data: ByteArray?, offset: Int, length: Int): Bitmap? = null
+
+    @JvmStatic
+    fun decodeByteArray(data: ByteArray?, offset: Int, length: Int, opts: Options?): Bitmap? {
+        val options = opts ?: Options()
+        val bitmap = decoder?.invoke(options.inJustDecodeBounds, options)
+        return if (options.inJustDecodeBounds) null else bitmap
+    }
 }
 
 open class Paint {

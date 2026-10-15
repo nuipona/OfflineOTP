@@ -55,10 +55,18 @@ class LocaleList {
     val size: Int get() = 1
 }
 
-/** Field/constant-only stand-in for the version gate the Java sources branch on. */
+/**
+ * Version-gate stand-in. `SDK_INT` is a runtime field (as on the platform, where it is not a
+ * compile-time constant), so checks can drive a version branch and must restore it afterwards.
+ */
 object Build {
     object VERSION {
-        const val SDK_INT: Int = 28
+        @JvmField
+        var SDK_INT: Int = 28
+    }
+
+    object VERSION_CODES {
+        const val TIRAMISU: Int = 33
     }
 }
 

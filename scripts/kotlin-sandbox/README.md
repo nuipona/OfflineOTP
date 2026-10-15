@@ -51,6 +51,8 @@ manifest.
 | `Utilities/DatabaseHelper.kt` | The vault repository's outcome mapping and its fail-closed document boundary are executed (every `VaultReadError` -> `Status`, `LoadResult`/`VaultException` behaviour, `stringToEntries` rejections, `entriesToString` bounds), as are the stored-document round trip over real entries with whole-document rejection of a bad entry, and the poisoned-transaction short-circuits of every entry point (the poison flag is set by reflection; reaching `FileHelper` would fail the check). The file transaction itself is not: `FileHelper`/`AtomicFile`, `SharedPreferences` and `EncryptionHelper` have no class files here. Its Java-visible surface is reflected, including both public `status` fields. |
 | `Utilities/StorageAccessHelper.kt` | **Executed** against a recording fake `ContentResolver` over real temporary files: chunked writes with their six permission checks, mid-write revocation, after-open/after-flush refusals, every pre-provider refusal, provider failures as `false`; bounded reads, cache-only `file:` URIs (sibling prefix, `..`, the cache itself), stream closing; display-name metadata, fallbacks, bound-before-strip and ASCII control stripping. The provider is a fake and `ParcelFileDescriptor` replicates only write-truncate, so no platform provider, URI grant or SAF write semantics are exercised. |
 | `Utilities/BackupHelper.kt` | Compiled against the real `Settings`/`EncryptionHelper`/`Constants` declarations. Its methods take the Java-only `Constants.BackupType` (no class file here), so they can be neither executed nor reflected; the nested `BackupFile` holder is instantiated and reflected, and the rest is pinned by `test_kotlin_document_io_conversion.py`. |
+| `Utilities/ScanQRCodeFromFile.kt` | **Executed** against scripted stand-ins: a `BitmapFactory` hook that reports bounds and returns pixel-holding bitmaps, a zxing `QRCodeReader` that replays results/failures, and recorded toasts. Covers load failures, bounds rejected before the full decode, rejected decoded bitmaps (recycled), pixels handed to the luminance source, the `TRY_HARDER` retry and the last-failure-wins messages. No image is decoded and zxing itself is not run. |
+| `Utilities/NotificationHelper.kt` | The Android 13 permission gate is executed with fake fragments/activities and a runtime `SDK_INT`; the channel/notification members take the Java-only `Constants.NotificationChannel` (no class file here) and are compiled only, against recording `NotificationManager`/`NotificationCompat` stand-ins. |
 | `Database/EntryList.kt` | Compiled and shape-checked only: its sorting/filtering API takes `Constants` enums and its entries are `Entry` objects, and the `Constants` enums have no class file in this sandbox, so its behaviour stays covered by the Python source guards and `ApplicationTest`. |
 
 The task subclasses are compiled **against the real Java declarations** they call: `run.sh` passes
@@ -97,6 +99,8 @@ Still **not** covered, and therefore still dependent on the Gradle/device gates:
   beyond its holder: SAF descriptors, URI grants, `DocumentFile` tree creation, settings-driven names
   and the encrypted-backup writer need the platform, `Settings` and `EncryptionHelper`
   (`KotlinDocumentIoInteropTest`, `EncryptedRestoreSecurityTest`).
+- Real image decoding and zxing, notification channels/posting and the runtime-permission dialog
+  (`KotlinNotificationQrInteropTest`).
 - **Execution** of the task subclass bodies (and of `EntryPersistence`/`VaultRestoreOperation`):
   the Java resolution sources produce no class files, so `Settings`/`DatabaseHelper`/
   `EncryptionHelper` calls inside them cannot run on the desktop JVM here; only their compile-time
@@ -202,7 +206,7 @@ curl -sS -o /tmp/kt.tgz https://registry.npmjs.org/kotlin-compiler/-/kotlin-comp
 tar xzf /tmp/kt.tgz -C /tmp && chmod +x /tmp/package/bin/kotlinc*
 ```
 
-Verified with Kotlin `2.4.21` and Temurin `25.0.2` on 2026-10-15 (57 checks). Pin your own compiler
+Verified with Kotlin `2.4.21` and Temurin `25.0.2` on 2026-10-15 (60 checks). Pin your own compiler
 when recording results; the check is only as meaningful as the versions you run it with.
 
 ## Thumbnail conversion follow-up
@@ -288,3 +292,27 @@ The checked-in Java `KotlinDocumentIoInteropTest` covers the real resolver, `Uri
 `DocumentFile` tree and `Settings` paths and the Java call sites on a device, without a test provider
 (so it proves refusals and failure handling, not a successful provider write). It has not been
 compiled or run here.
+
+## Notification and QR-image follow-up
+
+- `Utilities/ScanQRCodeFromFile.kt` is compiled **and executed**. New stand-ins: zxing's core types
+  under `stubs/com/google/zxing` (formats, hints, luminance source, binarizer, result and the three
+  reader failures, which like zxing's capture no stack trace) and a `QRCodeReader` that replays a
+  scripted queue and records the bitmap and hints of every call; `BitmapFactory.Options` with its
+  public fields plus a `decoder` hook for the options overload; a `Bitmap` that holds a size and
+  pixels, copies them row by row and records recycling; and a `Toast` that records the resource id
+  of every toast shown. None of this decodes an image.
+- `Utilities/NotificationHelper.kt` is compiled; its permission gate is executed. `Build.VERSION.SDK_INT`
+  is now a runtime field (as on the platform, where it is not a compile-time constant) so a check
+  can drive the API 33 branch and restore it; `VERSION_CODES.TIRAMISU`, `Manifest.permission`,
+  `PackageManager`, a recording `NotificationManager`/`NotificationChannel`, the deprecated platform
+  `Fragment`/`Activity`, `Context.getText`/`checkSelfPermission`/`NOTIFICATION_SERVICE` and the
+  AndroidX `NotificationCompat`/`ContextCompat` (under `stubs/androidx/core`) were added. The
+  stand-in builder's channel id is non-null, mirroring the `@NonNull` AndroidX parameter.
+- `generate-r-stub.py` now gives scalar resources **distinct** deterministic ids (an aapt-like
+  `0x7fTTEEEE` layout from the sorted type and entry names) instead of `0` for all of them, so a
+  check can tell which toast or message was used. They are still not aapt's ids; nothing may rely on
+  a particular number.
+
+The checked-in Java `KotlinNotificationQrInteropTest` round-trips a zxing-generated code through the
+real decode path and checks the real channels on a device. It has not been compiled or run here.
