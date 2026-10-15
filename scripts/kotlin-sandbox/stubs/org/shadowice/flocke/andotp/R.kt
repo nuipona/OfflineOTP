@@ -8,6 +8,10 @@ object R {
         const val letter_tile_colors = 0
         const val settings_defaults_search_includes = 0
     }
+    object attr {
+        const val dialogPreferenceStyle = 0
+        const val dialogTheme = 0
+    }
     object dimen {
         const val card_thumbnail_size = 0
         const val tile_letter_font_size_scale = 0
@@ -358,9 +362,18 @@ object R {
         const val thumb_zoho = 0
         const val thumb_zoom = 0
     }
+    object id {
+        const val buttonOk = 0
+        const val dialogContent = 0
+        const val dontShowAgain = 0
+    }
     object integer {
         const val settings_default_label_size = 0
         const val settings_default_tap_to_reveal_timeout = 0
+    }
+    object layout {
+        const val dialog_dont_show_again = 0
+        const val simple_list_item_multiple_choice = 0
     }
     object mipmap {
         const val ic_launcher_round = 0
@@ -454,6 +467,12 @@ object R {
         const val AppTheme_Black_NoActionBar = 0
         const val AppTheme_Dark_NoActionBar = 0
         const val AppTheme_NoActionBar = 0
+    }
+    object styleable {
+        @JvmField val NumberPickerPreference = intArrayOf(0, 1, 2)
+        const val NumberPickerPreference_maxValue = 0
+        const val NumberPickerPreference_minValue = 1
+        const val NumberPickerPreference_wrapSelectorWheel = 2
     }
     object xml {
         const val preferences = 0

@@ -27,6 +27,8 @@ import org.shadowice.flocke.andotp.Database.EntryJson
 import org.shadowice.flocke.andotp.Database.EntryJsonError
 import org.shadowice.flocke.andotp.Database.EntryJsonResult
 import org.shadowice.flocke.andotp.Database.ValidatedEntry
+import org.shadowice.flocke.andotp.Utilities.EntryThumbnail
+import org.shadowice.flocke.andotp.Utilities.LetterBitmap
 import org.shadowice.flocke.andotp.Utilities.BoundedInputReader
 import org.shadowice.flocke.andotp.Utilities.ConfirmedPasswordTransformationHelper
 import org.shadowice.flocke.andotp.Utilities.DimensionConverter
@@ -55,7 +57,12 @@ import org.shadowice.flocke.andotp.Utilities.UIHelper
 import org.shadowice.flocke.andotp.View.ItemTouchHelper.ItemTouchHelperAdapter
 import org.shadowice.flocke.andotp.View.ItemTouchHelper.ItemTouchHelperViewHolder
 import org.shadowice.flocke.andotp.View.ItemTouchHelper.SimpleItemTouchHelperCallback
+import org.shadowice.flocke.andotp.View.TagsAdapter
+import org.shadowice.flocke.andotp.View.ThumbnailSelectionAdapter
+import org.shadowice.flocke.andotp.View.AutoFillable.AutoFillableTextInputEditText
 import org.shadowice.flocke.andotp.View.SimpleDoubleClickListener
+import org.shadowice.flocke.andotp.Preferences.NumberPickerPreference
+import org.shadowice.flocke.andotp.Dialogs.HideableDialog
 import org.shadowice.flocke.andotp.R
 
 import android.app.AlertDialog
@@ -430,6 +437,36 @@ private class NullRunnerTask(fallback: String?) : UiBasedBackgroundTask<String?>
     override fun doInBackground(): String? = null
 }
 
+/** Recording preference over the fake superclass, not a real PreferenceManager/persistence test. */
+private class SandboxNumberPreference(context: Context) : NumberPickerPreference(context, null) {
+    val persisted = mutableListOf<Int>()
+    var restoredValue: Int? = null
+    var persistedFallback: Int? = null
+    var allowChange = true
+    val proposed = mutableListOf<Int>()
+    lateinit var widget: android.widget.NumberPicker
+
+    override fun persistInt(value: Int): Boolean { persisted.add(value); return true }
+    override fun getPersistedInt(defaultValue: Int): Int {
+        persistedFallback = defaultValue
+        return restoredValue ?: defaultValue
+    }
+    override fun callChangeListener(value: Any?): Boolean {
+        expect(widget.focusCleared, { "picker text must be committed before listener dispatch" })
+        proposed.add(value as Int)
+        return allowChange
+    }
+    fun createAndBind(): android.widget.FrameLayout {
+        val root = onCreateDialogView() as android.widget.FrameLayout
+        widget = root.getChildAt(0) as android.widget.NumberPicker
+        onBindDialogView(root)
+        return root
+    }
+    fun close(positive: Boolean) = onDialogClosed(positive)
+    fun initialize(restore: Boolean, value: Any?) = onSetInitialValue(restore, value)
+    fun defaultValue(array: android.content.res.TypedArray, index: Int): Any = onGetDefaultValue(array, index)
+}
+
 fun main() {
     val keySha1 = ascii("12345678901234567890")
     val keySha256 = ascii("12345678901234567890123456789012")
@@ -801,9 +838,222 @@ fun main() {
                     { "Entry(${parameters.first().simpleName}) no longer declares throws Exception" })
         }
 
-        // Entry's constructors, enum and constants are executable/reflectable here; its
-        // thumbnail-dependent members are pinned by the reflection source guards instead, because
-        // EntryThumbnail stays Java and therefore has no class file in this sandbox (see README).
+        expect(entry.getMethod("getThumbnail").returnType == EntryThumbnail.EntryThumbnails::class.java,
+                { "thumbnail getter type changed" })
+    }
+
+    check("thumbnail names retain exact and ordered whole-word lookup semantics") {
+        val thumbnails = EntryThumbnail.EntryThumbnails.values()
+        for (thumbnail in thumbnails) {
+            expect(EntryThumbnail.EntryThumbnails.valueOfIgnoreCase(thumbnail.name.lowercase()) == thumbnail,
+                    { "case-insensitive lookup: ${thumbnail.name}" })
+            expect(thumbnail.assetType == EntryThumbnail.AssetType.Vector, { "asset default" })
+        }
+        expect(EntryThumbnail.EntryThumbnails.valueOfFuzzy("GitHub Inc.") == EntryThumbnail.EntryThumbnails.GitHub,
+                { "whole-word lookup" })
+        // Declaration order, not textual position or longest match: Git precedes GitHub.
+        expect(EntryThumbnail.EntryThumbnails.valueOfFuzzy("GitHub and Git") == EntryThumbnail.EntryThumbnails.Git,
+                { "lookup order changed" })
+        for (unknown in listOf("not-a-brand", "MyGitHubAccount", "GitHub_extra", "")) {
+            expectThrows(IllegalArgumentException::class.java) { EntryThumbnail.EntryThumbnails.valueOfFuzzy(unknown) }
+        }
+        for (unknown in listOf(null, " GitHub", "GitHub ", "unknown")) {
+            expectThrows(IllegalArgumentException::class.java) { EntryThumbnail.EntryThumbnails.valueOfIgnoreCase(unknown) }
+        }
+    }
+
+    check("thumbnail helpers retain their Java-visible entry points") {
+        val thumbnail = EntryThumbnail::class.java
+        expect(!Modifier.isFinal(thumbnail.modifiers), { "EntryThumbnail was extendable" })
+        thumbnail.getConstructor()
+        val graphic = thumbnail.getMethod("getThumbnailGraphic", Context::class.java, String::class.java,
+                String::class.java, Int::class.javaPrimitiveType!!, EntryThumbnail.EntryThumbnails::class.java)
+        expect(Modifier.isStatic(graphic.modifiers) && graphic.returnType == android.graphics.Bitmap::class.java,
+                { "static graphic API" })
+        val enum = EntryThumbnail.EntryThumbnails::class.java
+        for (name in listOf("valueOfIgnoreCase", "valueOfFuzzy")) {
+            val method = enum.getMethod(name, String::class.java)
+            expect(Modifier.isStatic(method.modifiers) && method.returnType == enum, { name })
+        }
+        expect(enum.getMethod("getResource").returnType == Int::class.javaPrimitiveType, { "resource getter" })
+        expect(enum.getMethod("getAssetType").returnType == EntryThumbnail.AssetType::class.java, { "asset getter" })
+        LetterBitmap::class.java.getConstructor(Context::class.java)
+        val tile = LetterBitmap::class.java.getMethod("getLetterTile", String::class.java, String::class.java,
+                Int::class.javaPrimitiveType!!, Int::class.javaPrimitiveType!!)
+        expect(tile.returnType == android.graphics.Bitmap::class.java, { "tile API" })
+    }
+
+    check("tag lists preserve sorted names, borrowed state and copied snapshots") {
+        val states = hashMapOf<String, Boolean?>("zeta" to false, "Alpha" to true, "alpha" to false)
+        val adapter = TagsAdapter(Context(), states)
+        expect(adapter.getTags() == listOf("Alpha", "alpha", "zeta"), { "natural sort" })
+        expect(adapter.getActiveTags() == listOf("Alpha"), { "active sort" })
+        expect(adapter.getTagState("missing") == false && adapter.getTagState(null) == false, { "unknown tag" })
+        val before = adapter.changeNotifications
+        adapter.setTagState("missing", true)
+        expect(!states.containsKey("missing") && adapter.changeNotifications > before, { "unknown toggle" })
+        adapter.setTagState("zeta", true)
+        expect(states["zeta"] == true, { "constructor must borrow state map" })
+        states["alpha"] = true
+        expect(adapter.allTagsActive(), { "external state changes are still visible" })
+        adapter.getTagsWithState()["alpha"] = false
+        expect(adapter.getTagState("alpha") == true, { "snapshot must be independent" })
+        val row = adapter.getView(0, null, android.view.ViewGroup()) as android.widget.CheckedTextView
+        expect(row.text == "Alpha" && row.isChecked, { "row bind" })
+        val reused = adapter.getView(2, row, android.view.ViewGroup())
+        expect(reused === row && row.text == "zeta" && row.isChecked, { "row reuse" })
+        val replacement = hashMapOf<String, Boolean?>("two" to false, "one" to true)
+        adapter.setTags(replacement)
+        expect(adapter.getTags() == listOf("one", "two") && adapter.getCount() == 2, { "replace, not merge" })
+        expect(adapter.getItem(0) == "one" && adapter.getActiveTags() == listOf("one"), { "replacement data" })
+        adapter.setTagState("two", true)
+        expect(replacement["two"] == true && adapter.allTagsActive(), { "replacement map must be borrowed" })
+    }
+
+    check("empty tags remain all-active and boxed null states are not silently unchecked") {
+        val adapter = TagsAdapter(Context(), hashMapOf())
+        expect(adapter.allTagsActive() && adapter.getActiveTags().isEmpty(), { "empty tags" })
+        adapter.setTags(hashMapOf("tag" to true))
+        adapter.setTagState("tag", null)
+        expect(adapter.getTagState("tag") == null, { "boxed null state" })
+        expectThrows(NullPointerException::class.java) { adapter.getActiveTags() }
+        expectThrows(NullPointerException::class.java) { adapter.allTagsActive() }
+    }
+
+    check("autofill delegates before callbacks and ignores non-text values and cleared listeners") {
+        val field = AutoFillableTextInputEditText(Context())
+        val text = android.view.autofill.AutofillValue.forText("preview")
+        var calls = 0
+        field.setAutoFillTextListener {
+            expect(field.autofilledValue === text, { "super.autofill must run first" })
+            expect(it.toString() == "preview", { "callback text" })
+            calls++
+        }
+        field.autofill(text)
+        field.autofill(android.view.autofill.AutofillValue.forToggle(true))
+        field.autofill(null) // Only the fake superclass tolerates null; not a platform null guarantee.
+        expect(calls == 1, { "only text should trigger callbacks" })
+        field.setAutoFillTextListener(null)
+        field.autofill(text)
+        expect(calls == 1 && field.autofilledValue === text, { "listener clearing must not disable platform autofill" })
+    }
+
+    check("autofill and thumbnail picker keep the Java-visible API shapes") {
+        val picker = ThumbnailSelectionAdapter::class.java
+        expect(!Modifier.isFinal(picker.modifiers), { "picker was extendable" })
+        picker.getConstructor(Context::class.java, String::class.java, String::class.java)
+        picker.getMethod("filter", String::class.java)
+        expect(picker.getMethod("getItem", Int::class.javaPrimitiveType!!).returnType == Any::class.java,
+                { "getItem Object return type" })
+        expect(picker.getMethod("getItemId", Int::class.javaPrimitiveType!!).returnType == LONG_TYPE, { "item id" })
+        val field = AutoFillableTextInputEditText::class.java
+        expect(!Modifier.isFinal(field.modifiers), { "autofill widget was extendable" })
+        field.getConstructor(Context::class.java)
+        field.getConstructor(Context::class.java, android.util.AttributeSet::class.java)
+        field.getConstructor(Context::class.java, android.util.AttributeSet::class.java, Int::class.javaPrimitiveType!!)
+        field.getMethod("setAutoFillTextListener", AutoFillableTextInputEditText.AutoFillTextListener::class.java)
+        val listener = AutoFillableTextInputEditText.AutoFillTextListener::class.java
+        expect(listener.isInterface && listener.declaredMethods.size == 1, { "Java SAM listener" })
+        listener.getMethod("onTextAutoFilled", CharSequence::class.java)
+    }
+
+    check("number picker keeps default and configured bounds, layout and summary") {
+        val defaults = SandboxNumberPreference(Context())
+        defaults.setValue(12)
+        val root = defaults.createAndBind()
+        expect(root.childCount == 1, { "one picker per dialog" })
+        expect(defaults.widget.minValue == 0 && defaults.widget.maxValue == 100 && defaults.widget.wrapSelectorWheel,
+                { "default bounds and wrap" })
+        expect(defaults.widget.value == 12 && defaults.summary.toString() == "12", { "bind current value" })
+        val params = defaults.widget.layoutParams as android.widget.FrameLayout.LayoutParams
+        expect(params.width == -2 && params.height == -2 && params.gravity == android.view.Gravity.CENTER,
+                { "wrap-content, centered picker" })
+        var recycled = false
+        val attrs = object : android.content.res.TypedArray() {
+            override fun getInteger(index: Int, defValue: Int): Int = when (index) {
+                R.styleable.NumberPickerPreference_minValue -> 3
+                R.styleable.NumberPickerPreference_maxValue -> 9
+                else -> throw AssertionError("unexpected integer attribute")
+            }
+            override fun getBoolean(index: Int, defValue: Boolean): Boolean {
+                expect(index == R.styleable.NumberPickerPreference_wrapSelectorWheel, { "wrap attribute" })
+                return false
+            }
+            override fun recycle() { recycled = true }
+        }
+        val context = object : Context() {
+            override fun obtainStyledAttributes(attrsSet: android.util.AttributeSet?, styleable: IntArray): android.content.res.TypedArray {
+                expect(styleable === R.styleable.NumberPickerPreference, { "styleable array" })
+                return attrs
+            }
+        }
+        val configured = SandboxNumberPreference(context)
+        expect(recycled, { "typed array must be recycled after reading" })
+        configured.setValue(5)
+        configured.createAndBind()
+        expect(configured.widget.minValue == 3 && configured.widget.maxValue == 9 && !configured.widget.wrapSelectorWheel,
+                { "configured bounds" })
+    }
+
+    check("number picker cancellation and veto do not persist a proposed edit") {
+        val pref = SandboxNumberPreference(Context())
+        pref.setValue(5)
+        pref.createAndBind()
+        pref.widget.value = 7
+        val persistedBefore = pref.persisted.size
+        pref.close(false)
+        expect(!pref.widget.focusCleared && pref.proposed.isEmpty() && pref.persisted.size == persistedBefore,
+                { "cancel must not commit or notify" })
+        pref.allowChange = false
+        pref.close(true)
+        expect(pref.widget.focusCleared && pref.proposed == listOf(7), { "veto must be offered committed edit" })
+        expect(pref.getValue() == 5 && pref.persisted.size == persistedBefore && pref.summary.toString() == "5",
+                { "veto must preserve value and summary" })
+        pref.allowChange = true
+        pref.close(true)
+        expect(pref.getValue() == 7 && pref.persisted.last() == 7 && pref.summary.toString() == "7", { "accepted edit" })
+    }
+
+    check("number preference keeps default parsing and restore-versus-initial-value semantics") {
+        val pref = SandboxNumberPreference(Context())
+        val missingDefault = object : android.content.res.TypedArray() {
+            override fun getInt(index: Int, defValue: Int): Int {
+                expect(index == 4 && defValue == 0, { "typed-array index and min fallback" })
+                return 8
+            }
+        }
+        expect(pref.defaultValue(missingDefault, 4) == 8, { "boxed default value" })
+        pref.initialize(false, 8)
+        expect(pref.getValue() == 8 && pref.persisted.last() == 8 && pref.summary.toString() == "8", { "initial default" })
+        pref.restoredValue = 19
+        pref.initialize(true, null)
+        expect(pref.getValue() == 19 && pref.persistedFallback == 0 && pref.summary.toString() == "19", { "restore persisted" })
+        pref.restoredValue = null
+        pref.initialize(true, 99)
+        expect(pref.getValue() == 0 && pref.summary.toString() == "0", { "missing persisted value uses min, not default object" })
+    }
+
+    check("number preference and hideable dialog keep their Java entry points") {
+        val number = NumberPickerPreference::class.java
+        expect(!Modifier.isFinal(number.modifiers), { "preference must remain extendable" })
+        number.getConstructor(Context::class.java, android.util.AttributeSet::class.java)
+        number.getConstructor(Context::class.java, android.util.AttributeSet::class.java, Int::class.javaPrimitiveType!!)
+        expect(number.getField("DEFAULT_MAX_VALUE").getInt(null) == 100, { "max constant" })
+        expect(number.getField("DEFAULT_MIN_VALUE").getInt(null) == 0, { "min constant" })
+        expect(number.getField("DEFAULT_WRAP_SELECTOR_WHEEL").getBoolean(null), { "wrap constant" })
+        number.getMethod("setValue", Int::class.javaPrimitiveType!!)
+        expect(number.getMethod("getValue").returnType == Int::class.javaPrimitiveType, { "value getter" })
+        for (method in number.declaredMethods.filter { it.name.startsWith("on") }) {
+            expect(Modifier.isProtected(method.modifiers) && !Modifier.isFinal(method.modifiers), { "overridable protected hook ${method.name}" })
+        }
+        val dialog = HideableDialog::class.java
+        expect(!Modifier.isFinal(dialog.modifiers), { "dialog must remain extendable" })
+        dialog.getConstructor(Context::class.java, Int::class.javaPrimitiveType!!, Int::class.javaPrimitiveType!!, Int::class.javaPrimitiveType!!)
+        val show = dialog.getMethod("ShowHidableDialog", Context::class.java, Int::class.javaPrimitiveType!!,
+                Int::class.javaPrimitiveType!!, Int::class.javaPrimitiveType!!)
+        expect(Modifier.isStatic(show.modifiers), { "legacy Java show spelling/static API" })
+        expect(View.OnClickListener::class.java.isAssignableFrom(dialog), { "click listener" })
+        expect(android.widget.CompoundButton.OnCheckedChangeListener::class.java.isAssignableFrom(dialog), { "checkbox listener" })
     }
 
     check("bounded document reads reject oversize input and keep the caller's stream") {

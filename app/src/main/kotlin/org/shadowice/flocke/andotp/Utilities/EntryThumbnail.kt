@@ -21,63 +21,67 @@
  * SOFTWARE.
  */
 
-package org.shadowice.flocke.andotp.Utilities;
+package org.shadowice.flocke.andotp.Utilities
 
-import java.util.regex.Pattern;
+import android.content.Context
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
+import android.graphics.Canvas
+import android.text.TextUtils
+import androidx.appcompat.app.AppCompatDelegate
+import androidx.appcompat.content.res.AppCompatResources
+import org.shadowice.flocke.andotp.R
+import java.util.regex.Pattern
 
-import android.content.Context;
-import android.graphics.Bitmap;
-import android.graphics.BitmapFactory;
-import android.graphics.Canvas;
-import android.graphics.drawable.Drawable;
-import android.text.TextUtils;
+/** Provides bundled brand icons and generated letter tiles. */
+open class EntryThumbnail {
+    companion object {
+        /** Uses the issuer (or label) for default tiles; failed brand loads fall back to the app icon. */
+        @JvmStatic
+        fun getThumbnailGraphic(
+            context: Context,
+            issuer: String?,
+            label: String,
+            size: Int,
+            thumbnail: EntryThumbnails
+        ): Bitmap? {
+            AppCompatDelegate.setCompatVectorFromResourcesEnabled(true)
 
-import androidx.appcompat.app.AppCompatDelegate;
-import androidx.appcompat.content.res.AppCompatResources;
-
-import org.shadowice.flocke.andotp.R;
-
-/** Provides the thumbnails: the bundled brand icons and the generated letter tiles. */
-public class EntryThumbnail {
-    /** Returns the entry thumbnail: a generated letter tile for the default icon, else the brand icon
-     * (with the app icon as fallback when the drawable cannot be loaded). */
-    public static Bitmap getThumbnailGraphic(Context context, String issuer, String label, int size, EntryThumbnails thumbnail) {
-        AppCompatDelegate.setCompatVectorFromResourcesEnabled(true);
-
-        if (thumbnail == EntryThumbnails.Default && size > 0) {
-            LetterBitmap letterBitmap = new LetterBitmap(context);
-            String letterSrc = TextUtils.isEmpty(issuer) ? label : issuer;
-            return letterBitmap.getLetterTile(letterSrc, letterSrc, size, size);
-        } else if (thumbnail != EntryThumbnails.Default) {
-
-            try {
-                if (thumbnail.getAssetType() == AssetType.Vector) {
-                    Drawable drawable = AppCompatResources.getDrawable(context, thumbnail.getResource());
-                    assert drawable != null; // The thumbnail should always have a drawable
-                    Bitmap bitmap = Bitmap.createBitmap(drawable.getMinimumWidth(), drawable.getMinimumHeight(), Bitmap.Config.ARGB_8888);
-                    Canvas canvas = new Canvas(bitmap);
-                    drawable.setBounds(0, 0, drawable.getMinimumWidth(), drawable.getMinimumHeight());
-                    drawable.draw(canvas);
-                    return bitmap;
-                } else {
-                    return BitmapFactory.decodeResource(context.getResources(), thumbnail.getResource());
+            if (thumbnail == EntryThumbnails.Default && size > 0) {
+                val letterSrc = if (TextUtils.isEmpty(issuer)) label else requireNotNull(issuer)
+                return LetterBitmap(context).getLetterTile(letterSrc, letterSrc, size, size)
+            } else if (thumbnail != EntryThumbnails.Default) {
+                try {
+                    if (thumbnail.assetType == AssetType.Vector) {
+                        // A missing drawable takes the same fallback path as a failed resource load.
+                        val drawable = requireNotNull(AppCompatResources.getDrawable(context, thumbnail.resource))
+                        val bitmap = Bitmap.createBitmap(
+                            drawable.getMinimumWidth(), drawable.getMinimumHeight(), Bitmap.Config.ARGB_8888
+                        )
+                        val canvas = Canvas(bitmap)
+                        drawable.setBounds(0, 0, drawable.getMinimumWidth(), drawable.getMinimumHeight())
+                        drawable.draw(canvas)
+                        return bitmap
+                    } else {
+                        return BitmapFactory.decodeResource(context.resources, thumbnail.resource)
+                    }
+                } catch (e: Exception) {
+                    e.printStackTrace()
                 }
-            } catch (Exception e) {
-                e.printStackTrace();
             }
+            return BitmapFactory.decodeResource(context.resources, R.mipmap.ic_launcher_round)
         }
-
-        return BitmapFactory.decodeResource(context.getResources(), R.mipmap.ic_launcher_round);
     }
 
-    /** Whether an icon is a vector drawable or a bitmap. */
-    private enum AssetType {
-        Bitmap,
-        Vector
-    }
+    // Java exposed this type through getAssetType() despite declaring it private. Kotlin requires
+    // the return type to be visible too; making the enum public keeps the getter unmangled.
+    enum class AssetType { Bitmap, Vector }
 
-    /** The available thumbnails, with the resource of each icon. */
-    public enum EntryThumbnails {
+    /** Names and declaration order are persisted/used by the thumbnail picker: do not normalize. */
+    enum class EntryThumbnails private constructor(
+        val resource: Int,
+        val assetType: AssetType = AssetType.Vector
+    ) {
         Default(R.mipmap.ic_launcher_round),
         OneAndOne(R.drawable.thumb_1and1),
         OneBlu(R.drawable.thumb_1blu),
@@ -425,44 +429,25 @@ public class EntryThumbnail {
         Zoho(R.drawable.thumb_zoho),
         Zoom(R.drawable.thumb_zoom);
 
-        private final int resource;
-        private final AssetType assetType;
-
-        EntryThumbnails(int resource) {
-            this.resource = resource;
-            this.assetType = AssetType.Vector;
-        }
-
-        EntryThumbnails(int resource, AssetType assetType) {
-            this.resource = resource;
-            this.assetType = assetType;
-        }
-
-        /** Looks up a thumbnail by its exact name, ignoring case. */
-        public static EntryThumbnails valueOfIgnoreCase(String thumbnail) {
-            for (EntryThumbnails entryThumbnails : values())
-                if (entryThumbnails.name().equalsIgnoreCase(thumbnail)) return entryThumbnails;
-            throw new IllegalArgumentException();
-        }
-
-        /** Looks up a thumbnail by a whole-word match, ignoring case (e.g. "GitHub Inc."). */
-        public static EntryThumbnails valueOfFuzzy(String thumbnail) {
-            for (EntryThumbnails entryThumbnails : values()) {
-                Pattern re = Pattern.compile("\\b" + Pattern.quote(entryThumbnails.name()) + "\\b", Pattern.CASE_INSENSITIVE);
-                if (re.matcher(thumbnail).find())
-	                return entryThumbnails;
+        companion object {
+            /** Exact name lookup, ignoring case (not whitespace). */
+            @JvmStatic
+            fun valueOfIgnoreCase(thumbnail: String?): EntryThumbnails {
+                for (entry in values()) {
+                    if (entry.name.equals(thumbnail, ignoreCase = true)) return entry
+                }
+                throw IllegalArgumentException()
             }
-            throw new IllegalArgumentException();
-        }
 
-        /** The drawable resource of this thumbnail. */
-        public int getResource() {
-            return resource;
-        }
-
-        /** Whether the resource is a vector or a bitmap. */
-        public AssetType getAssetType() {
-            return assetType;
+            /** First whole-word match, ignoring case, in declaration order. */
+            @JvmStatic
+            fun valueOfFuzzy(thumbnail: String): EntryThumbnails {
+                for (entry in values()) {
+                    val re = Pattern.compile("\\b" + Pattern.quote(entry.name) + "\\b", Pattern.CASE_INSENSITIVE)
+                    if (re.matcher(thumbnail).find()) return entry
+                }
+                throw IllegalArgumentException()
+            }
         }
     }
 }

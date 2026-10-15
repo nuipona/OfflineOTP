@@ -79,12 +79,82 @@ Seventh batch (the validated entry model — the assessment's first conversion t
   adapters, delegating parsing to `OtpUriParser`/`EntryJson` instead of parsing itself.
 - `Database/EntryList.kt` predates this batch as Kotlin and is unchanged; it is compiled with it.
 
-`Utilities/EntryThumbnail.java` and `Utilities/LetterBitmap.java` stay Java: their constants are
-Android resource ids (`R.drawable`/`R.mipmap`) and their bitmaps are platform graphics. `Entry`
-therefore keeps `EntryThumbnail.EntryThumbnails` as its thumbnail type, exactly as the Java did.
+Eighth batch (entry thumbnail leaf renderers):
 
-No activity, list adapter, fragment, preference, receiver, worker, dialog renderer or persistence
-implementation is converted; the task runner and its subclasses are, and so is the entry model above. No coroutine, Compose, new
+- `Utilities/EntryThumbnail.kt` and `Utilities/LetterBitmap.kt` replace the Java thumbnail helpers.
+  `Entry` keeps the same `EntryThumbnail.EntryThumbnails` type. All 346 thumbnail enum names,
+  declaration order, resource mappings and vector defaults are unchanged (source fingerprint guard).
+  Static lookup/render entry points and the enum resource/asset getters remain callable from Java.
+- Exact lookup still ignores case but not whitespace; fuzzy lookup still uses Java regex whole-word
+  boundaries and declaration order, not textual position or a longest-match algorithm.
+- Drawing preserves issuer-over-label selection, first UTF-16 char/uppercase/placeholder rules,
+  string-hash color selection, integer centering, vector intrinsic dimensions and app-icon fallback.
+  Nullable bitmap decode results are now explicit. No new caching, resizing or resource policy is added.
+- Kotlin cannot publicly return a private nested type: `AssetType` is now public so that the existing
+  `getAssetType()` getter keeps its name and return descriptor without compiler-error suppression.
+  `LetterBitmap` is Kotlin `internal` (public JVM bytecode, since Kotlin has no package-private).
+  Both classes remain extendable; the static-only `EntryThumbnail` still has its public constructor.
+  `LetterBitmap` remains per-request: this conversion deliberately retains its existing typed-array
+  recycling in `pickColor` rather than changing its lifetime or making the renderer reusable.
+- The sandbox now compiles these real implementations against inert graphics/resource stand-ins;
+  it executes enum lookup checks and reflects the Java-facing signatures, **not** rendering.
+  `KotlinThumbnailInteropTest` supplies real-platform pixel comparisons against the pre-conversion
+  drawing recipe and Java call sites for the device gates; it has not been executed here.
+
+Ninth batch (small UI adapters and autofill field):
+
+- `View/TagsAdapter.kt`, `View/ThumbnailSelectionAdapter.kt` and
+  `View/AutoFillable/AutoFillableTextInputEditText.kt` replace their Java implementations. MainActivity,
+  EntriesCardAdapter, TagsDialog, ManualEntryDialog and AuthenticateActivity remain Java, with the
+  same call sites; the autofill widget keeps its XML class name and all three distinct super calls.
+- Tags retain natural sorted display order, borrowed maps, copied state snapshots, replacement
+  semantics, unknown-tag no-op plus notification, and empty-map all-active behavior. The public
+  `Boolean` getter/setter stay boxed (including nullable states), not primitive `boolean`; rendering
+  still rejects null states via unboxing rather than silently treating them as unchecked. The
+  factory still restores `Settings.getTagToggle` and de-duplicates across entries. Initial inherited
+  ArrayAdapter item order is unchanged (the custom rows/getTags, not super.getItem, are sorted).
+- The picker retains enum declaration order, device-default-locale substring matching, ordinal IDs,
+  high-position Default fallback, negative-position failure, intrinsic graphic rendering, recycled
+  views and accessibility descriptions. The raw Java list is now typed internally. The constructor
+  is Kotlin internal/public bytecode; formerly package-private `filter` is public and unmangled for
+  callers. There is no cache, ROOT-locale behavior change, filtering algorithm change or new policy.
+- Autofill still delegates to the platform first, then notifies only text values when a listener is
+  registered. The nullable setter and nested SAM interface keep the Java lambda boundary.
+- The sandbox compiles all three; it executes tag-state logic and fake autofill wiring, but only
+  reflects the picker (real `Settings` is unavailable at runtime). Added Java instrumentation tests
+  cover real rows/observers, tag factory, picker locale/index/recycling and widget XML/text insertion.
+  They are **not yet executed**; Java compilation, real rendering and platform behavior remain gates.
+
+Tenth batch (number preference and hideable notice):
+
+- `Preferences/NumberPickerPreference.kt` and `Dialogs/HideableDialog.kt` replace the Java classes
+  under their existing package/class names; no preference XML or MainActivity call site changes.
+- The number preference preserves both XML constructors and the framework dialog style, all three
+  public static default constants, protected/overridable lifecycle hooks, min/max/wrapping attributes,
+  centered wrap-content picker layout, current-value binding and summary/persistence calls. Positive
+  close clears picker focus before consulting `callChangeListener`; cancel and veto do not update
+  the value or summary. Restore uses the persisted integer with the minimum as its fallback, not the
+  default object; initial setup still takes a boxed integer default. No range clamp or AndroidX
+  preference migration is introduced.
+- The notice still resolves `dialogTheme`, inflates the same layout, persists checkbox changes
+  immediately for positive setting IDs only, and dismisses on OK. The exact misspelled/capitalized
+  static `ShowHidableDialog` entry point is retained, including the saved-hide flag guard. It is not
+  converted into a singleton, deferred save, or lifecycle owner. Required layout children are now
+  checked explicitly rather than relying on disabled Java assertions.
+- The sandbox compiles both against real Java `Settings` declarations. It executes the number
+  preference against recording fake widgets/persistence/listeners and reflects the dialog API only;
+  it cannot instantiate `HideableDialog` because `Settings` has no runtime class file there.
+  Sandbox resource generation now emits styleable arrays and distinct deterministic attribute slots
+  from `declare-styleable` XML, not scalar stand-ins for arrays. These slots are **not aapt IDs or
+  ordering**, and fake typed arrays do not resolve real XML, references or themes.
+- Added Java instrumentation tests cover real picker configuration from application XML, summary
+  updates, cancel/veto/accept listeners, default/restore hooks, notice layout listeners and immediate
+  setting writes, invalid hide IDs and the saved-hide suppression path. The tests record number
+  persistence calls rather than claim real PreferenceManager disk I/O, and do not show an unsuppressed
+  dialog window. They still need compilation/execution on the Android gates.
+
+No activity, entry-card list adapter/view holder, fragment, credential preference, receiver, worker,
+larger dialog renderer or persistence implementation is converted; the task runner and its subclasses are, and so is the entry model above. No coroutine, Compose, new
 dependency, SDK/bytecode target, storage format or crypto change is included.
 
 **Source conversion is implemented; Gradle and device acceptance is still pending.** What *has* been
@@ -429,14 +499,15 @@ checks:
   stored field order and defaults (including a reserialization that equals the legacy string
   byte-for-byte), the malformed-field matrix with its closed error set, the `ValidatedEntry`
   one-use/redacted ownership, and the Base32/mOTP-hex secret rules.
-- The converted `Entry` class **reflected, not instantiated** (its members reference the Java,
-  resource-backed `EntryThumbnail`, so no `Entry` object can exist in this sandbox): public and
-  non-final class, the six constructors including both `Exception`-declaring adapters, the `OTPType`
-  constants, `COLOR_RED`, and `validateSecret` for Base32/mOTP secrets.
+- The converted `Entry` class **reflected, not instantiated**: public and non-final class, the six
+  constructors including both `Exception`-declaring adapters, the `OTPType` constants, `COLOR_RED`,
+  thumbnail getter and `validateSecret` for Base32/mOTP secrets.
+- Thumbnail enum lookups and Java-visible rendering/lookup/getter signatures. The 346 enum/resource
+  mappings are also fingerprinted by a Python source guard; actual pixels are not sandbox-tested.
 - The ten converted task subclasses are **type-checked against the real Java declarations** they
   call: `run.sh` passes `Settings.java`, `EncryptionHelper.java`, `BackupHelper.java`,
-  `StorageAccessHelper.java`, `DatabaseHelper.java`, `KeyStoreHelper.java`, `FileHelper.java`,
-  `EntryThumbnail.java` and `LetterBitmap.java` to `kotlinc` for resolution, so the
+  `StorageAccessHelper.java`, `DatabaseHelper.java`, `KeyStoreHelper.java` and `FileHelper.java`
+  to `kotlinc` for resolution, so the
   Kotlin calls are verified against the actual parameter/return types instead of stub copies. Their
   bodies are not executed (the Java sources produce no class files on the desktop JVM), and
   reflection covers the members whose signatures avoid those Java-only types: constructor parameter
@@ -478,12 +549,6 @@ tracked in the [decomposition plan](ui-decomposition-plan.md).
   resolution source (see the sandbox check) confirms that same-package Kotlin reads the
   package-private `ALGORITHM_ASYMMETRIC` constant, and the harness now resolves that Java source
   instead of mirroring it.
-- `Utilities/EntryThumbnail.java`: it is a resource catalogue — its enum constants are
-  `R.drawable`/`R.mipmap` ids and the class returns platform drawables/bitmaps — so it needs the
-  Android build regardless of language. Converting it would neither remove platform code nor shrink
-  the Java-visible API, so it stays Java and the sandbox resolves it for `Entry`'s compile check.
-- `Utilities/LetterBitmap.java`: same package-private policy — the class itself is package-private,
-  and a Kotlin conversion would have to publish it to at least `public`/`internal` bytecode.
 - `Tasks/EncryptedBackupWorker.java`: it is a WorkManager `Worker` — an Android-scheduled entry
   point like the activities and receivers, not a task subclass over the runner. Component
   conversion is a separate decision from the task layer (see the sixth batch).
@@ -492,3 +557,9 @@ The drag & drop trio, `UIHelper`, `ConfirmedPasswordTransformationHelper` and `B
 are no longer in this list: they are converted (see the fourth batch above). The task subclasses
 and their runner are converted too (fifth and sixth batches); the *workers*, receivers and other
 components remain Java.
+
+The thumbnail pair has also left this list (eighth batch). The small visibility widenings are
+explicitly recorded above; these leaf renderers still need Android acceptance despite their sandbox
+compile. Latest local check after the tenth batch: 67 Python guards and 50 sandbox checks passed. The both-flavor Gradle
+host/lint/instrumentation-APK build was attempted but stopped at the Gradle 8.13 distribution download
+(`SSLHandshakeException` from `services.gradle.org`); no Android acceptance result is claimed.

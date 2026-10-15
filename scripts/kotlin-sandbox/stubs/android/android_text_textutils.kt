@@ -6,3 +6,6 @@ object TextUtils {
     @JvmStatic
     fun isEmpty(text: CharSequence?): Boolean = text == null || text.length == 0
 }
+
+/** Inert graphics stand-in; no glyphs are drawn in the sandbox. */
+class TextPaint : android.graphics.Paint()

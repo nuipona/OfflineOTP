@@ -3,7 +3,11 @@ package android.graphics
 
 abstract class ColorFilter
 
-class Canvas
+class Canvas(bitmap: Bitmap? = null) {
+    fun setBitmap(bitmap: Bitmap?) {}
+    fun drawColor(color: Int) {}
+    fun drawText(text: CharArray, index: Int, count: Int, x: Float, y: Float, paint: Paint) {}
+}
 
 class PorterDuffColorFilter(color: Int, mode: PorterDuff.Mode) : ColorFilter()
 
@@ -33,14 +37,15 @@ object BitmapFactory {
     fun decodeByteArray(data: ByteArray?, offset: Int, length: Int): Bitmap? = null
 }
 
-class Paint {
+open class Paint {
     enum class Style { FILL, STROKE, FILL_AND_STROKE }
     enum class Align { LEFT, CENTER, RIGHT }
 
     var color: Int = 0
     var textSize: Float = 0f
-    var antiAlias: Boolean = false
+    var isAntiAlias: Boolean = false
 
+    fun getTextBounds(text: CharArray, index: Int, count: Int, bounds: Rect) {}
     fun getTextWidths(text: String?, widths: FloatArray): Int = 0
     fun setStyle(style: Style?) {}
     fun setTextAlign(align: Align?) {}
@@ -50,6 +55,7 @@ class Paint {
 
 class Typeface private constructor() {
     companion object {
+        const val BOLD = 1
         @JvmStatic
         val DEFAULT: Typeface = Typeface()
 
@@ -65,4 +71,9 @@ class Rect {
     var bottom: Int = 0
     fun width(): Int = right - left
     fun height(): Int = bottom - top
+}
+
+object Color {
+    const val WHITE: Int = -1
+    const val BLACK: Int = -16777216
 }

@@ -28,7 +28,7 @@ class KotlinSandboxHarnessTest(unittest.TestCase):
         documentation = (SANDBOX / "README.md").read_text()
         script = (SANDBOX / "run.sh").read_text()
         for file in sorted(KOTLIN.rglob("*.kt")):
-            relative = f"{file.parent.name}/{file.name}"
+            relative = file.relative_to(KOTLIN).as_posix()
             self.assertTrue(relative in documentation or f"$KOTLIN_APP/{relative}" in script,
                             f"{relative} is neither compiled nor documented as excluded in {SANDBOX}")
 
@@ -53,11 +53,12 @@ class KotlinSandboxHarnessTest(unittest.TestCase):
         # The task subclasses resolve the real settings/database/crypto helpers, not stubs of them.
         for resolved in ("Utilities/Settings.java", "Utilities/EncryptionHelper.java",
                          "Utilities/DatabaseHelper.java", "Utilities/KeyStoreHelper.java",
-                         "Utilities/BackupHelper.java", "Utilities/StorageAccessHelper.java",
-                         "Utilities/EntryThumbnail.java"):
+                         "Utilities/BackupHelper.java", "Utilities/StorageAccessHelper.java"):
             self.assertIn(f"$ROOT/app/src/main/java/org/shadowice/flocke/andotp/{resolved}", script)
-        # EntryThumbnail stays Java (its resource ids need the Android toolchain), so the converted
-        # Entry resolves the real declaration rather than a stub of it.
+        # The model and thumbnail pair are compiled as real Kotlin, not stubbed.
+        for converted in ("EntryThumbnail", "LetterBitmap"):
+            self.assertIn(f"$KOTLIN_APP/Utilities/{converted}.kt", script)
+            self.assertFalse((ROOT / f"app/src/main/java/org/shadowice/flocke/andotp/Utilities/{converted}.java").exists())
         self.assertIn("$KOTLIN_APP/Database/Entry.kt", script)
         self.assertFalse((ROOT / "app/src/main/java/org/shadowice/flocke/andotp/Database/Entry.java").exists())
         # No production class may be shadowed by a stub of the same name.
