@@ -63,6 +63,8 @@ import org.shadowice.flocke.andotp.Utilities.SessionState
 import org.shadowice.flocke.andotp.Utilities.ValidatedOtp
 import org.shadowice.flocke.andotp.Utilities.VaultSession
 import org.shadowice.flocke.andotp.Utilities.ScreenTimerController
+import org.shadowice.flocke.andotp.Utilities.Settings
+import org.shadowice.flocke.andotp.Utilities.Constants
 import org.shadowice.flocke.andotp.Utilities.TokenCalculator
 import org.shadowice.flocke.andotp.Utilities.Tools
 import org.shadowice.flocke.andotp.Utilities.UIHelper
@@ -93,11 +95,14 @@ import android.net.Uri
 import android.database.Cursor
 import android.os.ParcelFileDescriptor
 import android.provider.OpenableColumns
+import android.os.Build
 import android.os.Handler
 import android.os.IBinder
+import android.os.SystemClock
 import android.text.TextWatcher
 import android.text.method.PasswordTransformationMethod
 import android.text.method.TransformationMethod
+import android.util.Base64
 import android.util.DisplayMetrics
 import android.view.KeyEvent
 import android.view.View
@@ -118,9 +123,15 @@ import com.google.zxing.NotFoundException
 import com.google.zxing.RGBLuminanceSource
 import com.google.zxing.qrcode.QRCodeReader
 
+import android.content.res.Configuration
+import android.content.res.Resources
+import android.preference.FakeSharedPreferences
+import android.preference.PreferenceManager
+
 import org.json.JSONObject
 
 import java.io.ByteArrayInputStream
+import java.io.DataInputStream
 import java.io.File
 import java.io.IOException
 import java.io.InputStream
@@ -132,6 +143,7 @@ import java.security.GeneralSecurityException
 import java.security.KeyPairGenerator
 import java.security.MessageDigest
 import java.util.Arrays
+import java.util.Locale
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
@@ -150,6 +162,9 @@ private fun check(name: String, body: () -> Unit) {
     } catch (t: Throwable) {
         failures++
         println("FAIL  $name -> $t")
+        // A one-line failure is enough for assertions, but a harness bug (a missing stub member, a
+        // class that cannot be loaded) is only debuggable with the frame that raised it.
+        if (System.getenv("SANDBOX_CHECK_TRACE") != null) t.printStackTrace()
     }
 }
 
@@ -666,10 +681,233 @@ private fun staticMethod(type: Class<*>, name: String, parameters: List<Class<*>
     throw AssertionError("${type.simpleName}.$name(${parameters.joinToString(",") { it.simpleName }}) is missing")
 }
 
+/**
+ * The Java-visible surface of a compiled class, read from its own class file.
+ *
+ * Reflection cannot describe every converted class: `Class.getDeclaredMethods()` resolves each
+ * declared signature eagerly, so a class that mentions a Java-only type without a class file (in
+ * this sandbox the `Constants` enums) cannot be described at all — the JVM throws while collecting
+ * the members, before a name is compared. Parsing the class file reports the same names, descriptors
+ * and access flags without resolving a single referenced type, which is exactly what a Java caller
+ * compiles against.
+ */
+private class CompiledClass(bytes: ByteArray) {
+    class Member(val name: String, val descriptor: String, val flags: Int) {
+        /** `getBoolean(IZ)Z` for a method, `context Landroid/content/Context;` for a field. */
+        val signature: String get() = if (descriptor.startsWith("(")) name + descriptor else "$name $descriptor"
+        val isPublic: Boolean get() = Modifier.isPublic(flags)
+        val isPrivate: Boolean get() = Modifier.isPrivate(flags)
+        val isStatic: Boolean get() = Modifier.isStatic(flags)
+        val isFinal: Boolean get() = Modifier.isFinal(flags)
+
+        /** Kotlin's own artefacts: `..$lambda$0`, accessors of a companion holder. */
+        val isSynthetic: Boolean get() = name.contains('$')
+    }
+
+    private val input = DataInputStream(ByteArrayInputStream(bytes))
+    private val utf8 = HashMap<Int, String>()
+    private val classNames = HashMap<Int, Int>()
+
+    val flags: Int
+    val name: String
+    val superName: String
+    val fields: List<Member>
+    val methods: List<Member>
+
+    init {
+        if (input.readInt() != 0xCAFEBABE.toInt()) throw AssertionError("not a class file")
+        input.readUnsignedShort()                       // minor_version
+        input.readUnsignedShort()                       // major_version
+        val poolSize = input.readUnsignedShort()
+        var index = 1
+        while (index < poolSize) {
+            when (val tag = input.readUnsignedByte()) {
+                1 -> utf8[index] = readUtf8()
+                3, 4 -> skip(4)
+                5, 6 -> { skip(8); index++ }            // eight-byte constants occupy two slots
+                7 -> classNames[index] = input.readUnsignedShort()
+                8, 16, 19, 20 -> skip(2)
+                9, 10, 11, 12, 17, 18 -> skip(4)
+                15 -> skip(3)
+                else -> throw AssertionError("unknown constant pool tag $tag")
+            }
+            index++
+        }
+        flags = input.readUnsignedShort()
+        name = className(input.readUnsignedShort())
+        superName = className(input.readUnsignedShort())
+        skip(input.readUnsignedShort() * 2)             // interfaces
+        fields = readMembers()
+        methods = readMembers()
+    }
+
+    val publicMembers: List<Member> get() = methods.filter { it.isPublic && !it.isSynthetic }
+    val privateMembers: List<Member> get() = methods.filter { it.isPrivate && !it.isSynthetic }
+
+    private fun readMembers(): List<Member> {
+        val members = ArrayList<Member>()
+        repeat(input.readUnsignedShort()) {
+            val accessFlags = input.readUnsignedShort()
+            val memberName = utf8.getValue(input.readUnsignedShort())
+            val descriptor = utf8.getValue(input.readUnsignedShort())
+            readAttributes()
+            members.add(Member(memberName, descriptor, accessFlags))
+        }
+        return members
+    }
+
+    /** Attributes (code, exceptions, …) are not needed, but their lengths have to be walked over. */
+    private fun readAttributes() {
+        repeat(input.readUnsignedShort()) {
+            input.readUnsignedShort()
+            skip(input.readInt())
+        }
+    }
+
+    private fun readUtf8(): String {
+        val bytes = ByteArray(input.readUnsignedShort())
+        input.readFully(bytes)
+        return bytes.toString(Charsets.UTF_8)
+    }
+
+    private fun className(index: Int): String = utf8.getValue(classNames.getValue(index))
+
+    private fun skip(count: Int) {
+        input.skipBytes(count)
+    }
+}
+
+/** Reads the class file the class loader holds for [type]. */
+private fun compiledClass(type: Class<*>): CompiledClass {
+    val entry = type.name.substringAfterLast('.') + ".class"
+    val stream = type.getResourceAsStream(entry)
+            ?: throw AssertionError("no class file for ${type.name}")
+    return stream.use { CompiledClass(it.readBytes()) }
+}
+
 private fun expectThrowsClause(type: Class<*>, name: String, parameters: List<Class<*>>, vararg declared: Class<out Throwable>) {
     val method = staticMethod(type, name, parameters)
     expect(method.exceptionTypes.toSet() == declared.toSet(),
             { "${type.simpleName}.$name throws ${method.exceptionTypes.toList()}, expected ${declared.toList()}" })
+}
+
+// --- converted settings facade -------------------------------------------------------------------
+
+/**
+ * The preference-key and default-value view for the converted `Settings`, which addresses everything
+ * through string resources: keys are distinct synthetic strings per id and the *default* strings the
+ * code parses into enums carry the values `app/src/main/res/values/settings.xml` declares, so an
+ * empty store behaves like a fresh install. Every lookup is recorded so a check can assert which
+ * resource an accessor resolved. Those literals are pinned against the XML by
+ * scripts/tests/test_kotlin_settings_conversion.py.
+ */
+private fun settingsDefaultValue(id: Int): String? = when (id) {
+    R.string.settings_default_encryption -> "keystore"
+    R.string.settings_default_lang -> "system"
+    R.string.settings_default_theme_mode -> "auto"
+    R.string.settings_default_theme -> "light"
+    R.string.settings_default_label_display -> "truncate"
+    R.string.settings_default_card_layout -> "default"
+    R.string.settings_default_tap_single -> "nothing"
+    R.string.settings_default_tap_double -> "nothing"
+    R.string.settings_default_thumbnail_size -> "46dp"
+    R.string.settings_default_split_group_size -> "3"
+    R.string.settings_default_tag_functionality -> "or"
+    R.string.settings_default_auto_backup_password_enc -> "off"
+    else -> null
+}
+
+private class SettingsResources(
+    private val consulted: MutableList<Int>,
+    private val config: Configuration
+) : Resources() {
+
+    override fun getInteger(id: Int): Int = when (id) {
+        // settings.xml: settings_default_tap_to_reveal_timeout / settings_default_label_size
+        R.integer.settings_default_tap_to_reveal_timeout -> 30
+        R.integer.settings_default_label_size -> 18
+        else -> id
+    }
+
+    override fun getString(id: Int): String {
+        consulted.add(id)
+        return settingsDefaultValue(id) ?: "res:" + id
+    }
+
+    override fun getStringArray(id: Int): Array<String> =
+        if (id == R.array.settings_defaults_search_includes) arrayOf("label", "issuer") else emptyArray()
+
+    override val displayMetrics: DisplayMetrics get() = METRICS
+
+    override val configuration: Configuration get() = config
+
+    companion object {
+        /** 2x density, so the "46dp" default resolves to 92 px and the checks can see the formula run. */
+        val METRICS: DisplayMetrics = DisplayMetrics().apply {
+            density = 2.0f
+            scaledDensity = 2.0f
+            xdpi = 320f
+            ydpi = 320f
+        }
+    }
+}
+
+/** Context whose resource strings are the preference keys themselves, plus the default values above. */
+private class SettingsContext : Context() {
+    val consulted = ArrayList<Int>()
+    val config = Configuration()
+    private val settingsResources = SettingsResources(consulted, config)
+
+    override val resources: Resources get() = settingsResources
+
+    override fun getString(resId: Int): String {
+        consulted.add(resId)
+        return settingsDefaultValue(resId) ?: settingsKey(resId)
+    }
+}
+
+/** The preference key the fake context maps a resource id to. */
+private fun settingsKey(resId: Int): String = "key:" + resId
+
+/**
+ * Runs the block with the vault transaction poisoned. The converted construction runs
+ * `DatabaseHelper.recoverPendingDatabase`, and the pending-file transaction it would otherwise
+ * touch has no class file here (FileHelper), so a dropped short-circuit would fail loudly.
+ */
+private fun <T> withPoisonedTransaction(block: () -> T): T {
+    val poison = DatabaseHelper::class.java.getDeclaredField("transactionPoisoned")
+    poison.isAccessible = true
+    poison.setBoolean(null, true)
+    try {
+        return block()
+    } finally {
+        poison.setBoolean(null, false)
+    }
+}
+
+/** One clean in-memory preference store plus the `Settings` instance reading and writing it. */
+private class SettingsFixture {
+    val context = SettingsContext()
+    val settings: Settings
+    val store: FakeSharedPreferences
+
+    init {
+        PreferenceManager.reset()
+        settings = withPoisonedTransaction { Settings(context) }
+        store = PreferenceManager.getDefaultSharedPreferences(context) as FakeSharedPreferences
+    }
+
+    fun seed(resId: Int, value: String) {
+        store.edit().putString(settingsKey(resId), value).commit()
+    }
+
+    fun seed(resId: Int, value: Boolean) {
+        store.edit().putBoolean(settingsKey(resId), value).commit()
+    }
+
+    fun stored(resId: Int): String? = store.getString(settingsKey(resId), null)
+
+    fun storedSet(resId: Int): MutableSet<String> = HashSet(store.getStringSet(settingsKey(resId), emptySet())!!)
 }
 
 fun main() {
@@ -3215,6 +3453,478 @@ fun main() {
             val method = staticMethod(keyStore, name, parameters)
             expect(method.exceptionTypes.isEmpty(), { "KeyStoreHelper.$name gained checked exceptions" })
         }
+    }
+
+
+    check("the compiled settings class keeps the Java-visible surface of Settings.java") {
+        // `Class.getDeclaredMethods()` resolves every declared signature eagerly and the Java-only
+        // `Constants` enums have no class file in this sandbox, so no reflection lookup on `Settings`
+        // can succeed here. The compiled class file carries the same names, descriptors and access
+        // flags, so it is read directly — the surface every Java caller compiles against.
+        val compiled = compiledClass(Settings::class.java)
+
+        expect(Modifier.isPublic(compiled.flags), { "Settings must stay public" })
+        expect(!Modifier.isFinal(compiled.flags) && !Modifier.isAbstract(compiled.flags),
+                { "Settings must stay an open, instantiable class (androidTest subclasses it)" })
+        expect(compiled.superName == "java/lang/Object", { "Settings gained a superclass: ${compiled.superName}" })
+
+        // The public surface, verbatim and complete, reviewed member by member against the Java file.
+        // Adding or dropping one is a deliberate change to the Java-visible contract.
+        val expectedPublic = listOf(
+            "<init>(Landroid/content/Context;)V",
+            "clear(Z)V",
+            "commitVaultSettings(Ljava/lang/String;Lorg/shadowice/flocke/andotp/Utilities/Constants\$EncryptionType;Lorg/shadowice/flocke/andotp/Utilities/Constants\$AuthMethod;Lorg/shadowice/flocke/andotp/Utilities/Settings\$PreparedCredentials;Z)Z",
+            "disableAutomaticBackups()V",
+            "getAllTagsToggle()Z",
+            "getAndroidBackupServiceEnabled()Z",
+            "getAuthCredentials()Ljava/lang/String;",
+            "getAuthInactivity()Z",
+            "getAuthInactivityDelay()I",
+            "getAuthMethod()Lorg/shadowice/flocke/andotp/Utilities/Constants\$AuthMethod;",
+            "getAutoBackupEncryptedFullEnabled()Z",
+            "getAutoBackupEncryptedPasswordsEnabled()Z",
+            "getAutoUnlockAfterAutofill()Z",
+            "getBackupAsk()Z",
+            "getBackupBroadcasts()Ljava/util/Set;",
+            "getBackupLocation()Landroid/net/Uri;",
+            "getBackupPassword()Ljava/lang/String;",
+            "getBackupPasswordEnc()Ljava/lang/String;",
+            "getBlockAccessibility()Z",
+            "getBlockAutofill()Z",
+            "getBoolean(IZ)Z",
+            "getCardLayout()Lorg/shadowice/flocke/andotp/Utilities/Constants\$CardLayouts;",
+            "getDefaultBackupType()Lorg/shadowice/flocke/andotp/Utilities/Constants\$BackupType;",
+            "getEncryption()Lorg/shadowice/flocke/andotp/Utilities/Constants\$EncryptionType;",
+            "getFirstTimeWarningShown()Z",
+            "getIsAppendingDateTimeToBackups()Z",
+            "getIterations()I",
+            "getLabelDisplay()Lorg/shadowice/flocke/andotp/Utilities/Constants\$LabelDisplay;",
+            "getLabelSize()I",
+            "getLocale()Ljava/util/Locale;",
+            "getNoTagsToggle()Z",
+            "getOldCredentials(Lorg/shadowice/flocke/andotp/Utilities/Constants\$AuthMethod;)Ljava/lang/String;",
+            "getOpenPGPEncryptionUserIDs()Ljava/lang/String;",
+            "getOpenPGPProvider()Ljava/lang/String;",
+            "getOpenPGPSigningKey()J",
+            "getOpenPGPVerify()Z",
+            "getPanicResponse()Ljava/util/Set;",
+            "getRelockOnBackground()Z",
+            "getRelockOnScreenOff()Z",
+            "getSalt()[B",
+            "getScreenshotsEnabled()Z",
+            "getSearchValues()Ljava/util/List;",
+            "getShowPrevToken()Z",
+            "getSortMode()Lorg/shadowice/flocke/andotp/Utilities/Constants\$SortMode;",
+            "getSpecialFeatures()Z",
+            "getTagFunctionality()Lorg/shadowice/flocke/andotp/Utilities/Constants\$TagFunctionality;",
+            "getTagToggle(Ljava/lang/String;)Z",
+            "getTapDouble()Lorg/shadowice/flocke/andotp/Utilities/Constants\$TapMode;",
+            "getTapSingle()Lorg/shadowice/flocke/andotp/Utilities/Constants\$TapMode;",
+            "getTapToReveal()Z",
+            "getTapToRevealTimeout()I",
+            "getTheme()I",
+            "getThumbnailSize()I",
+            "getThumbnailVisible()Z",
+            "getTokenSplitGroupSize()I",
+            "getUsedTokensDialogShown()Z",
+            "isBackupLocationSet()Z",
+            "isEncryptedBackupBroadcastEnabled()Z",
+            "isFocusSearchOnStartEnabled()Z",
+            "isHideGlobalTimeoutEnabled()Z",
+            "isHideIssuerEnabled()Z",
+            "isHighlightTokenOptionEnabled()Z",
+            "isMinimizeAppOnCopyEnabled()Z",
+            "isShowIndividualTimeoutsEnabled()Z",
+            "prepareAuthCredentials(Ljava/lang/String;)Lorg/shadowice/flocke/andotp/Utilities/Settings\$PreparedCredentials;",
+            "registerPreferenceChangeListener(Landroid/content/SharedPreferences\$OnSharedPreferenceChangeListener;)V",
+            "removeAuthPINHash()V",
+            "removeAuthPasswordHash()V",
+            "setAllTagsToggle(Ljava/lang/Boolean;)V",
+            "setAndroidBackupServiceEnabled(Z)V",
+            "setAuthCredentials(Ljava/lang/String;)[B",
+            "setAuthCredentials(Ljava/lang/String;Ljava/util/function/BooleanSupplier;)[B",
+            "setAuthMethod(Lorg/shadowice/flocke/andotp/Utilities/Constants\$AuthMethod;)V",
+            "setBackupLocation(Landroid/net/Uri;)V",
+            "setBoolean(IZ)V",
+            "setDefaultBackupType(Lorg/shadowice/flocke/andotp/Utilities/Constants\$BackupType;)V",
+            "setEncryption(Ljava/lang/String;)V",
+            "setEncryption(Lorg/shadowice/flocke/andotp/Utilities/Constants\$EncryptionType;)V",
+            "setFirstTimeWarningShown(Z)V",
+            "setIterations(I)V",
+            "setLocale(Ljava/lang/String;)V",
+            "setNoTagsToggle(Ljava/lang/Boolean;)V",
+            "setSalt([B)V",
+            "setSortMode(Lorg/shadowice/flocke/andotp/Utilities/Constants\$SortMode;)V",
+            "setSpecialFeatures(Z)V",
+            "setTagToggle(Ljava/lang/String;Ljava/lang/Boolean;)V",
+            "setUsedTokensDialogShown(Z)V",
+            "tryAcquireBroadcastBackupSlot()Z",
+            "unregisterPreferenceChangeListener(Landroid/content/SharedPreferences\$OnSharedPreferenceChangeListener;)V",
+        )
+        val publicSurface = compiled.publicMembers.map { it.signature }
+        expect(publicSurface.toSet() == expectedPublic.toSet() && publicSurface.size == expectedPublic.size, {
+            "the public surface changed: missing ${expectedPublic.filterNot { it in publicSurface }}, " +
+                    "unexpected ${publicSurface.filterNot { it in expectedPublic }}"
+        })
+
+        // Everything else stayed private, exactly as in the Java class: an accessor that had widened to
+        // public or protected shows up in the list above, one that lost a modifier shows up here.
+        val expectedPrivate = listOf(
+            "getAutoBackupEncryptedSetting()Lorg/shadowice/flocke/andotp/Utilities/Constants\$AutoBackup;",
+            "getInt(II)I",
+            "getIntValue(II)I",
+            "getLong(IJ)J",
+            "getResInt(I)I",
+            "getResString(I)Ljava/lang/String;",
+            "getString(II)Ljava/lang/String;",
+            "getString(ILjava/lang/String;)Ljava/lang/String;",
+            "getStringSet(ILjava/util/Set;)Ljava/util/Set;",
+            "migrateDeprecatedSettings()V",
+            "remove(I)V",
+            "setInt(II)V",
+            "setString(ILjava/lang/String;)V",
+            "setStringSet(ILjava/util/Set;)V",
+        )
+        val privateSurface = compiled.privateMembers.map { it.signature }
+        expect(privateSurface.toSet() == expectedPrivate.toSet() && privateSurface.size == expectedPrivate.size,
+                { "the private members changed: ${privateSurface.sorted()}" })
+        val widened = compiled.methods.filter { !it.isPublic && !it.isPrivate && !it.isSynthetic && it.name != "<clinit>" }
+        expect(widened.isEmpty(), { "a member became protected or package-private: ${widened.map { it.signature }}" })
+        expect(compiled.methods.none { it.isSynthetic && !it.isPrivate },
+                { "a synthetic member leaked into the Java-visible surface" })
+
+        // Java reaches every member through an instance and subclasses may override them, so nothing
+        // may become static or final.
+        expect(compiled.publicMembers.all { !it.isStatic && !it.isFinal },
+                { "static or final public members: " +
+                        compiled.publicMembers.filter { it.isStatic || it.isFinal }.map { it.signature } })
+
+        // The acceptance-critical shapes must not gain a primitive overload: Java's
+        // `setAllTagsToggle(false)` means "no explicit choice", which only the boxed parameter can say.
+        for (rejected in listOf("setAllTagsToggle(Z)V", "setNoTagsToggle(Z)V",
+                "setTagToggle(Ljava/lang/String;Z)V")) {
+            expect(compiled.methods.none { it.signature == rejected },
+                    { "$rejected exists: the boxed Boolean parameter is part of the Java contract" })
+        }
+
+        // Two private collaborators, the two language lists and the single companion placeholder
+        // Kotlin adds; nothing else may become a field.
+        expect(compiled.fields.map { it.signature }.toSet() == setOf(
+                "Companion Lorg/shadowice/flocke/andotp/Utilities/Settings\$Companion;",
+                "context Landroid/content/Context;",
+                "settings Landroid/content/SharedPreferences;",
+                "newLangs Ljava/util/List;",
+                "oldLangs Ljava/util/List;"),
+                { "the fields changed: ${compiled.fields.map { it.signature }}" })
+        val companion = compiled.fields.single { it.name == "Companion" }
+        expect(companion.isPublic && companion.isStatic && companion.isFinal,
+                { "the companion holder must stay public static final" })
+        for (fieldName in listOf("context", "settings")) {
+            val field = compiled.fields.single { it.name == fieldName }
+            expect(field.isPrivate && field.isFinal && !field.isStatic,
+                    { "$fieldName must stay a private final instance field: ${field.flags}" })
+        }
+        for (fieldName in listOf("newLangs", "oldLangs")) {
+            val field = compiled.fields.single { it.name == fieldName }
+            expect(field.isPrivate && field.isFinal && field.isStatic,
+                    { "$fieldName must stay a private static final list: ${field.flags}" })
+        }
+        expect(compiled.fields.single { it.name == "context" }.descriptor == "Landroid/content/Context;" &&
+                compiled.fields.single { it.name == "settings" }.descriptor == "Landroid/content/SharedPreferences;",
+                { "the two collaborators changed type" })
+
+        // The nested holder is what Java builds in `prepareAuthCredentials` and reads `credentials.key`
+        // from: public final, public final JvmField members, and only `destroy()` on top.
+        val prepared = compiledClass(Settings.PreparedCredentials::class.java)
+        expect(Modifier.isPublic(prepared.flags) && Modifier.isFinal(prepared.flags) &&
+                !Modifier.isAbstract(prepared.flags), { "PreparedCredentials must stay a public final class" })
+        expect(prepared.methods.map { it.signature }.toSet() ==
+                setOf("<init>([BLjava/lang/String;Ljava/lang/String;I)V", "destroy()V"),
+                { "PreparedCredentials methods changed: ${prepared.methods.map { it.signature }}" })
+        expect(prepared.fields.map { it.signature }.toSet() ==
+                setOf("key [B", "verifier Ljava/lang/String;", "salt Ljava/lang/String;", "iterations I"),
+                { "PreparedCredentials fields changed: ${prepared.fields.map { it.signature }}" })
+        expect(prepared.fields.all { it.isPublic && it.isFinal },
+                { "a PreparedCredentials field stopped being public final" })
+        expect(prepared.privateMembers.isEmpty(), { "an unexpected private member appeared" })
+    }
+
+    check("the settings facade keeps the stored keys and the documented non-enum defaults") {
+        val fixture = SettingsFixture()
+        val settings = fixture.settings
+
+        // An empty store must behave like a fresh install: every accessor falls back to its default.
+        expect(settings.getRelockOnScreenOff(), { "relock on screen off must default to true" })
+        expect(!settings.getRelockOnBackground(), { "relock on background must default to false" })
+        expect(!settings.getBlockAccessibility(), { "block accessibility" })
+        expect(!settings.getBlockAutofill(), { "block autofill" })
+        expect(!settings.getAutoUnlockAfterAutofill(), { "auto unlock after autofill" })
+        expect(!settings.getScreenshotsEnabled(), { "screenshots" })
+        expect(!settings.getShowPrevToken(), { "show previous token" })
+        expect(settings.getBackupAsk(), { "backup ask" })
+        expect(settings.getIsAppendingDateTimeToBackups(), { "append date/time to backups" })
+        expect(settings.isHighlightTokenOptionEnabled(), { "highlight token" })
+        expect(!settings.isHideGlobalTimeoutEnabled(), { "hide global timeout" })
+        expect(!settings.isShowIndividualTimeoutsEnabled(), { "show individual timeouts" })
+        expect(!settings.isFocusSearchOnStartEnabled(), { "focus search on start" })
+        expect(!settings.isHideIssuerEnabled(), { "hide issuer" })
+        expect(!settings.isMinimizeAppOnCopyEnabled(), { "minimize on copy" })
+        expect(!settings.getAuthInactivity(), { "auth inactivity" })
+        expect(settings.getAuthInactivityDelay() == 0, { "auth inactivity delay" })
+        expect(!settings.getUsedTokensDialogShown(), { "used tokens dialog" })
+        expect(!settings.getFirstTimeWarningShown(), { "first-time warning" })
+        expect(!settings.getSpecialFeatures(), { "special features" })
+        expect(!settings.getOpenPGPVerify(), { "OpenPGP verify" })
+        expect(settings.getOpenPGPSigningKey() == 0L, { "OpenPGP signing key" })
+        expect(settings.getOpenPGPProvider() == "" && settings.getOpenPGPEncryptionUserIDs() == "",
+                { "the OpenPGP selectors must default to empty" })
+        expect(!settings.isBackupLocationSet(), { "no backup location is configured by default" })
+        expect(settings.getBackupPassword() == "" && settings.getBackupPasswordEnc() == "",
+                { "the backup password must default to empty" })
+        expect(settings.getAuthCredentials() == "", { "the credentials must default to empty" })
+        expect(settings.getPanicResponse().isEmpty(), { "the panic response must default to empty" })
+        expect(settings.getBackupBroadcasts().isEmpty() && !settings.isEncryptedBackupBroadcastEnabled(),
+                { "no backup broadcast is enabled by default" })
+        expect(settings.getAllTagsToggle() && settings.getNoTagsToggle(), { "both tag toggles default to true" })
+        expect(!settings.getAndroidBackupServiceEnabled(), { "the platform backup service stays off" })
+        expect(settings.getTapToRevealTimeout() == 30, { "tap to reveal timeout default" })
+        expect(settings.getLabelSize() == 18, { "label size default" })
+        expect(settings.getTokenSplitGroupSize() == 3, { "split group size default" })
+        expect(settings.getIterations() == 30000, { "the iteration default must stay PBKDF2_MIN_AUTH_ITERATIONS" })
+        expect(settings.getThumbnailSize() == 92 && settings.getThumbnailVisible(),
+                { "the 46dp default at density 2 must resolve through DimensionConverter: ${settings.getThumbnailSize()}" })
+
+        // The defaults this code parses into enums are resource values; they are read here and
+        // asserted (as the strings the code then parses) so the XML defaults stay reachable, and the
+        // enum mapping itself is pinned by the source guard and KotlinSettingsInteropTest.
+        fixture.context.consulted.clear()
+        settings.getRelockOnBackground()
+        expect(fixture.context.consulted == listOf(R.string.settings_key_relock_background),
+                { "consulted ${fixture.context.consulted}" })
+        fixture.context.consulted.clear()
+        settings.getThumbnailSize()
+        // Which resources are read is the contract; the order they are evaluated in is not.
+        expect(fixture.context.consulted.toSet() ==
+                setOf(R.string.settings_key_thumbnail_size, R.string.settings_default_thumbnail_size) &&
+                fixture.context.consulted.size == 2,
+                { "consulted ${fixture.context.consulted}" })
+
+        // Setters write exactly the key they read and nothing else.
+        fixture.store.edit().clear().commit()
+        settings.setFirstTimeWarningShown(true)
+        expect(fixture.store.getBoolean(settingsKey(R.string.settings_key_security_backup_warning), false),
+                { "setFirstTimeWarningShown did not write its key" })
+        settings.setUsedTokensDialogShown(true)
+        expect(fixture.store.getAll().keys == setOf(
+                settingsKey(R.string.settings_key_security_backup_warning),
+                settingsKey(R.string.settings_key_last_used_dialog_shown)),
+                { "setters wrote unexpected keys: ${fixture.store.getAll().keys}" })
+        settings.setIterations(42000)
+        expect(settings.getIterations() == 42000, { "iterations round trip" })
+
+        settings.setLocale("de_DE")
+        expect(settings.getLocale() == Locale("de", "DE"), { "locale ${settings.getLocale()}" })
+        settings.setLocale("de")
+        expect(settings.getLocale() == Locale("de"), { "locale ${settings.getLocale()}" })
+        settings.setLocale("system")
+        expect(settings.getLocale() == Tools.getSystemLocale(),
+                { "the literal system language must resolve through Tools.getSystemLocale()" })
+
+        settings.setBackupLocation(Uri.parse("content://org.example.backup/vault.aes"))
+        expect(settings.isBackupLocationSet(), { "a stored location must be reported as set" })
+        expect(settings.getBackupLocation().toString() == "content://org.example.backup/vault.aes",
+                { "backup location round trip: ${settings.getBackupLocation()}" })
+
+        // The salt/verifier pair is Base64 URL_SAFE, and a missing salt is a programming error.
+        settings.setSalt(ByteArray(16) { (it + 1).toByte() })
+        val salt = settings.getSalt()
+        expect(salt.contentEquals(ByteArray(16) { (it + 1).toByte() }), { "the salt must round-trip" })
+        expect(!settings.getSalt().let { java.util.Base64.getEncoder().encodeToString(it) }.contains('+'),
+                { "the stored salt must use the URL-safe alphabet" })
+
+        // The language migration lists are private static data on the class itself; the mapping they
+        // encode is asserted here and applied by migrateDeprecatedSettings, which needs the file
+        // transaction and stays device-tested.
+        fun languageList(name: String): List<String> {
+            val field = Settings::class.java.getDeclaredField(name).also { it.isAccessible = true }
+            @Suppress("UNCHECKED_CAST")
+            return field.get(null) as List<String>
+        }
+        val newLangs = languageList("newLangs")
+        val oldLangs = languageList("oldLangs")
+        expect(newLangs.size == 25 && oldLangs.size == 25, { "language list sizes: ${newLangs.size}/${oldLangs.size}" })
+        for ((old, new) in listOf(
+            "ar_SA" to "ar", "de_DE" to "de", "en_US" to "en", "pt_BR" to "pt_BR",
+            "zh_TW" to "zh_TW", "fr_FR" to "fr", "uk_UA" to "uk"
+        )) {
+            expect(newLangs[oldLangs.indexOf(old)] == new, { "the $old migration maps to ${newLangs[oldLangs.indexOf(old)]}" })
+        }
+    }
+
+    check("tag toggles keep the unchecked-tag representation and the boxed setters' failure mode") {
+        val fixture = SettingsFixture()
+        val settings = fixture.settings
+
+        expect(settings.getTagToggle("unknown"), { "an unknown tag must default to checked" })
+
+        settings.setTagToggle("work", false)
+        expect(!settings.getTagToggle("work"), { "an unchecked tag must stay unchecked" })
+        expect(fixture.storedSet(R.string.settings_key_tags_toggles) == setOf("work"),
+                { "only unchecked tags are stored: ${fixture.storedSet(R.string.settings_key_tags_toggles)}" })
+
+        settings.setTagToggle("work", true)
+        expect(settings.getTagToggle("work"), { "re-checking a tag must restore the default" })
+        expect(fixture.storedSet(R.string.settings_key_tags_toggles).isEmpty(),
+                { "a checked tag must be removed, not stored: ${fixture.storedSet(R.string.settings_key_tags_toggles)}" })
+
+        settings.setTagToggle("one", false)
+        settings.setTagToggle("two", false)
+        settings.setTagToggle("one", true)
+        expect(fixture.storedSet(R.string.settings_key_tags_toggles) == setOf("two"),
+                { "the stored unchecked set is wrong: ${fixture.storedSet(R.string.settings_key_tags_toggles)}" })
+        expect(!settings.getTagToggle("two") && settings.getTagToggle("three"),
+                { "unknown tags must stay checked while stored ones are reported as unchecked" })
+
+        // A read must not alias the stored set: mutating the returned set cannot uncheck a stored tag.
+        fixture.storedSet(R.string.settings_key_tags_toggles).add("three")
+        expect(settings.getTagToggle("three"), { "the stored set was shared with the caller" })
+
+        settings.setAllTagsToggle(false)
+        expect(!settings.getAllTagsToggle(), { "setAllTagsToggle(false)" })
+        settings.setNoTagsToggle(false)
+        expect(!settings.getNoTagsToggle(), { "setNoTagsToggle(false)" })
+
+        // The boxed parameters dereference their argument, exactly like the Java unboxing did.
+        expectThrows(NullPointerException::class.java) { settings.setAllTagsToggle(null) }
+        expectThrows(NullPointerException::class.java) { settings.setNoTagsToggle(null) }
+        expectThrows(NullPointerException::class.java) { settings.setTagToggle("work", null) }
+        expect(!settings.getAllTagsToggle(), { "a null boxed argument must not write a default" })
+    }
+
+    check("the broadcast-backup slot is throttled, survives a backwards clock and is cleared") {
+        val fixture = SettingsFixture()
+        val settings = fixture.settings
+
+        expect(settings.tryAcquireBroadcastBackupSlot(), { "the first broadcast backup must be granted" })
+        expect(!settings.tryAcquireBroadcastBackupSlot(), { "a second one within the window must be refused" })
+        expect(fixture.store.getLong("last_broadcast_backup_elapsed", -1) > 0,
+                { "the granted slot must be stamped with the elapsed realtime" })
+
+        // A clock that moved backwards must not block the slot forever (`now >= last` guard).
+        fixture.store.edit().putLong("last_broadcast_backup_elapsed", SystemClock.elapsedRealtime() + 60000).commit()
+        expect(settings.tryAcquireBroadcastBackupSlot(), { "a backwards clock must not block the slot" })
+        // An expired window is granted again.
+        fixture.store.edit().putLong("last_broadcast_backup_elapsed", SystemClock.elapsedRealtime() - 60000).commit()
+        expect(settings.tryAcquireBroadcastBackupSlot(), { "an expired window must be granted" })
+
+        fixture.store.edit().putStringSet(settingsKey(R.string.settings_key_backup_broadcasts), setOf("encrypted")).commit()
+        expect(settings.isEncryptedBackupBroadcastEnabled(), { "the encrypted broadcast opt-in" })
+        settings.disableAutomaticBackups()
+        expect(!settings.isEncryptedBackupBroadcastEnabled(), { "disabling must clear the opt-in" })
+        expect(fixture.storedSet(R.string.settings_key_backup_broadcasts).isEmpty(),
+                { "disabling must store an empty broadcast set" })
+        expect(fixture.stored(R.string.settings_key_auto_backup_password_enc) == "off",
+                { "disabling must store the off value: ${fixture.stored(R.string.settings_key_auto_backup_password_enc)}" })
+    }
+
+    check("credential staging derives the key/verifier split and refuses without consent") {
+        val fixture = SettingsFixture()
+        val settings = fixture.settings
+
+        expectThrows(IllegalArgumentException::class.java) { settings.prepareAuthCredentials(null) }
+        expectThrows(IllegalArgumentException::class.java) { settings.prepareAuthCredentials("") }
+        expectThrows(IllegalArgumentException::class.java) {
+            settings.prepareAuthCredentials("x".repeat(InputPolicy.MAX_TEXT_CHARS + 1))
+        }
+        expectThrows(IllegalStateException::class.java) { settings.getSalt() }
+        fixture.seed(R.string.settings_key_split_group_size, "not-a-number")
+        expectThrows(NumberFormatException::class.java) { settings.getTokenSplitGroupSize() }
+        fixture.store.edit().remove(settingsKey(R.string.settings_key_split_group_size)).commit()
+
+        val prepared = settings.prepareAuthCredentials("synthetic-password")
+        try {
+            // PBKDF2_LENGTH is 256 bits, split into the 128-bit key and the 128-bit password half.
+            expect(prepared.key.size == 16, { "the derived key must stay 128 bits, was ${prepared.key.size}" })
+            expect(prepared.iterations >= 30000, { "iterations must stay bounded: ${prepared.iterations}" })
+            val salt = Base64.decode(prepared.salt, Base64.URL_SAFE)
+            expect(salt.size == 16, { "the stored salt must be 16 bytes, was ${salt.size}" })
+            val derived = EncryptionHelper.generatePBKDF2Credentials("synthetic-password", salt, prepared.iterations)
+            try {
+                expect(derived.key.contentEquals(prepared.key),
+                        { "the prepared key must be the derived key for the stored salt/iterations" })
+                expect(Base64.decode(prepared.verifier, Base64.URL_SAFE).contentEquals(derived.password),
+                        { "the verifier must be the Base64 URL_SAFE form of the derived password half" })
+                expect(!prepared.salt.contains('+') && !prepared.verifier.contains('+'),
+                        { "prepared material must use the URL-safe alphabet" })
+            } finally {
+                derived.key.fill(0)
+                derived.password.fill(0)
+            }
+
+            // destroy() wipes the copy it owns and nothing else.
+            val foreign = prepared.key.clone()
+            prepared.destroy()
+            expect(prepared.key.all { it == 0.toByte() }, { "destroy must wipe the owned key" })
+            expect(foreign.any { it != 0.toByte() }, { "destroy must not touch a foreign array" })
+        } finally {
+            prepared.destroy()
+        }
+
+        // No mutation may be staged without the caller's consent: the supplier is asked first, so the
+        // consent-free path cannot reach the encryption type / vault read at all here.
+        val untouched = fixture.store.getAll()
+        expect(settings.setAuthCredentials("synthetic-password") { false } == null,
+                { "the permission supplier must be asked before the commit" })
+        expect(fixture.store.getAll() == untouched, { "a non-consenting upgrade must not write preferences" })
+    }
+
+    check("theme and locale selection follow the stored mode, the night configuration and the defaults") {
+        val fixture = SettingsFixture()
+        val settings = fixture.settings
+
+        expect(settings.getTheme() == R.style.AppTheme_NoActionBar, { "the default theme must be light" })
+        fixture.seed(R.string.settings_key_theme, "dark")
+        expect(settings.getTheme() == R.style.AppTheme_Dark_NoActionBar, { "the dark theme" })
+        fixture.seed(R.string.settings_key_theme, "black")
+        expect(settings.getTheme() == R.style.AppTheme_Black_NoActionBar, { "the black theme" })
+        fixture.seed(R.string.settings_key_theme, "green")
+        expect(settings.getTheme() == R.style.AppTheme_NoActionBar,
+                { "an unknown theme name must keep the initial light theme" })
+
+        // "auto" (the XML default) needs API 29+ and reads the night mode from the configuration.
+        val previousSdk = Build.VERSION.SDK_INT
+        try {
+            Build.VERSION.SDK_INT = Build.VERSION_CODES.Q - 1
+            expect(settings.getTheme() == R.style.AppTheme_NoActionBar,
+                    { "below API 29 the stored theme name decides" })
+
+            Build.VERSION.SDK_INT = Build.VERSION_CODES.Q
+            fixture.context.config.uiMode = Configuration.UI_MODE_NIGHT_YES
+            expect(settings.getTheme() == R.style.AppTheme_Dark_NoActionBar,
+                    { "night mode with the auto setting must use the dark theme" })
+            fixture.seed(R.string.settings_key_theme_black_auto, true)
+            expect(settings.getTheme() == R.style.AppTheme_Black_NoActionBar,
+                    { "the black-auto preference must select the black theme" })
+            fixture.context.config.uiMode = Configuration.UI_MODE_NIGHT_NO
+            expect(settings.getTheme() == R.style.AppTheme_NoActionBar,
+                    { "light night mode with the auto setting must use the light theme" })
+            fixture.context.config.uiMode = Configuration.UI_MODE_NIGHT_UNDEFINED
+            expect(settings.getTheme() == R.style.AppTheme_NoActionBar,
+                    { "an undefined night mode must fall back to the light theme" })
+        } finally {
+            Build.VERSION.SDK_INT = previousSdk
+            fixture.context.config.uiMode = Configuration.UI_MODE_NIGHT_UNDEFINED
+        }
+    }
+
+    check("settings never re-enable the platform backup service, whatever the stored value says") {
+        val fixture = SettingsFixture()
+        fixture.store.edit().putBoolean(settingsKey(R.string.settings_key_enable_android_backup_service), true).commit()
+        expect(!fixture.settings.getAndroidBackupServiceEnabled(),
+                { "the getter must stay hard-false like the Java one" })
+        fixture.settings.setAndroidBackupServiceEnabled(true)
+        expect(!fixture.store.getBoolean(settingsKey(R.string.settings_key_enable_android_backup_service), true),
+                { "the setter must keep writing false" })
     }
 
     if (failures == 0) {

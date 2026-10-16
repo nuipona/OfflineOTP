@@ -11,8 +11,16 @@ open class Context {
     /** Open only to let the preference check supply explicit fake attribute values. */
     open fun obtainStyledAttributes(attrs: android.util.AttributeSet?, styleable: IntArray): android.content.res.TypedArray = android.content.res.TypedArray()
     val theme: Resources.Theme get() = Resources.Theme()
-    val resources: Resources get() = Resources()
-    fun getString(resId: Int): String = "stub"
+    /**
+     * `open` so the settings checks can substitute a resource view with distinct, check-owned values;
+     * the default returns an inert [Resources].
+     */
+    open val resources: Resources get() = Resources()
+    /**
+     * `open` so the settings checks can map a resource id to a distinct key string. The default is a
+     * recognisable placeholder, not a real resource lookup.
+     */
+    open fun getString(resId: Int): String = "stub"
 
     /** Format overload; the result stays a recognisable placeholder, arguments are not applied. */
     fun getString(resId: Int, vararg formatArgs: Any?): String = "text:$resId"
@@ -50,10 +58,15 @@ open class ContentResolver {
     open fun getType(uri: Uri?): String? = null
 }
 
-/** Field/type-only stand-in: the Java settings/database sources read and write through this. */
+/**
+ * Field/type-only stand-in for the preference interface. The converted `Settings` class is
+ * *executed* against it through [android.preference.PreferenceManager]'s in-memory implementation;
+ * this interface itself models no persistence, listener delivery or type-mismatch behaviour.
+ */
 interface SharedPreferences {
     fun getAll(): Map<String, *>?
     fun getString(key: String?, defValue: String?): String?
+    fun getStringSet(key: String?, defValues: Set<String>?): Set<String>?
     fun getInt(key: String?, defValue: Int): Int
     fun getLong(key: String?, defValue: Long): Long
     fun getBoolean(key: String?, defValue: Boolean): Boolean
@@ -71,6 +84,9 @@ interface SharedPreferences {
         fun commit(): Boolean
         fun apply()
     }
+
+    fun registerOnSharedPreferenceChangeListener(listener: OnSharedPreferenceChangeListener?)
+    fun unregisterOnSharedPreferenceChangeListener(listener: OnSharedPreferenceChangeListener?)
 
     fun interface OnSharedPreferenceChangeListener {
         fun onSharedPreferenceChanged(sharedPreferences: SharedPreferences?, key: String?)

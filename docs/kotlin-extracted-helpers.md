@@ -218,11 +218,49 @@ Fifteenth batch (crypto and KeyStore helpers):
   calls and every AndroidKeyStore path need a device, so a new instrumentation test
   (`KotlinCryptoInteropTest`) plus the existing security suites carry them.
 
+Sixteenth batch (settings facade):
+
+- `Utilities/Settings.kt` replaces the Java class of the same name — the last `Utilities` helper used
+  by the still-Java activities and by the already-converted Kotlin callers. It stays an instantiable,
+  extendable class with its single `Settings(Context)` constructor, so `KotlinSmallAdaptersInteropTest`
+  keeps subclassing it and overriding `getTagToggle`, and the 16 Java construction sites keep
+  compiling. Every public member stays a non-final method with its Java name, its parameter shape and
+  its checked exceptions: `prepareAuthCredentials` keeps `@Throws`, the three tag setters keep the
+  boxed `Boolean` and its unboxing failure mode, `getBoolean(int,boolean)`/`setBoolean(int,boolean)`
+  keep their primitive parameters, `PreparedCredentials` keeps its public final `key` field and
+  `destroy()`, and the two private language lists stay private static data.
+- The one documented widening: Kotlin has no package-private visibility, so the nested
+  `PreparedCredentials` constructor and its `verifier`/`salt`/`iterations` fields are public in
+  bytecode where Java made them package-private (`key` was already public). Nothing else about the
+  surface moved, and the whole public/private member list is pinned by the sandbox check.
+- No stored key, default, migration or policy changed. The deprecated-key migration (including the
+  `perf_theme_mode` misspelling and the pre-`zh_CN` language tags), the salt/verifier split, the single
+  credential commit carrying the transaction id, the repeated consent checks around the vault read,
+  the broadcast-backup throttle, the disabled platform backup service and the auto-backup mode parsing
+  all behave as they did. Case conversions keep the locale of their Java call site, including the
+  default-locale conversions the Java sources used inconsistently: `clear(true)` still lowercases the
+  auth method with the *default* locale one line below an encryption value written with `Locale.ROOT`,
+  and the two enum parsers (`getEncryption`, `getTagFunctionality`) still use the default locale.
+- The sandbox **executes** the platform-free half against an in-memory `SharedPreferences` and a
+  resource view serving the `settings.xml` defaults (which the Python guard cross-checks against the
+  XML): the stored-default matrix, the resource each accessor resolves, the round trips, the
+  string-set representation of the tag toggles with the boxed setters' null failure mode, the
+  broadcast-backup throttle including a stored future timestamp, the credential staging split (a real
+  PBKDF2 derivation, a 16-byte key half, the `URL_SAFE` verifier and salt, `destroy()` on both the
+  refusing and the succeeding path) and that `getAndroidBackupServiceEnabled()` stays `false` whatever
+  the store says. `clear`, `commitVaultSettings` and the vault-file half of the credential staging are
+  **not** executed: their `Constants`-enum parameters have no class file here and the transaction
+  needs storage, so they stay with the Python guard and `CredentialLifecycleSecurityTest`.
+- The Java-visible surface of both `Settings` and the nested `PreparedCredentials` is read from the
+  **compiled class file**. Reflection cannot describe this class in the sandbox at all:
+  `Class.getDeclaredMethods()` resolves every declared signature eagerly, so the Java-only `Constants`
+  enums without a class file fail the lookup before a name is compared.
+
 No activity, entry-card list adapter/view holder, fragment, `CredentialsPreference`, receiver, worker
 or large manual-entry dialog is converted; the task runner and its subclasses are, and so are the entry
 model, the vault repository, the document/backup, notification, QR-image and three small UI pieces
-above, plus the crypto and KeyStore helpers — the four Java files that remain under `Utilities/` are
-`Constants.java`, `FileHelper.java`, `Settings.java` and `BackupAgent.java`. The repository's own
+above, plus the crypto and KeyStore helpers and the settings facade — the three Java files that
+remain under `Utilities/` are `Constants.java`, `FileHelper.java` and `BackupAgent.java`. The repository's own
 storage primitives (`Utilities/FileHelper.java`) and the Android file/preference surface it uses stay
 Java and are resolved by the sandbox rather than converted. No coroutine, Compose, new
 dependency, SDK/bytecode target, storage format or crypto change is included.
@@ -902,6 +940,25 @@ checks after the fourteenth batch:
   because its declared methods mention the Java-only `Constants.EncryptionType`; the static surface,
   the throws clauses and the `KeyStoreHelper` member shapes are asserted where reflection works, and
   the rest stays with the Python guard and the device test.
+- The settings facade **executed** against an in-memory `SharedPreferences` and a resource view that
+  serves the `settings.xml` defaults: the stored-default matrix of the non-enum accessors, the resource
+  and key each accessor resolves (recorded, so a dropped key fails), the round trips including the salt
+  through Base64 `URL_SAFE`, the string-set representation of the tag toggles with the boxed setters'
+  failure mode, the broadcast-backup throttle (the first call acquires, a second call inside the window
+  does not, a stored future timestamp does not block), the credential staging split (a real PBKDF2
+  derivation, a 16-byte key half, the `URL_SAFE` verifier/salt/iterations, `destroy()` after both the
+  refusing and the succeeding path) and the invariant that `getAndroidBackupServiceEnabled()` stays
+  `false` whatever the store says. `clear`, `commitVaultSettings` and the vault-file half of the
+  staging are not executed (enum-typed parameters, no vault transaction); the migration only runs
+  behind a recovery guard the sandbox poisons.
+- The **compiled class file** of `Settings` and of the nested `PreparedCredentials` parsed by
+  `CompiledClass`: the exact public and private member lists (89 public and 14 private entries, member
+  by member), the boxed tag-setter descriptors and the absence of primitive overloads, that every
+  public member stays non-final and non-static, the field shapes (two private collaborators, two
+  private static language lists, the companion placeholder) and the nested holder's public final
+  fields. This is the only way to pin the class here: `Class.getDeclaredMethods()` resolves every
+  declared signature eagerly and the Java-only `Constants` enums have no class file, so a reflection
+  lookup on `Settings` throws before a name is compared.
 - The entry document boundary executed against functional `org.json`/`Base32`/`Hex` replicas: the
   stored field order and defaults (including a reserialization that equals the legacy string
   byte-for-byte), the malformed-field matrix with its closed error set, the `ValidatedEntry`
@@ -914,7 +971,8 @@ checks after the fourteenth batch:
   mappings are also fingerprinted by a Python source guard; actual pixels are not sandbox-tested.
 - The ten converted task subclasses, the converted repository, the backup helper and the converted
   crypto helpers are **type-checked against the real Java declarations** they call: `run.sh` passes
-  `Settings.java` and `FileHelper.java` (plus `Constants.java`) to `kotlinc` for resolution, so the
+  `FileHelper.java` and the still-Java `Preferences/CredentialsPreference.java` (plus
+  `Constants.java`) to `kotlinc` for resolution, so the
   Kotlin calls are verified against the actual parameter/return types instead of stub copies. Their
   bodies are not executed (the Java sources produce no class files on the desktop JVM), and
   reflection covers the members whose signatures avoid those Java-only types: constructor parameter
@@ -979,6 +1037,6 @@ components remain Java.
 
 The thumbnail pair has also left this list (eighth batch). The small visibility widenings are
 explicitly recorded above; these leaf renderers still need Android acceptance despite their sandbox
-compile. Latest local check after the fourteenth batch: 82 Python guards and 63 sandbox checks passed. The both-flavor Gradle
+compile. Latest local check after the sixteenth batch: 101 Python guards and 77 sandbox checks passed. The both-flavor Gradle
 host/lint/instrumentation-APK build was attempted but stopped at the Gradle 8.13 distribution download
 (`SSLHandshakeException` from `services.gradle.org`); no Android acceptance result is claimed.

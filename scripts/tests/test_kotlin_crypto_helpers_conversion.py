@@ -31,9 +31,11 @@ class KotlinCryptoHelpersConversionTest(unittest.TestCase):
             self.assertTrue((KOTLIN / f"{stem}.kt").is_file())
             self.assertIn(f"$KOTLIN_APP/{stem}.kt", harness)
             self.assertNotIn(f"{stem}.java", harness)
-        # The resolution sources left are the ones the converted helpers read.
-        for resolved in ("Constants", "Settings", "FileHelper"):
+        # The resolution sources left are the ones the compiled sources still read.
+        for resolved in ("Constants", "FileHelper"):
             self.assertIn(f"$ROOT/app/src/main/java/org/shadowice/flocke/andotp/Utilities/{resolved}.java", harness)
+        self.assertIn("$ROOT/app/src/main/java/org/shadowice/flocke/andotp/Preferences/CredentialsPreference.java",
+                      harness)
         checks = (SANDBOX / "Checks.kt").read_text()
         for executed in ("EncryptionHelper.generatePBKDF2Credentials(password, salt, 4096)",
                          "EncryptionHelper.generateSymmetricKeyFromPassword(",
@@ -204,12 +206,14 @@ class KotlinCryptoHelpersConversionTest(unittest.TestCase):
         self.assertIn("failSilent: Boolean", key_store)
 
     def test_java_and_kotlin_callers_keep_their_call_sites(self):
-        settings = (JAVA / "Utilities/Settings.java").read_text()
+        # `Settings` is Kotlin since the sixteenth batch; its call sites into the crypto helpers moved
+        # to the Kotlin declarations without changing which helper is called with which argument.
+        settings = self.read("Utilities/Settings.kt")
         for call in ("EncryptionHelper.generateRandom(Constants.PBKDF2_SALT_LENGTH)",
                      "EncryptionHelper.benchmarkIterations(password, salt)",
-                     "EncryptionHelper.PBKDF2Credentials derived = EncryptionHelper.generatePBKDF2Credentials(password, salt, iterations)",
-                     "EncryptionHelper.encrypt(key.getPublic(), plainPassword.getBytes(StandardCharsets.UTF_8))",
-                     "EncryptionHelper.decrypt(key.getPrivate(), encPassword)",
+                     "val derived = EncryptionHelper.generatePBKDF2Credentials(password, salt, iterations)",
+                     "EncryptionHelper.encrypt(key.public, plainPassword.toByteArray(StandardCharsets.UTF_8))",
+                     "EncryptionHelper.decrypt(key.private, encPassword)",
                      "KeyStoreHelper.loadOrGenerateAsymmetricKeyPair(context, Constants.KEYSTORE_ALIAS_PASSWORD)",
                      "KeyStoreHelper.loadAsymmetricKeyPair(context, Constants.KEYSTORE_ALIAS_PASSWORD)",
                      "KeyStoreHelper.loadEncryptionKeyFromKeyStore(context, true)"):

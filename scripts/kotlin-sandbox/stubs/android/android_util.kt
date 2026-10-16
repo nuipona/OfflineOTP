@@ -46,23 +46,55 @@ object Log {
     fun w(tag: String?, msg: String?): Int = 0
 }
 
-/** Constant/inert stand-in for the Base64 flags used by the auth and settings code paths. */
+/**
+ * Stand-in for `android.util.Base64`, with the documented flag constants.
+ *
+ * Replication, not an inert surface: the converted settings facade stores the authentication salt
+ * and the credential verifier Base64-encoded, and the settings checks decode them again to compare
+ * against an independent PBKDF2 derivation. For the flags the app uses (`DEFAULT`, `URL_SAFE`,
+ * `NO_WRAP`, `NO_PADDING` combinations) the JDK's standard/URL-safe codecs produce the same
+ * alphabet and padding. Not replicated: the platform decoder's leniency towards line breaks and its
+ * exact invalid-input/exception behaviour, CRLF line wrapping, `NO_CLOSE`, and the `Base64` flags
+ * beyond the bits modelled here.
+ */
 object Base64 {
     const val DEFAULT: Int = 0
+    const val NO_PADDING: Int = 1
     const val NO_WRAP: Int = 2
+    const val CRLF: Int = 4
     const val URL_SAFE: Int = 8
+    const val NO_CLOSE: Int = 16
 
     @JvmStatic
-    fun encode(input: ByteArray?, flags: Int): ByteArray = ByteArray(0)
+    fun encode(input: ByteArray?, flags: Int): ByteArray =
+        encodeToString(input, flags).toByteArray(Charsets.US_ASCII)
 
     @JvmStatic
-    fun encodeToString(input: ByteArray?, flags: Int): String = ""
+    fun encodeToString(input: ByteArray?, flags: Int): String {
+        if (input == null) return ""
+        return encoder(flags).encodeToString(input)
+    }
 
     @JvmStatic
-    fun decode(str: String?, flags: Int): ByteArray = ByteArray(0)
+    fun decode(str: String?, flags: Int): ByteArray {
+        if (str == null) return ByteArray(0)
+        return decoder(flags).decode(str)
+    }
 
     @JvmStatic
-    fun decode(input: ByteArray?, flags: Int): ByteArray = ByteArray(0)
+    fun decode(input: ByteArray?, flags: Int): ByteArray {
+        if (input == null) return ByteArray(0)
+        return decode(String(input, Charsets.US_ASCII), flags)
+    }
+
+    private fun encoder(flags: Int): java.util.Base64.Encoder {
+        var encoder = if (flags and URL_SAFE != 0) java.util.Base64.getUrlEncoder() else java.util.Base64.getEncoder()
+        if (flags and NO_PADDING != 0) encoder = encoder.withoutPadding()
+        return encoder
+    }
+
+    private fun decoder(flags: Int): java.util.Base64.Decoder =
+        if (flags and URL_SAFE != 0) java.util.Base64.getUrlDecoder() else java.util.Base64.getDecoder()
 }
 
 /** Type-only stand-in for the atomic private-file helper the resolved Java sources use. */

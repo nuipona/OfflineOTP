@@ -60,6 +60,7 @@ APP_SOURCES=(
     "$KOTLIN_APP/Utilities/DatabaseHelper.kt"
     "$KOTLIN_APP/Utilities/EncryptionHelper.kt"
     "$KOTLIN_APP/Utilities/KeyStoreHelper.kt"
+    "$KOTLIN_APP/Utilities/Settings.kt"
     "$KOTLIN_APP/Utilities/StorageAccessHelper.kt"
     "$KOTLIN_APP/Utilities/BackupHelper.kt"
     "$KOTLIN_APP/Utilities/NotificationHelper.kt"
@@ -123,13 +124,15 @@ STUBS=("$SANDBOX"/stubs/android/*.kt
 # Real Java sources, used for resolution only: kotlinc reads them so the Kotlin code is checked
 # against the actual declarations, and no Java class file is produced or verified here. Listed
 # explicitly instead of by directory so that adding one is a deliberate choice. The task
-# subclasses, the vault repository and the backup helpers are compiled against the real
-# Settings/FileHelper declarations rather than stub copies of them; the crypto/key-management
-# helpers are Kotlin since the fifteenth batch and therefore compiled, not resolved.
+# subclasses, the vault repository, the backup helpers and the converted settings facade are
+# compiled against the real FileHelper declaration rather than a stub copy of it, and against the
+# real CredentialsPreference.DEFAULT_VALUE the settings default uses; the crypto/key-management
+# helpers (fifteenth batch) and Settings (sixteenth batch) are Kotlin and therefore compiled, not
+# resolved.
 JAVA_SOURCES=(
     "$ROOT/app/src/main/java/org/shadowice/flocke/andotp/Utilities/Constants.java"
-    "$ROOT/app/src/main/java/org/shadowice/flocke/andotp/Utilities/Settings.java"
     "$ROOT/app/src/main/java/org/shadowice/flocke/andotp/Utilities/FileHelper.java"
+    "$ROOT/app/src/main/java/org/shadowice/flocke/andotp/Preferences/CredentialsPreference.java"
 )
 
 rm -rf "$OUT"
