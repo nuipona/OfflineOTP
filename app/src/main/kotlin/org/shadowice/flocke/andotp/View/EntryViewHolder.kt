@@ -83,9 +83,10 @@ open class EntryViewHolder(context: Context, v: View, tapToReveal: Boolean) :
         // Style the buttons in the current theme colors
         val colorFilter: ColorFilter = Tools.getThemeColorFilter(context, android.R.attr.textColorSecondary)
 
-        menuButton.getDrawable()!!.setColorFilter(colorFilter)
-        copyButton.getDrawable()!!.setColorFilter(colorFilter)
-        invisibleImg.getDrawable()!!.setColorFilter(colorFilter)
+        // app:srcCompat drawables are missing when the layout is inflated without AppCompat's factory.
+        menuButton.getDrawable()?.setColorFilter(colorFilter)
+        copyButton.getDrawable()?.setColorFilter(colorFilter)
+        invisibleImg.getDrawable()?.setColorFilter(colorFilter)
 
         setupOnClickListeners(menuButton, copyButton)
 

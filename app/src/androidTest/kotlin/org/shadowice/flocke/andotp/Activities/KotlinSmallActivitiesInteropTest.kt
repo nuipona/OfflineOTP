@@ -87,7 +87,7 @@ class KotlinSmallActivitiesInteropTest {
 
         assertTrue("a foreign action wiped the vault", vault.exists())
         assertNotEquals("a foreign action disabled the automatic backups", "off", automaticBackupPassword())
-        assertFalse(
+        assertTrue(
             "a foreign action cleared the panic response",
             PreferenceManager.getDefaultSharedPreferences(context)
                 .getStringSet(context.getString(R.string.settings_key_panic), HashSet())!!
@@ -128,10 +128,11 @@ class KotlinSmallActivitiesInteropTest {
                 .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         )
 
-        waitUntil("clear the settings") {
+        // The "off" marker is written before and after the wipe; wait for the final state.
+        waitUntil("clear the settings and disable the backups") {
             val response = PreferenceManager.getDefaultSharedPreferences(context)
                 .getStringSet(context.getString(R.string.settings_key_panic), HashSet())
-            response == null || !response.contains("settings")
+            automaticBackupPassword() == "off" && (response == null || !response.contains("settings"))
         }
         assertEquals("the automatic backups were not disabled", "off", automaticBackupPassword())
     }
