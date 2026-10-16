@@ -48,7 +48,11 @@ def main(argv: list[str]) -> int:
     distinct = {}
     for line in lines:
         key = None
-        if "error:" in line:
+        lint = re.match(r"^(\S[^:]*):(\d+): (?:Error|Fatal): (.*)$", line)
+        if lint:
+            # Lint text report: "path/File.kt:12: Error: message [IssueId]"
+            key = f"{Path(lint.group(1)).name}:{lint.group(2)}: {lint.group(3)}"
+        elif "error:" in line:
             key = line.split("error:", 1)[1].split("(aka", 1)[0].strip()
         elif line.lstrip().startswith("e: "):
             # Kotlin compiler: "e: file:///.../Name.kt:12:5 message" -> "Name.kt:12: message"

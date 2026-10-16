@@ -66,6 +66,11 @@ jobs:
         run: |
           python3 scripts/diagnose_ci_failure.py gradle-host.log mem-host.log
           python3 scripts/ci_failure_annotation.py gradle-host.log
+          # Lint reports every finding in its text report; Gradle only prints the first one.
+          for report in app/build/intermediates/lint_intermediate_text_report/*/lintReport*/lint-results-*.txt; do
+            [ -f "$report" ] && python3 scripts/ci_failure_annotation.py "$report"
+          done
+          true
       - name: Compare independent builds and inspect packaged manifests
         run: bash scripts/verify_reproducible_build.sh
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
@@ -113,15 +118,7 @@ jobs:
           arch: x86_64
           target: google_apis
           disable-animations: true
-          script: |
-            set -e
-            (while true; do echo "$(date +%T) $(free -m | awk '/Mem:/{print "used=" $3 "MB"}')"; sleep 5; done) > mem-emulator.log 2>&1 &
-            rc=0; ./gradlew --no-daemon :security-test-client:installDebug > gradle-install.log 2>&1 || rc=$?
-            echo "gradle exit code: $rc" >> gradle-install.log
-            [ "$rc" -eq 0 ]
-            rc=0; ./gradlew --no-daemon :app:connected${{ matrix.flavor }}DebugAndroidTest > gradle-connected.log 2>&1 || rc=$?
-            echo "gradle exit code: $rc" >> gradle-connected.log
-            [ "$rc" -eq 0 ]
+          script: bash scripts/ci_emulator_tests.sh ${{ matrix.flavor }}
       - name: Publish Gradle failure context
         if: failure()
         run: |

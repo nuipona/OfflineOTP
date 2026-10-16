@@ -35,7 +35,7 @@ android {
         abortOnError true
         // An initial focused gate, not a fabricated full-project lint baseline.
         checkOnly 'NewApi', 'InlinedApi', 'TrustAllX509TrustManager',
-                'BadHostnameVerifier', 'SslCertificateSocketFactoryCreateInsecure'
+                'BadHostnameVerifier'
         warningsAsErrors true
     }
     buildFeatures {
