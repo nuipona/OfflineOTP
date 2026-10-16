@@ -72,7 +72,16 @@ jobs:
           done
           true
       - name: Compare independent builds and inspect packaged manifests
-        run: bash scripts/verify_reproducible_build.sh
+        run: |
+          set -o pipefail
+          mkdir -p reports/reproducibility
+          bash scripts/verify_reproducible_build.sh 2>&1 | tee reports/reproducibility/verify.log
+      - name: Publish reproducibility failure context
+        if: failure()
+        run: |
+          if [ -f reports/reproducibility/verify.log ]; then
+            python3 scripts/ci_failure_annotation.py reports/reproducibility/verify.log
+          fi
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         if: always()
         with:
