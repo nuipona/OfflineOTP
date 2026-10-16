@@ -80,6 +80,7 @@ import org.shadowice.flocke.andotp.Preferences.PasswordEncryptedPreference
 import org.shadowice.flocke.andotp.Dialogs.HideableDialog
 import org.shadowice.flocke.andotp.Dialogs.PasswordEntryDialog
 import org.shadowice.flocke.andotp.Dialogs.TagsDialog
+import org.shadowice.flocke.andotp.Activities.BaseActivity
 import org.shadowice.flocke.andotp.Receivers.BackupBroadcastReceiver
 import org.shadowice.flocke.andotp.Receivers.EncryptedBackupBroadcastReceiver
 import org.shadowice.flocke.andotp.Tasks.EncryptedBackupWorker
@@ -110,6 +111,7 @@ import android.text.method.TransformationMethod
 import android.util.Base64
 import android.util.DisplayMetrics
 import android.view.KeyEvent
+import android.view.MotionEvent
 import android.view.View
 import android.view.inputmethod.EditorInfo
 import android.view.inputmethod.InputMethodManager
@@ -883,6 +885,52 @@ private class ComponentContext : SettingsContext() {
 
     override fun getSystemService(name: String): Any? =
         if (name == Context.NOTIFICATION_SERVICE) notifications else null
+}
+
+/**
+ * The converted base activity, driven by the checks: it reads the settings like
+ * [SettingsContext] and records what the base class delivered.
+ */
+private class ScreenActivity : BaseActivity() {
+    /** How often the vault lock was delivered to the activity. */
+    var lockEvents = 0
+
+    /** How often the screen-off callback was delivered. */
+    var screenOffEvents = 0
+
+    /** Whether the activity requires an open vault session. */
+    var requiresSession: Boolean = false
+
+    /** Whether the activity is closed when the screen turns off. */
+    var destroyOnScreenOff: Boolean = true
+
+    /** The settings of the activity are read from the in-memory store. */
+    override fun getString(resId: Int): String = settingsKey(resId)
+
+    fun create() {
+        onCreate(null)
+    }
+
+    fun resume() {
+        onResume()
+    }
+
+    fun destroy() {
+        onDestroy()
+    }
+
+    /** Runs the deliveries that were posted to the UI thread. */
+    fun drainUiThread() {
+        while (uiThreadDeliveries.isNotEmpty()) uiThreadDeliveries.removeAt(0).run()
+    }
+
+    override fun requiresVaultSession(): Boolean = requiresSession
+
+    override fun onVaultLocked() {
+        lockEvents++
+    }
+
+    override fun shouldDestroyOnScreenOff(): Boolean = destroyOnScreenOff
 }
 
 /** The preference key the fake context maps a resource id to. */
@@ -4046,6 +4094,67 @@ fun main() {
         expect(Modifier.isPublic(restore.modifiers), { "onRestore must stay public" })
         expect(restore.exceptionTypes.toList() == listOf(IOException::class.java),
                 { "onRestore must keep declaring IOException" })
+    }
+
+    check("the base activity locks the vault when the screen turns off") {
+      // The activity builds its own Settings, whose construction recovers a pending vault file.
+      // That recovery needs the Java-only FileHelper, which has no class file here.
+      withPoisonedTransaction {
+        val activity = ScreenActivity()
+        activity.create()
+
+        // The screen-off receiver is registered with the platform's action.
+        expect(activity.registeredReceivers.size == 1, { "the screen-off receiver was not registered" })
+        val filter = activity.registeredReceivers[0].second
+        expect(filter.action == Intent.ACTION_SCREEN_OFF, { "wrong filter: ${filter.action}" })
+        val receiver = activity.registeredReceivers[0].first
+
+        // Another action is not ours: nothing happens.
+        receiver.onReceive(activity, Intent())
+        expect(activity.finishes == 0, { "another broadcast finished the activity" })
+        expect(activity.screenOffEvents == 0, { "another broadcast notified the callback" })
+
+        // The screen-off broadcast notifies the callback, locks the vault and finishes.
+        activity.setBroadcastCallback { activity.screenOffEvents++ }
+        val screenOff = Intent()
+        screenOff.intentAction = Intent.ACTION_SCREEN_OFF
+        receiver.onReceive(activity, screenOff)
+        expect(activity.screenOffEvents == 1, { "the screen-off callback was not delivered" })
+        expect(activity.finishes == 1, { "the activity was not finished: ${activity.finishes}" })
+
+        // The lock is delivered to the activity on the UI thread.
+        activity.drainUiThread()
+        expect(activity.lockEvents == 1, { "the vault lock was not delivered: ${activity.lockEvents}" })
+
+        // The receiver is unregistered when the activity is destroyed.
+        activity.destroy()
+        expect(activity.registeredReceivers.isEmpty(), { "the screen-off receiver was not unregistered" })
+      }
+    }
+
+    check("the base activity rejects the touches of an obscured window") {
+        val activity = ScreenActivity()
+
+        val obscured = MotionEvent()
+        obscured.eventFlags = MotionEvent.FLAG_WINDOW_IS_OBSCURED
+        expect(!activity.dispatchTouchEvent(obscured), { "an obscured touch was accepted" })
+        expect(activity.dispatchedTouches.isEmpty(), { "an obscured touch reached the activity" })
+
+        val normal = MotionEvent()
+        expect(activity.dispatchTouchEvent(normal), { "a normal touch was rejected" })
+        expect(activity.dispatchedTouches.size == 1, { "the normal touch was not dispatched" })
+
+        // From Android 10 on, a partially obscured window is refused as well.
+        val sdk = Build.VERSION.SDK_INT
+        try {
+            Build.VERSION.SDK_INT = Build.VERSION_CODES.Q
+            val partial = MotionEvent()
+            partial.eventFlags = MotionEvent.FLAG_WINDOW_IS_PARTIALLY_OBSCURED
+            expect(!activity.dispatchTouchEvent(partial), { "a partially obscured touch was accepted" })
+            expect(activity.dispatchedTouches.size == 1, { "the partially obscured touch reached the activity" })
+        } finally {
+            Build.VERSION.SDK_INT = sdk
+        }
     }
 
     if (failures == 0) {

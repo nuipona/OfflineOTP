@@ -12,6 +12,7 @@ object R {
     object attr {
         const val dialogPreferenceStyle = 0x7f020000
         const val dialogTheme = 0x7f020001
+        const val navigationBarColor = 0x7f020002
     }
     object dimen {
         const val activity_margin = 0x7f030000

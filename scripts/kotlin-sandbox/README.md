@@ -49,6 +49,7 @@ manifest.
 | `Receivers/BackupBroadcastReceiver.kt`, `Receivers/EncryptedBackupBroadcastReceiver.kt` | The receiver's **action gate is executed**: a null intent and another action are ignored without reaching the settings, the notifications or the work manager. The failure paths behind it post a notification through the Java-only `Constants.NotificationChannel` (no class file here), so their order and messages are pinned by `test_kotlin_backup_components_conversion.py` and by `KotlinBackupComponentsInteropTest` on a device. The Java-visible shapes (the two public static final constants, the protected `canSaveBackup` helper, the abstract base class) are reflected. |
 | `Tasks/EncryptedBackupWorker.kt` | Compiled against the converted task layer, the `androidx.work` stand-ins and the real `Constants` declaration. The **early exits are executed**: stopped or disabled work fails without a notification. The vault read, the backup and the failure notifications are not: they need the Java-only notification channel, the AndroidKeyStore and a real vault file. The constructor and the `ListenableWorker.Result` return type are reflected. |
 | `Utilities/BackupAgent.kt` | The refused platform restore is **executed**: the restore throws the documented `IOException`, and the refusal is not preceded by a null check on the platform's (unannotated) arguments. The other callbacks are inert, like the platform's. |
+| `Activities/ThemedActivity.kt`, `Activities/BaseActivity.kt` | The **screen-off handling and the obscured-touch rejection are executed** against the new `AppCompatActivity` stand-in: the receiver is registered with `ACTION_SCREEN_OFF`, another action is ignored, the screen-off broadcast notifies the callback, locks the vault and finishes the activity, the lock reaches the activity through the recorded UI-thread delivery, the receiver is unregistered on destroy, and a touch from an obscured (or partially obscured, from Android 10 on) window is refused. The theme, the window color, the locale update, the real broadcast dispatch and the activity lifecycle are not exercised: the stand-in has no window, decor, configuration change or looper. |
 | `Utilities/VaultSession.kt` | Compiled with the runner and driven live (generation advances, change listeners, mutation lock); the static facade shapes are asserted. |
 | `Database/EntryJsonResult.kt` | The closed parse-error set and the owned one-use seed: `copySecret()` returns copies, `close()` wipes and is idempotent, redacted `toString()`, no generated `data class` members. |
 | `Database/EntryJson.kt` | The stored document format, executed against the functional `org.json`/`Base32`/`Hex` stand-ins: legacy field defaults, the malformed-field matrix with its closed errors, the serialized field order, and the Base32/mOTP-hex secret rules. |
@@ -433,3 +434,24 @@ The checked-in Java `KotlinBackupComponentsInteropTest` drives the real receiver
 keystore-backed password, checks that the work is queued under its unique name, that a disabled
 broadcast and another action queue nothing, and that the queued work really runs the worker and
 reaches a terminal state. It has not been compiled or run here.
+
+## Activity base classes follow-up
+
+- `Activities/ThemedActivity.kt` and `Activities/BaseActivity.kt` are compiled against the new
+  `androidx.appcompat.app.AppCompatActivity` stand-in (which records the applied theme, the
+  window color, the registered receivers, the posted UI-thread work, the finished state and the
+  dispatched touches) and the new `android.view.Window`, `android.view.MotionEvent` and
+  `android.os.Bundle` stand-ins.
+- The stand-in `Context` hands out a `Resources` whose `configuration` is a **property**, so the
+  converted code reads `resources.configuration` and `resources.displayMetrics` instead of the
+  Java getters. Both spellings work in the real build, where the platform classes are Java.
+- The screen-off handling and the obscured-touch rejection are executed; the theme, the window
+  color, the locale update, the real broadcast dispatch and the activity lifecycle are not: there
+  is no window, decor, configuration change or looper here, and the `Settings` the activity builds
+  needs the Java-only `FileHelper`, so the checks poison the vault recovery around it.
+- The stand-in's `getString` returns a placeholder, so the checks' activity subclass maps the
+  resource ids to the preference keys the in-memory store uses, exactly like the settings checks do.
+
+The converted base activities still need the Android gates: the real theme and window, the real
+configuration change, the real screen-off broadcast and the activity lifecycle with rotation.
+

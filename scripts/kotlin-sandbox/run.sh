@@ -107,6 +107,8 @@ APP_SOURCES=(
     "$KOTLIN_APP/Receivers/EncryptedBackupBroadcastReceiver.kt"
     "$KOTLIN_APP/Tasks/EncryptedBackupWorker.kt"
     "$KOTLIN_APP/Utilities/BackupAgent.kt"
+    "$KOTLIN_APP/Activities/ThemedActivity.kt"
+    "$KOTLIN_APP/Activities/BaseActivity.kt"
 )
 
 STUBS=("$SANDBOX"/stubs/android/*.kt

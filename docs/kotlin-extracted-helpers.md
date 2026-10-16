@@ -284,10 +284,41 @@ Seventeenth batch (the Android components):
   the sandbox, and the happy path needs the AndroidKeyStore; both are covered by the source guards
   and by the new `KotlinBackupComponentsInteropTest` (Java, instrumentation) instead.
 
-No activity, entry-card list adapter/view holder, fragment, `CredentialsPreference` or large
-manual-entry dialog is converted; the task runner and its subclasses are, and so are the entry
+Eighteenth batch (the activity base classes):
+
+- `Activities/ThemedActivity.kt` and `Activities/BaseActivity.kt` replace their Java
+  implementations. The theme is still applied before `super.onCreate()`, the locale handling
+  (`Locale.setDefault`, `Configuration.setLocale`, the deprecated `updateConfiguration`) is
+  unchanged, the screen-off receiver still locks the vault with `SCREEN_OFF`, notifies the
+  callback and finishes the activity, and the obscured-touch rejection still refuses the
+  `FLAG_WINDOW_IS_OBSCURED` window and, from Android 10 on, the partially obscured one.
+- The public `settings` field stays a **field** (not a property), so the 88 Java call sites in the
+  activities keep reading `settings.…` unchanged. Kotlin cannot declare a public field that is
+  assigned later — `@JvmField` cannot be combined with `lateinit` — so the field is nullable: it
+  is null before `onCreate`, exactly as the Java field was, and the `!!` uses in the Kotlin code
+  fail with the same `NullPointerException` a Java field access would have failed with. The
+  settings are still built in `onCreate`, not in the constructor, because the activity is not
+  attached to its base context before that.
+- The nested `BroadcastReceivedCallback` was package-private in Java; Kotlin has no
+  package-private visibility, so it is public here. It stays a single-method interface, so the
+  Java call sites keep passing a lambda.
+- The protected hooks (`requiresVaultSession()`, `onVaultLocked()`, `shouldDestroyOnScreenOff()`)
+  stay protected and overridable, so the Java subclasses are unchanged. The screen-off receiver is
+  unregistered defensively: the Java version would have thrown a `NullPointerException` if
+  `onCreate` had failed before the registration.
+- The sandbox compiles both and **executes** the screen-off handling (the receiver is registered
+  with `ACTION_SCREEN_OFF`, another action is ignored, the screen-off broadcast notifies the
+  callback, locks the vault and finishes the activity, the lock reaches the activity through the
+  UI thread and the receiver is unregistered on destroy) and the obscured-touch rejection (both
+  flags, including the partially obscured one from Android 10 on). The window, the theme, the
+  configuration change and the real broadcast dispatch are not exercised.
+
+No entry-card list adapter/view holder, fragment, `CredentialsPreference` or large
+manual-entry dialog is converted, and none of the concrete activities is; the task runner and its
+subclasses are, and so are the entry
 model, the vault repository, the document/backup, notification, QR-image and three small UI pieces
-above, plus the crypto and KeyStore helpers, the settings facade and the Android components — the
+above, plus the crypto and KeyStore helpers, the settings facade, the Android components and the
+two activity base classes — the
 two Java files that remain under `Utilities/` are `Constants.java` and `FileHelper.java`. The repository's own
 storage primitives (`Utilities/FileHelper.java`) and the Android file/preference surface it uses stay
 Java and are resolved by the sandbox rather than converted. No coroutine, Compose, new
@@ -882,14 +913,21 @@ work by its name and the manifest entry with its signature permission.
 the real broadcast with a keystore-backed password queues the work, the disabled broadcast and
 another action queue nothing, and the queued work really runs the worker and reaches a terminal
 state. It has **not been compiled or run** here.
+With the activity-base batch the stem list gains `Activities/ThemedActivity` and
+`Activities/BaseActivity`, and `scripts/tests/test_kotlin_activity_bases_conversion.py` pins the
+replacements, the public `settings` field the Java activities read, the theme applied before
+`super.onCreate()`, the unchanged locale handling, the screen-off registration, the vault lock
+with its reason, the callback, the finish, the lock listener's UI-thread delivery, the
+unregistration on destroy, the single-method callback interface the Java lambdas need and the
+obscured-touch rejection with its Android 10 gate.
 
 ### Executed here: partial sandbox compile/run check
 
 `scripts/kotlin-sandbox/` compiles the converted platform-free/low-platform sources against
 hand-written platform stubs and runs `Checks.kt` on a desktop JVM; `bootstrap-toolchain.sh` fetches
 a JDK and the Kotlin compiler from package mirrors when the machine has neither. Executed on
-2026-10-15 with **Kotlin 2.3.20 and 2.4.21 plus Temurin 25.0.2** (`-jvm-target 1.8`), it reports 81 passing
-checks after the seventeenth batch:
+2026-10-15 with **Kotlin 2.3.20 and 2.4.21 plus Temurin 25.0.2** (`-jvm-target 1.8`), it reports 83 passing
+checks after the eighteenth batch:
 
 - RFC 6238 TOTP vectors (SHA-1/256/512, six timestamps, eight digits) and RFC 4226 HOTP vectors.
 - TOTP/HOTP agreement with an independent HMAC implementation, including offsets and 1/30/60/86400 s periods.
@@ -1093,6 +1131,8 @@ preference and the large manual-entry dialog remain Java.
 
 The thumbnail pair has also left this list (eighth batch). The small visibility widenings are
 explicitly recorded above; these leaf renderers still need Android acceptance despite their sandbox
-compile. Latest local check after the seventeenth batch: 108 Python guards and 81 sandbox checks passed. The both-flavor Gradle
+compile. The activity base classes are converted too (eighteenth batch); the concrete activities,
+the fragments, the credential preference and the large manual-entry dialog remain Java. Latest
+local check after the eighteenth batch: 113 Python guards and 83 sandbox checks passed. The both-flavor Gradle
 host/lint/instrumentation-APK build was attempted but stopped at the Gradle 8.13 distribution download
 (`SSLHandshakeException` from `services.gradle.org`); no Android acceptance result is claimed.
