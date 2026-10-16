@@ -60,6 +60,17 @@ def main(argv: list[str]) -> int:
     if distinct:
         summary.append(f"Distinct compiler errors: {len(distinct)} ({sum(distinct.values())} occurrences)")
         summary.extend(f"  {count}x {key}" for key, count in list(distinct.items())[:20])
+    # Failing unit tests: Gradle prints "Class > method() FAILED" followed by the exception line.
+    raw_lines = raw.splitlines()
+    failed = []
+    for index, line in enumerate(raw_lines):
+        if line.rstrip().endswith(" FAILED") and " > " in line:
+            detail = raw_lines[index + 1].strip()[:160] if index + 1 < len(raw_lines) else ""
+            failed.append(f"  {line.strip()[:200]}" + (f" -- {detail}" if detail else ""))
+    totals = [line.strip() for line in raw_lines if "tests completed" in line]
+    if failed or totals:
+        summary.append(f"Failing unit tests: {len(failed)} listed; {totals[-1] if totals else 'no totals line'}")
+        summary.extend(failed[:15])
     # Start at the first failure marker when there is one, so the error text is not cut off.
     starts = [i for i, line in enumerate(lines) if "What went wrong" in line or line.startswith("FAILURE:")]
     if starts:
