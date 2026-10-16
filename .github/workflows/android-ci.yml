@@ -51,11 +51,23 @@ jobs:
           cmdline-tools-version: '12266719'
           packages: 'platform-tools platforms;android-36 build-tools;36.0.0'
       - name: Host regression tests, focused lint and debug APKs
-        run: >-
-          ./gradlew --no-daemon
-          :app:testFdroidDebugUnitTest :app:testPlayDebugUnitTest
-          :app:lintFdroidRelease :app:lintPlayRelease
-          :app:assembleFdroidDebug :app:assemblePlayDebug
+        run: |
+          set +e
+          ./gradlew --no-daemon \
+            :app:testFdroidDebugUnitTest :app:testPlayDebugUnitTest \
+            :app:lintFdroidRelease :app:lintPlayRelease \
+            :app:assembleFdroidDebug :app:assemblePlayDebug 2>&1 | tee /tmp/gradle-output.log
+          status=${PIPESTATUS[0]}
+          set -e
+          if (( status != 0 )); then
+            grep -E '(^e: |error:|FAILURE:|Execution failed|What went wrong|Compilation error)' \
+              /tmp/gradle-output.log | head -20 | while IFS= read -r line; do
+                line=${line//'%'/'%25'}
+                line=${line//$'\r'/'%0D'}
+                echo "::error title=Gradle build::$line"
+              done
+          fi
+          exit "$status"
       - name: Compare independent builds and inspect packaged manifests
         run: bash scripts/verify_reproducible_build.sh
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
