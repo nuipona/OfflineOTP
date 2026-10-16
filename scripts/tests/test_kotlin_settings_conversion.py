@@ -43,13 +43,14 @@ class KotlinSettingsConversionTest(unittest.TestCase):
         self.assertTrue((KOTLIN / "Utilities/Settings.kt").is_file())
         self.assertIn("$KOTLIN_APP/Utilities/Settings.kt", harness)
         self.assertNotIn("Utilities/Settings.java", harness)
-        # The resolution sources left are the ones the compiled sources still read.
-        for resolved in ("Constants", "FileHelper"):
-            self.assertIn(f"$ROOT/app/src/main/java/org/shadowice/flocke/andotp/Utilities/{resolved}.java", harness)
+        # Constants and FileHelper are Kotlin since the twenty-second batch: compiled, not resolved.
+        for compiled in ("Constants", "FileHelper"):
+            self.assertIn(f"$KOTLIN_APP/Utilities/{compiled}.kt", harness)
+            self.assertNotIn(f"Utilities/{compiled}.java", harness)
         # The credential preference is Kotlin since the twenty-first batch: compiled, not resolved.
         self.assertIn("$KOTLIN_APP/Preferences/CredentialsPreference.kt", harness)
         self.assertNotIn("Preferences/CredentialsPreference.java", harness)
-        self.assertIn('"${JAVA_SOURCES[@]}"', harness)
+        self.assertNotIn("JAVA_SOURCES", harness)
         checks = (SANDBOX / "Checks.kt").read_text()
         # The settings checks execute the converted class and read its compiled surface.
         for executed in ("SettingsFixture", "SettingsResources", "withPoisonedTransaction",

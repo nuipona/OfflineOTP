@@ -20,9 +20,12 @@ KOTLINC="${KOTLINC:-/tmp/ks-toolchain/kotlin/bin/kotlinc-jvm}"
 eval "$(python3 - "$SANDBOX/run.sh" <<'PY'
 import re, shlex, sys
 text = open(sys.argv[1]).read()
-for variable in ("APP_SOURCES", "STUBS", "JAVA_SOURCES"):
+for variable in ("APP_SOURCES", "STUBS"):
     match = re.search(rf"^{variable}=\((.*?)^\)", text, re.MULTILINE | re.DOTALL)
-    entries = re.findall(r'"([^"]+)"', match.group(1))
+    # Each entry is one shell word (quoted prefix plus an optional glob), so split with shlex
+    # rather than taking only the quoted parts; comment lines inside the array are skipped.
+    body = "\n".join(line for line in match.group(1).splitlines() if not line.lstrip().startswith("#"))
+    entries = shlex.split(body)
     print(f"{variable}=(" + " ".join(shlex.quote(e) for e in entries) + ")")
 PY
 )"
@@ -43,10 +46,9 @@ STUBS=("${expanded[@]}")
 
 APP_SOURCES=("${APP_SOURCES[@]//\$KOTLIN_APP/$KOTLIN_APP}")
 APP_SOURCES=("${APP_SOURCES[@]//\$ROOT/$ROOT}")
-JAVA_SOURCES=("${JAVA_SOURCES[@]//\$ROOT/$ROOT}")
 
 rm -rf "$OUT"
 mkdir -p "$OUT"
 
-"$KOTLINC" -jvm-target 1.8 -nowarn "$@" "${APP_SOURCES[@]}" "${STUBS[@]}" "${JAVA_SOURCES[@]}" -d "$OUT"
+"$KOTLINC" -jvm-target 1.8 -nowarn "$@" "${APP_SOURCES[@]}" "${STUBS[@]}" -d "$OUT"
 echo "COMPILE OK -> $OUT"

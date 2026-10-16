@@ -57,7 +57,7 @@ manifest.
 | `Database/EntryJson.kt` | The stored document format, executed against the functional `org.json`/`Base32`/`Hex` stand-ins: legacy field defaults, the malformed-field matrix with its closed errors, the serialized field order, and the Base32/mOTP-hex secret rules. |
 | `Database/Entry.kt` | Shape-checked: it is non-final, has both legacy adapters, the nested `OTPType`, `COLOR_RED` and `validateSecret`; the thumbnail getter is reflected too now that `EntryThumbnail` is Kotlin. Entries are only *constructed* through the vault document check (document adapter, validation, serialization, destroy); token/URI members are not executed here. |
 | `Utilities/EntryThumbnail.kt`, `Utilities/LetterBitmap.kt` | Lookup behavior and JVM signatures only; inert graphics stand-ins do not exercise rendering. |
-| `Utilities/DatabaseHelper.kt` | The vault repository's outcome mapping and its fail-closed document boundary are executed (every `VaultReadError` -> `Status`, `LoadResult`/`VaultException` behaviour, `stringToEntries` rejections, `entriesToString` bounds), as are the stored-document round trip over real entries with whole-document rejection of a bad entry, and the poisoned-transaction short-circuits of every entry point (the poison flag is set by reflection; reaching `FileHelper` would fail the check). The file transaction itself is not: `FileHelper`/`AtomicFile` and `SharedPreferences` have no class files here, and the ciphertext paths need the AES-GCM provider this JDK refuses. Its Java-visible surface is reflected, including both public `status` fields. |
+| `Utilities/DatabaseHelper.kt` | The vault repository's outcome mapping and its fail-closed document boundary are executed (every `VaultReadError` -> `Status`, `LoadResult`/`VaultException` behaviour, `stringToEntries` rejections, `entriesToString` bounds), as are the stored-document round trip over real entries with whole-document rejection of a bad entry, and the poisoned-transaction short-circuits of every entry point (the poison flag is set by reflection; reaching `FileHelper` fails with `UnsupportedOperationException` from the refusing `AtomicFile` stand-in). The file transaction itself is not executed: `SharedPreferences` has no class file here, and the ciphertext paths need the AES-GCM provider this JDK refuses. Its Java-visible surface is reflected, including both public `status` fields. |
 | `Utilities/EncryptionHelper.kt` | **Executed** for the platform-free crypto: the credential derivation cross-checked against an independent `PBKDF2WithHmacSHA1` split plus the RFC 6070 vector, both derivation bound sets (null/over-long password, short salt, iteration range) with their accepted boundaries, the legacy SHA-256 key against known digests, `generateSymmetricKey`, the RSA encrypt/decrypt helpers against a real JVM key pair, the random/iteration/benchmark bounds, and the framed reader's pre-provider refusal of `null` and every frame shorter than nonce plus tag. The AES-GCM provider calls cannot run here (this JDK's SunJCE requires `GCMParameterSpec` while the unchanged Android path passes `IvParameterSpec`), and the class cannot be reflected at all (enumerating its declared methods eagerly loads the Java-only `Constants.EncryptionType`), so its static surface and throws clauses stay pinned by `test_kotlin_crypto_helpers_conversion.py` and by `KotlinCryptoInteropTest` on a device. |
 | `Utilities/KeyStoreHelper.kt` | Compiled and reflected only: the five static members keep their parameter and throws clauses (the three that declared no checked exceptions still declare none) and the nullable lookup results are pinned at source level. No `AndroidKeyStore` exists here, so no alias, generation, wrap/unwrap or `wipeKeys` behaviour is executed; `KotlinCryptoInteropTest` covers those paths on a device. |
 | `Utilities/Settings.kt` | **Executed** for the platform-free half against an in-memory `SharedPreferences` plus a resource view serving the `settings.xml` defaults: the default matrix, the resource/key resolution of every accessor (recorded), round trips including the salt in Base64 `URL_SAFE`, the string-set tag toggles with the boxed setters' null failure mode, the broadcast-backup throttle (acquire, throttled, stored future timestamp), the credential staging split (real PBKDF2 derivation, 16-byte key half, `URL_SAFE` verifier/salt/iterations, `destroy()` on both paths) and the invariant that `getAndroidBackupServiceEnabled()` stays `false`. `clear`, `commitVaultSettings` and the vault-file half of the staging are only compiled (their `Constants`-enum parameters have no class file and there is no vault transaction), the migration sits behind a poisoned recovery guard, and no theme is rendered. The whole Java-visible surface, including the enum-typed members, is pinned from the compiled class file (reflection cannot describe this class here) by `test_kotlin_settings_conversion.py` and `KotlinSettingsInteropTest`'s callers on a device. |
@@ -72,17 +72,12 @@ manifest.
 | `Preferences/CredentialsPreference.kt` | Compiled and shape-checked only: the class name (the preference XML instantiates it by name), the `(Context, AttributeSet)` constructor and the public static `DEFAULT_VALUE` constant are reflected, and the two public setters are asserted. The class initializer reads the Java-only `Constants.AuthMethod`, so the constant's value cannot be read here; it is asserted on the device. |
 | `Activities/MainActivity.kt`, `Activities/BackupActivity.kt`, `Activities/SettingsActivity.kt`, `Activities/IntroScreenActivity.kt`, `Activities/AuthenticateActivity.kt`, `Activities/BackgroundTaskActivity.kt` | Compiled and shape-checked only: the class shapes, the base classes, the nested types (`SettingsActivity.SettingsFragment`, the four intro slides, `BackgroundTaskActivity.TaskFragment`) and the members whose signatures avoid the Java-only `Constants` enums are reflected. The activities themselves need the real window, the real theme, the real `Preferences` framework and the vault session, so they are not executed here. |
 
-The task subclasses are compiled **against the real Java declarations** they call: `run.sh` passes
-`FileHelper.java` to `kotlinc` for resolution (the same
-mechanism already used for `Constants.java`). `Entry.java`, `DatabaseHelper.java`,
-`StorageAccessHelper.java`, `BackupHelper.java`, `EncryptionHelper.java`, `KeyStoreHelper.java` and
-`Settings.java` are no longer among them: all seven are Kotlin now (and the converted repository,
-backup helper, crypto helpers and settings facade read the same real
-`FileHelper`/`Constants`/`CredentialsPreference` declarations), and the graphical
-`EntryThumbnail.kt`/`LetterBitmap.kt` are now compiled Kotlin, using inert graphics stand-ins.
-No class files are produced for the remaining Java resolution sources, so their bodies cannot be *executed*
-here, and reflection can only see members whose signatures avoid those Java-only types; the
-remaining shapes are enforced by the Python source guards in `scripts/tests/`.
+The task subclasses are compiled **against the real declarations** they call. Since the twenty-second
+batch every converted source of the app is Kotlin and `run.sh` compiles all of them, `Utilities/Constants.kt`
+and `Utilities/FileHelper.kt` included; no Java file is passed to `kotlinc` any more. The graphical
+`EntryThumbnail.kt`/`LetterBitmap.kt` are compiled Kotlin too, using inert graphics stand-ins. Members whose
+signatures name a platform class without a stub cannot be reflected, so the remaining shapes are enforced by
+the Python source guards in `scripts/tests/`.
 
 `Checks.kt` reproduces the intent of the repository's own tests — `ApplicationTest` (RFC vectors),
 `InputPolicyTest`, `BoundedInputReaderTest`, `EncryptedBackupHeaderTest`,
@@ -91,16 +86,13 @@ assertions that the Java-visible API shapes survived the conversion (`@JvmStatic
 `@JvmField`/`const` fields, checked exceptions, `synchronized` methods, enum constants, abstract
 callbacks, a **non-final** class where the Java one was extendable, and the deliberate
 `object`-conversion delta for static-only utilities). Where a class cannot be reflected at all —
-its signatures mention a Java-only `Constants` enum that has no class file here, as `Settings`,
-`EncryptionHelper` and `EntryList` do — `Checks.kt` reads the **compiled class file** instead
+its signatures name a type this sandbox cannot load — `Checks.kt` reads the **compiled class file** instead
 (`CompiledClass`): the same names, descriptors and access flags, without resolving a single
 referenced type.
 
-`Constants.java` is resolved, not shadowed: `scripts/tests/test_kotlin_sandbox_harness.py` fails if a
-stub of the same name as a production class appears, so the sandbox cannot drift from the real
-declarations. It also records *why* `Constants` stays Java — its crypto/backup parameters are
-package-private and Kotlin has no package-private visibility — while confirming that same-package
-Kotlin can read them.
+`Constants` is compiled, not shadowed: `scripts/tests/test_kotlin_sandbox_harness.py` fails if a stub of
+the same name as a production class appears, so the sandbox cannot drift from the real declarations. Its
+crypto/backup parameters are `internal const val`s, which same-module Kotlin reads directly.
 
 The RSA round trip is real cryptography: `SecretKeyWrapper` is exercised against a JVM-generated
 `KeyPair`, including a tampered blob, a wrong private key and wrong-length input, and one case
@@ -114,7 +106,7 @@ Still **not** covered, and therefore still dependent on the Gradle/device gates:
 - The **user interface** of the twenty-first batch: the six activities, `Dialogs/ManualEntryDialog`,
   `Preferences/CredentialsPreference` and the entry-card adapter/view holder are compiled and
   shape-checked here, but their behaviour needs the real window, the real `Preferences` framework,
-  the vault session and the Java-only `Constants` enums, so it belongs to the device test
+  the vault session and the `Constants` enums, so it belongs to the device test
   (`KotlinConvertedUiInteropTest`) and to the Android gates. The entry card's binding is the
   exception: it is executed above.
 - `Utilities/DatabaseHelper.kt` beyond the executed part above: the vault file transaction needs
@@ -128,7 +120,7 @@ Still **not** covered, and therefore still dependent on the Gradle/device gates:
 - Real image decoding and zxing, notification channels/posting and the runtime-permission dialog
   (`KotlinNotificationQrInteropTest`).
 - **Execution** of the task subclass bodies (and of `EntryPersistence`/`VaultRestoreOperation`):
-  the Java resolution sources produce no class files, so `Settings`/`DatabaseHelper` calls inside
+  `Settings`/`DatabaseHelper` calls inside
   them cannot run on the desktop JVM here; only their compile-time agreement with those real
   declarations is checked. `tryEncryptionChange`, `loadOrGenerateWrappedKey` and every
   `KeyStoreHelper` path stay in this group even though they are Kotlin now: they need `Settings`, a
@@ -140,12 +132,10 @@ Still **not** covered, and therefore still dependent on the Gradle/device gates:
   `CredentialLifecycleSecurityTest`, `IpcAuthorizationSecurityTest`, `VaultFailureSecurityTest`)
   on a device.
 - Java *compilation*: `run.sh` does not invoke `javac` or provide the Android dependency classpath, so
-  no Java class file is produced and the Java callers' own compilation is never checked. It does pass real Java sources
-  (`Utilities/Constants.java`, `Utilities/FileHelper.java` — the full list is in the script)
-  to `kotlinc` for resolution, which is why the Kotlin code is checked against the actual declarations
-  rather than a copy — including the package-private `ALGORITHM_ASYMMETRIC`/`PBKDF2_*` constants,
-  which Kotlin in the same package can read (and whose values the compiler inlines, so the executed
-  crypto checks in the default package still see them).
+  no Java class file is produced and the Java callers' own compilation is never checked. No Java source
+  is passed to `kotlinc` either (none is left in the app), so the sandbox checks the Kotlin code against the
+  real Kotlin declarations; the `ALGORITHM_ASYMMETRIC`/`PBKDF2_*` constants are `internal const val`s, whose
+  values the compiler inlines, so the executed crypto checks in the default package still see them.
 
 ## What it proves, and what it does not
 
@@ -265,8 +255,8 @@ green run here does not cover them:
   not a behaviour change: the constants, the transformation name, the nonce length and the
   nonce-prefixed framing are untouched, and `EncryptionSecurityTest`/`ApplicationTest` keep the
   vectors and tamper cases on a device.
-- **`EncryptionHelper` cannot be reflected here.** Its declared methods mention
-  `Constants.EncryptionType`, a Java resolution source without a class file, and
+- **`EncryptionHelper` reflection (state before the twenty-second batch).** Its declared methods mention
+  `Constants.EncryptionType`, which had no class file in that state, and
   `Class.getDeclaredMethods()` resolves parameter types eagerly, so even enumerating the class
   fails. `KeyStoreHelper` (no `Constants` types in its signatures) and the nested
   `PBKDF2Credentials`/`EncryptionChangeResult` types are reflected normally; the rest stays pinned
@@ -424,8 +414,7 @@ real decode path and checks the real channels on a device. It has not been compi
   compiled and the receiver's **action gate is executed**: a null intent and an intent for another
   action are ignored without touching the settings, the notifications or the work manager. The
   failure paths behind that gate are not executed here: they post a notification through
-  `Constants.NotificationChannel`, and the Java-only `Constants` source is a resolution source
-  without a class file, so the enum cannot be loaded on this JVM. Their order and messages are
+  `Constants.NotificationChannel`, which needs the platform notification manager. Their order and messages are
   pinned by `test_kotlin_backup_components_conversion.py` and covered on a device by
   `KotlinBackupComponentsInteropTest`.
 - `Tasks/EncryptedBackupWorker.kt` is compiled against the new `androidx.work` stand-ins
@@ -460,7 +449,7 @@ reaches a terminal state. It has not been compiled or run here.
 - The screen-off handling and the obscured-touch rejection are executed; the theme, the window
   color, the locale update, the real broadcast dispatch and the activity lifecycle are not: there
   is no window, decor, configuration change or looper here, and the `Settings` the activity builds
-  needs the Java-only `FileHelper`, so the checks poison the vault recovery around it.
+  needs `FileHelper`, whose `AtomicFile` stand-in refuses here, so the checks poison the vault recovery around it.
 - The stand-in's `getString` returns a placeholder, so the checks' activity subclass maps the
   resource ids to the preference keys the in-memory store uses, exactly like the settings checks do.
 
@@ -475,8 +464,7 @@ configuration change, the real screen-off broadcast and the activity lifecycle w
   inert scanner view) and the extended `android.view.Window` stand-in (which records the flag
   calls and the insets controller).
 - The panic responder builds its own `Settings`, so the checks run it with the vault transaction
-  poisoned, like the base activity checks: the pending-file recovery needs the Java-only
-  `FileHelper`.
+  poisoned, like the base activity checks: the pending-file recovery needs `FileHelper`, whose `AtomicFile` stand-in refuses here.
 - The wipe of the database and of the keys cannot run here. The check asserts that the wipe was
   reached (the vault session was locked with the `RESET` reason) and that the failure is the
   missing `FileHelper` class, so a reordering of the panic steps would fail the check.
@@ -489,10 +477,8 @@ configuration change, the real screen-off broadcast and the activity lifecycle w
 ## Converted user interface follow-up
 
 - The twenty-first batch converted the last ten user interface classes: the six activities, the
-  manual entry dialog, the credential preference and the two card adapters. Only
-  `Utilities/Constants.java` and `Utilities/FileHelper.java` stay Java, for the documented
-  reasons (the package-private crypto parameters, and the file helper's Java-only API).
-- The Java sources are only **resolved** by `kotlinc`, never compiled, so the Java-only
+  manual entry dialog, the credential preference and the two card adapters. At this batch only `Utilities/Constants.java` and `Utilities/FileHelper.java` were still Java, for the documented reasons (the package-private crypto parameters, and the file helper's Java-only API); the twenty-second batch converted them.
+- At this batch the Java sources were only **resolved** by `kotlinc`, never compiled, so the Java-only
   `Utilities/Constants` has no class file at runtime here. A class whose members mention one of
   its types therefore cannot be reflected either: enumerating the declared methods or fields of
   `MainActivity`, `BackupActivity`, `SettingsActivity`, `IntroScreenActivity`, `EntryViewHolder` or
@@ -513,3 +499,23 @@ configuration change, the real screen-off broadcast and the activity lifecycle w
 - The locale semantics of the Java code are kept: Java's bare `toUpperCase()`/`toLowerCase()` use
   the default locale, so the converted calls pass `Locale.getDefault()` explicitly, while the
   credential preference keeps its deliberate `Locale.ENGLISH`.
+
+## Utilities follow-up (twenty-second batch)
+
+- `Utilities/Constants.kt` and `Utilities/FileHelper.kt` replace the last two Java sources of the app, so
+  `run.sh` has no `JAVA_SOURCES` list any more. `generate-r-stub.py` and `compile-only.sh` read only the
+  `APP_SOURCES` and `STUBS` lists. The R stand-in is unchanged: neither file references a resource id.
+- Earlier notes above (the per-batch sections, and the "What it proves" list) that describe `Constants`, `FileHelper`,
+  or an enum such as `Constants.BackupType` as Java-only or as having no class file describe the state of their
+  batch. Both are compiled now, so the `Constants`
+  enums load in the checks.
+- `AtomicFile` is a stand-in that **refuses every operation** with `UnsupportedOperationException`. The real
+  `FileHelper` therefore runs up to the platform boundary and then fails. This matters because
+  `Context.getFilesDir()` is `.` in this sandbox: a stand-in that touched the disk would write or delete
+  files in the working directory. The panic-responder check now expects that exception where it used to
+  expect `NoClassDefFoundError`, which still proves the wipe was reached and nothing was deleted.
+- The `Checks.kt` literal copies of the PBKDF2/backup constants are kept as an independent expectation.
+  `test_kotlin_crypto_helpers_conversion.py` keeps them equal to `Constants.kt`.
+- Not executed here: Gradle, lint, the instrumentation tests and any device run. The sandbox result is still
+  non-authoritative and compiles no Java, so the Java test sources are still checked only by the gates in
+  [build-and-security-tests.md](../../docs/build-and-security-tests.md).

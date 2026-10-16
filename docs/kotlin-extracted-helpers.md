@@ -415,6 +415,48 @@ Twenty-first batch (the remaining user interface):
   members, the intro wizard's slides, the retained task fragment's members and the card adapter's
   key property.
 
+Twenty-second batch (the last two Java sources of the app):
+
+- `Utilities/Constants.kt` replaces `Constants.java`. It is an `object` whose scalar members are `const val`s
+  and whose eleven nested enums keep their names, constants and declaration order. The Java spellings
+  `Constants.X` and `Constants.Enum.VALUE` are unchanged: `const val` members are public static final fields and
+  the nested enums are static nested classes. The members that were package-private in Java (the algorithm
+  names, the key length and the PBKDF2 settings) are `internal const val`s. Kotlin has no package-private
+  visibility, so `internal` is the nearest equivalent; it compiles to a public static final field, which is the
+  same widening the earlier helpers recorded (for example `LetterBitmap`).
+- `Utilities/FileHelper.kt` replaces `FileHelper.java`. It is an `internal object` with four `@JvmStatic`
+  functions (`exists`, `readFileToBytes`, `writeBytesToFile` and `delete`), so the same-package callers keep their
+  static calls. The write keeps the Java ordering: the staged stream is synced and promoted; a failure before the
+  promotion discards the staged write; the read-back verification runs after the promotion, and a failed
+  verification leaves the promoted file in place, as before. `Arrays.equals` became `contentEquals`. The catch
+  is `Exception`, which covers the same two types as the Java `IOException | RuntimeException` in this block, so
+  an `Error` still passes through without a discard.
+- The Java-visible surface was checked against the removed sources by reflection on the compiled classes. All 48
+  `Constants` fields keep their name, type and literal value, and all eleven enums keep their constants in order.
+  `FileHelper` keeps its four static methods with the same parameters and checked `IOException`s. The class
+  itself is public in the bytecode (as `internal` is), and its constructor stays private.
+- The sandbox no longer resolves any Java: `run.sh` compiles both files from `APP_SOURCES`, and the
+  `JAVA_SOURCES` list is gone from `run.sh`, `compile-only.sh` and `generate-r-stub.py`. The sandbox `AtomicFile`
+  stand-in now **refuses every operation** with `UnsupportedOperationException`. Without that, the real
+  `FileHelper` would run against `Context.getFilesDir()`, which is the working directory in the sandbox, so a
+  check that reached the disk could write or delete files there. The panic-responder check that used to expect
+  `NoClassDefFoundError` at the wipe now expects that exception; it still proves the wipe was reached and that
+  nothing was deleted.
+- `test_kotlin_utilities_conversion.py` pins the 48 constant values, the eleven enums, the eleven formerly
+  package-private members (now `internal`), the write ordering, the refusing stand-in, the removal of the Java list,
+  and that no `.java` file is left under `app/src/main`.
+- `compile-only.sh` could not compile the stubs: its extraction took only the quoted `$SANDBOX` fragments of the
+  stub globs, not the globs themselves. It now parses each array entry as a shell word, and the closing `)` of
+  `STUBS` in `run.sh` sits on its own line. `compile-only.sh` compiles the app sources and stubs cleanly again.
+- **Still Java, deliberately or by scope**: 34 Java files remain in the repository, none of them production code.
+  The 15 `Kotlin*InteropTest` classes stay Java on purpose, because they exercise the Java call sites of the
+  converted classes, which is what they are for. The 7 unit tests under `app/src/test`, the 11 other
+  instrumentation tests under `app/src/androidTest`, and the independently signed `security-test-client` app are
+  not converted in this batch. They can be neither compiled nor run in this environment, so converting them is a
+  separate change to verify on device and in the Gradle unit-test task.
+- Not executed here: Gradle, lint, both flavors, the instrumentation suite and the reproducible-build comparison.
+  The sandbox run is non-authoritative, and the Java callers of `Constants`/`FileHelper` are not compiled by it.
+
 Every converted source is Kotlin: the entry-card list adapter and view holder,
 `CredentialsPreference`, the large manual-entry dialog and the large concrete activities are the
 twenty-first batch, after the about screens (twentieth batch), the task runner and its
@@ -422,9 +464,8 @@ subclasses, the entry
 model, the vault repository, the document/backup, notification, QR-image and three small UI pieces
 above, plus the crypto and KeyStore helpers, the settings facade, the Android components, the two
 activity base classes and the two small standalone activities — the
-two Java files that remain under `Utilities/` are `Constants.java` and `FileHelper.java`. The repository's own
-storage primitives (`Utilities/FileHelper.java`) and the Android file/preference surface it uses stay
-Java and are resolved by the sandbox rather than converted. No coroutine, Compose, new
+two Java files that remained under `Utilities/` (`Constants.java` and `FileHelper.java`) were converted in the
+twenty-second batch, below, so no main-source Java is left. No coroutine, Compose, new
 dependency, SDK/bytecode target, storage format or crypto change is included.
 
 **Source conversion is implemented; Gradle and device acceptance is still pending.** What *has* been
@@ -1229,13 +1270,10 @@ tracked in the [decomposition plan](ui-decomposition-plan.md).
 
 ## Deliberately not converted
 
-- `Utilities/Constants.java` and `Utilities/FileHelper.java`: their crypto/backup parameters and the
-  helper class are package-private (`final static`, package-private class). Kotlin has no
-  package-private visibility, so converting them would widen the Java-visible API. This is an API
-  concern, not an access one: compiling `SecretKeyWrapper.kt` with the real `Constants.java` as a
-  resolution source (see the sandbox check) confirms that same-package Kotlin reads the
-  package-private `ALGORITHM_ASYMMETRIC` constant, and the harness now resolves that Java source
-  instead of mirroring it.
+- `Utilities/Constants` and `Utilities/FileHelper` were on this list until the twenty-second batch. Their
+  package-private members are `internal` now, which is public in the bytecode: a widening of the Java-visible
+  API that the batch records above. Same-package Kotlin (`SecretKeyWrapper.kt`) reads `ALGORITHM_ASYMMETRIC`
+  exactly as before.
 - `Tasks/EncryptedBackupWorker.java` is no longer in this list: it is converted (seventeenth batch).
   It was held back while the task layer was converted, because it is a WorkManager `Worker` — an
   Android-scheduled entry point like the activities and receivers, not a task subclass over the
@@ -1259,8 +1297,7 @@ explicitly recorded above; these leaf renderers still need Android acceptance de
 compile. The activity base classes are converted too (eighteenth batch) and so are the two small
 standalone activities (nineteenth batch), the about screens (twentieth batch — the about
 activity and the fragments) and the remaining user interface (twenty-first batch — the six large
-activities, the credential preference, the manual entry dialog and the two card adapters). Latest
-local check after the
-twenty-first batch: 143 Python guards and 93 sandbox checks passed. The both-flavor Gradle
+activities, the credential preference, the manual entry dialog and the two card adapters). Latest local check after the twenty-second batch: 152 Python guards (143 before, plus the nine new
+source guards) and 93 sandbox checks passed, and `compile-only.sh` compiles. The both-flavor Gradle
 host/lint/instrumentation-APK build was attempted but stopped at the Gradle 8.13 distribution download
 (`SSLHandshakeException` from `services.gradle.org`); no Android acceptance result is claimed.

@@ -320,10 +320,9 @@ private fun methodSignature(method: Method): String {
 /**
  * The public methods of a type, by signature.
  *
- * The Java-only Utilities/Constants has no class file in this sandbox (kotlinc reads the Java
- * sources for resolution, it does not compile them), so a method whose signature mentions one of
- * its types cannot be resolved here. Such a method is skipped here and asserted by name and
- * arity instead; see expectMethodArity.
+ * A method whose signature names a type this sandbox cannot load (a platform class without a stub)
+ * cannot be resolved here. Such a method is skipped and asserted by name and arity instead; see
+ * expectMethodArity. Utilities/Constants is compiled from Kotlin, so its enums load.
  */
 private fun publicMethods(type: Class<*>): List<String> =
         type.declaredMethods.filter { Modifier.isPublic(it.modifiers) }
@@ -784,7 +783,10 @@ private class ZeroStream(private val size: Long) : InputStream() {
 
 // --- crypto/keystore helper fixtures (fifteenth batch) ------------------------------------------
 
-/** The GCM nonce length and the backup iteration bounds that Constants.java holds package-private. */
+/**
+ * The GCM nonce length and the backup iteration bounds. Constants.kt holds the real values as
+ * `internal const val`s; these are an independent expectation, kept equal by the Python guards.
+ */
 private const val ENCRYPTION_IV_BYTES = 12
 private const val BACKUP_ITERATIONS_MIN = 140000
 private const val BACKUP_ITERATIONS_MAX = 160000
@@ -805,7 +807,8 @@ private fun ownPbkdf2(password: String, salt: ByteArray, iterations: Int, length
 /**
  * The Java callers compile against the static forwarder, so assert exactly that one. Candidates are
  * filtered by name and arity before their parameter types are read, so overloads that mention a
- * Java-only type without a class file cannot break the lookup for the ones that do load.
+ * type without a class file (a platform class without a stub) cannot break the lookup for the ones
+ * that do load.
  */
 private fun staticMethod(type: Class<*>, name: String, parameters: List<Class<*>>): Method {
     for (candidate in type.declaredMethods.filter {
@@ -820,12 +823,11 @@ private fun staticMethod(type: Class<*>, name: String, parameters: List<Class<*>
 /**
  * The Java-visible surface of a compiled class, read from its own class file.
  *
- * Reflection cannot describe every converted class: `Class.getDeclaredMethods()` resolves each
- * declared signature eagerly, so a class that mentions a Java-only type without a class file (in
- * this sandbox the `Constants` enums) cannot be described at all — the JVM throws while collecting
- * the members, before a name is compared. Parsing the class file reports the same names, descriptors
- * and access flags without resolving a single referenced type, which is exactly what a Java caller
- * compiles against.
+ * `Class.getDeclaredMethods()` resolves each declared signature eagerly, so a class whose signature
+ * names a type this sandbox cannot load cannot be described by reflection: the JVM throws while
+ * collecting the members, before a name is compared. Parsing the class file reports the same names,
+ * descriptors and access flags without resolving a single referenced type, which is exactly what a
+ * Java caller compiles against.
  */
 private class CompiledClass(bytes: ByteArray) {
     class Member(val name: String, val descriptor: String, val flags: Int) {
@@ -1119,7 +1121,8 @@ private class ScannerResources(private val config: Configuration) : Resources() 
 /**
  * Runs the block with the vault transaction poisoned. The converted construction runs
  * `DatabaseHelper.recoverPendingDatabase`, and the pending-file transaction it would otherwise
- * touch has no class file here (FileHelper), so a dropped short-circuit would fail loudly.
+ * touch refuses to run here (FileHelper over the AtomicFile stand-in), so a dropped short-circuit
+ * would fail loudly.
  */
 private fun <T> withPoisonedTransaction(block: () -> T): T {
     val poison = DatabaseHelper::class.java.getDeclaredField("transactionPoisoned")
@@ -2303,9 +2306,10 @@ fun main() {
 
     check("a poisoned vault transaction short-circuits every entry point before storage") {
         // `transactionPoisoned` is what an ambiguous metadata commit leaves behind; that commit path
-        // needs FileHelper/SharedPreferences, which have no class files here, so the flag is set
-        // directly. Every entry point below must then return before touching storage: reaching
-        // FileHelper would fail with NoClassDefFoundError, so a dropped guard cannot pass silently.
+        // needs FileHelper over the AtomicFile stand-in (which refuses) and SharedPreferences, so the
+        // flag is set directly. Every entry point below must then return before touching storage:
+        // reaching FileHelper would fail with UnsupportedOperationException, so a dropped guard
+        // cannot pass silently.
         val poison = DatabaseHelper::class.java.getDeclaredField("transactionPoisoned")
         expect(Modifier.isPrivate(poison.modifiers) && Modifier.isStatic(poison.modifiers) &&
                 poison.type == BOOLEAN_TYPE, { "poison flag shape changed" })
@@ -2518,8 +2522,8 @@ fun main() {
         expect(storage.declaredMethods.filter { Modifier.isPublic(it.modifiers) && Modifier.isStatic(it.modifiers) }
                 .none { it.exceptionTypes.isNotEmpty() && it.name != "loadFile" }, { "an unexpected checked exception appeared" })
 
-        // BackupHelper's members take the Java Constants.BackupType, which has no class file here,
-        // so its methods cannot be reflected; the nested result type can, and it stays a mutable,
+        // BackupHelper's methods are not reflected here (the Python guards pin their names and
+        // signatures); the nested result type is, and it stays a mutable,
         // extendable Java-style holder with public fields and a public no-argument constructor.
         val backupFile = BackupHelper.BackupFile::class.java
         expect(!Modifier.isFinal(backupFile.modifiers) && Modifier.isStatic(backupFile.modifiers),
@@ -2694,8 +2698,8 @@ fun main() {
         expect(harder == mapOf(DecodeHintType.POSSIBLE_FORMATS to listOf(BarcodeFormat.QR_CODE),
                 DecodeHintType.TRY_HARDER to true), { "harder hints $harder" })
 
-        // NotificationHelper's members take the Java Constants.NotificationChannel, which has no class
-        // file here, so only its fields can be reflected; the rest is pinned by the Python guards.
+        // NotificationHelper's channel and notification members are not reflected here (the Python
+        // guards pin them); its fields are.
         val notifications = NotificationHelper::class.java
         expectPublicFieldValue(notifications, "INSTANCE", NotificationHelper, notifications, true)
         val permission = field(notifications, "POST_NOTIFICATIONS_PERMISSION")!!
@@ -3633,17 +3637,15 @@ fun main() {
 
     check("converted task subclasses keep their Java-visible API shapes") {
         /*
-         * Reflection can only see signatures whose referenced types are on this classpath: the
-         * Java resolution sources (Settings, EncryptionHelper, Constants, Entry, ...) are read by
-         * kotlinc but produce no class files. Members mentioning them (getBackupType's
-         * Constants.BackupType, the credential tasks' constructors) are covered by the Python
-         * source guards instead. Generic erasure is why EncryptedBackupTask's constructors are
+         * Reflection can only see signatures whose referenced types are on this classpath. Members
+         * mentioning a type outside the compiled set (a platform class without a stub) are covered by
+         * the Python source guards instead; the converted Kotlin sources, Constants included, are
+         * all compiled and on the classpath. Generic erasure is why EncryptedBackupTask's constructors are
          * still checkable: ArrayList<Entry> erases to ArrayList.
          */
         val runner = UiBasedBackgroundTask::class.java
-        // ChangeEncryptionTask implements the Java-only EncryptionHelper.EncryptionChangeCallback;
-        // merely defining its Class object resolves that interface, which has no class file here.
-        // It is covered by the Python source guards instead.
+        // ChangeEncryptionTask implements EncryptionHelper.EncryptionChangeCallback, a platform-free
+        // interface that is compiled here; the Python source guards pin the rest of its shape.
         for (task in listOf(AuthenticationTask::class.java, GenericBackupTask::class.java,
                 GenericRestoreTask::class.java, PGPBackupTask::class.java, PGPRestoreTask::class.java,
                 EncryptedBackupTask::class.java, EncryptedRestoreTask::class.java,
@@ -3837,10 +3839,10 @@ fun main() {
     }
 
     check("converted crypto and keystore helpers keep their Java-visible API shapes") {
-        // EncryptionHelper's own Class cannot be enumerated here: resolving its declared methods
-        // eagerly loads the Java-only Constants.EncryptionType, which has no class file in the
-        // sandbox. Its static surface, throws clauses and the callback interface are therefore
-        // pinned by the Python source guard; everything that can be reflected is asserted below.
+        // EncryptionHelper's static surface, throws clauses and callback interface are pinned by the
+        // Python source guard, because the signatures that name the platform's crypto types and the
+        // nested callback are not all reflected here. Everything that can be reflected is asserted
+        // below.
         val helper = EncryptionHelper::class.java
         expect(Modifier.isFinal(helper.modifiers), { "EncryptionHelper must be the final object class" })
         expect(Modifier.isPrivate(helper.declaredConstructors.single().modifiers), { "the object constructor must stay private" })
@@ -3887,10 +3889,9 @@ fun main() {
 
 
     check("the compiled settings class keeps the Java-visible surface of Settings.java") {
-        // `Class.getDeclaredMethods()` resolves every declared signature eagerly and the Java-only
-        // `Constants` enums have no class file in this sandbox, so no reflection lookup on `Settings`
-        // can succeed here. The compiled class file carries the same names, descriptors and access
-        // flags, so it is read directly — the surface every Java caller compiles against.
+        // `Class.getDeclaredMethods()` resolves every declared signature eagerly, so the compiled class
+        // file is read directly: it carries the same names, descriptors and access flags, without
+        // resolving a single referenced type — the surface every Java caller compiles against.
         val compiled = compiledClass(Settings::class.java)
 
         expect(Modifier.isPublic(compiled.flags), { "Settings must stay public" })
@@ -4360,7 +4361,7 @@ fun main() {
     check("the backup broadcast receiver ignores every broadcast that is not its own") {
         // The action gate is the first thing the receiver does: another action is not ours and
         // must not reach the settings, the notifications or the work manager. The failure paths
-        // behind it need the Java-only Constants enum and the AndroidKeyStore, so they are
+        // behind it need the AndroidKeyStore and the device's notification channels, so they are
         // covered by the source guards and the device test instead.
         val context = ComponentContext()
         val work = WorkManager.getInstance(context)
@@ -4378,7 +4379,7 @@ fun main() {
 
     check("the backup worker fails early when the broadcast is disabled or the work is stopped") {
       // The worker builds its own Settings, whose construction recovers a pending vault file.
-      // That recovery needs the Java-only FileHelper, which has no class file here.
+      // That recovery needs the file transaction (FileHelper over AtomicFile), which refuses to run here.
       withPoisonedTransaction {
         val context = ComponentContext()
         val fixture = SettingsFixture(context)
@@ -4458,7 +4459,7 @@ fun main() {
 
     check("the base activity locks the vault when the screen turns off") {
       // The activity builds its own Settings, whose construction recovers a pending vault file.
-      // That recovery needs the Java-only FileHelper, which has no class file here.
+      // That recovery needs the file transaction (FileHelper over AtomicFile), which refuses to run here.
       withPoisonedTransaction {
         val activity = ScreenActivity()
         activity.create()
@@ -4526,7 +4527,7 @@ fun main() {
 
         try {
             // The activity builds its own Settings, whose construction recovers a pending vault
-            // file. That recovery needs the Java-only FileHelper, which has no class file here.
+            // file. That recovery needs the file transaction (FileHelper over AtomicFile), which refuses here.
             withPoisonedTransaction {
             // A foreign action changes nothing at all.
             val foreign = Intent()
@@ -4566,11 +4567,12 @@ fun main() {
             expect(VaultSession.getKey() == null, { "the vault was not locked" })
 
             // A configured "accounts" response reaches the wipe of the database and the keys. The
-            // wipe itself needs the Java-only file helper, which has no class file here, so the
-            // check can only see that the wipe was reached.
+            // wipe itself needs the file transaction (FileHelper over AtomicFile), which refuses to
+            // run here, so the check can only see that the wipe was reached: its first file
+            // operation fails with UnsupportedOperationException, and nothing is deleted.
             store.edit().putStringSet(settingsKey(R.string.settings_key_panic), setOf("accounts")).commit()
             work.reset()
-            expectThrows(NoClassDefFoundError::class.java) { activity.create() }
+            expectThrows(UnsupportedOperationException::class.java) { activity.create() }
             expect(work.cancelled == listOf(EncryptedBackupBroadcastReceiver.UNIQUE_WORK_NAME),
                     { "the pending encrypted backup was not cancelled: ${work.cancelled}" })
             val state = VaultSession.snapshot()
@@ -4856,12 +4858,10 @@ fun main() {
     // --- twenty-first batch: the converted activities, the manual entry dialog, the credential
     // preference and the two card adapters ---------------------------------------------------
     //
-    // The Java-only Utilities/Constants has no class file in this sandbox (kotlinc reads the Java
-    // sources for resolution, it does not compile them). A class whose members mention one of
-    // its types therefore cannot be reflected here: resolving a method or a field signature would
-    // need the missing class. Those classes are checked by their class shape below (name,
-    // modifiers, base classes and nested types); their members are pinned by the Python source
-    // guards and by the Java instrumentation tests, which run against the real Android runtime.
+    // Members whose signatures name a platform class without a stub cannot be reflected here.
+    // Those classes are checked by their class shape below (name, modifiers, base classes and
+    // nested types); their members are pinned by the Python source guards and by the Java
+    // instrumentation tests, which run against the real Android runtime.
 
     check("the converted UI classes keep their Java-visible API shapes") {
         val loader = Thread.currentThread().contextClassLoader
@@ -5019,7 +5019,7 @@ fun main() {
 
         val holder = withPoisonedTransaction { EntryViewHolder(context, root, false) }
 
-        // The entry has no issuer, so the card does not read the card layout (a Java-only enum).
+        // The entry has no issuer, so the card does not read the card layout (an enum from Constants).
         val entry = Entry(Entry.OTPType.TOTP, ENTRY_SEED, 30, 6, "", "label",
             TokenCalculator.HashAlgorithm.SHA1, arrayListOf("tag1", "tag2"))
         entry.updateOTP(true)

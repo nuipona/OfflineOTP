@@ -1,9 +1,8 @@
 #!/usr/bin/env python3
 """Regenerate the sandbox-only R stand-in from the sources the sandbox compiles.
 
-`scripts/kotlin-sandbox/run.sh` type-checks Kotlin sources against platform stubs and real Java
-resolution sources. Several of those sources reference generated resource ids (`R.string.*`,
-`R.drawable.*`, ...). The stub exists so those references resolve. Scalar ids are distinct and
+`scripts/kotlin-sandbox/run.sh` type-checks Kotlin sources against platform stubs. Several of those
+sources reference generated resource ids (`R.string.*`, `R.drawable.*`, ...). The stub exists so those references resolve. Scalar ids are distinct and
 deterministic (an aapt-like 0x7fTTEEEE layout: type byte from the sorted type names, entry index
 from the sorted names), so checks can tell one resource from another, e.g. which toast was shown.
 They are NOT aapt's values: nothing may depend on a specific number, only on (in)equality.
@@ -24,9 +23,8 @@ from collections import defaultdict
 SANDBOX = Path(__file__).resolve().parent
 ROOT = SANDBOX.parents[1]
 KOTLIN_APP = ROOT / "app/src/main/kotlin/org/shadowice/flocke/andotp"
-JAVA_APP = ROOT / "app/src/main/java/org/shadowice/flocke/andotp"
 
-# Keep in sync with the APP_SOURCES/JAVA_SOURCES lists in run.sh. Parsing run.sh itself keeps the
+# Keep in sync with the APP_SOURCES list in run.sh. Parsing run.sh itself keeps the
 # two from drifting apart.
 RUN = (SANDBOX / "run.sh").read_text()
 
@@ -39,13 +37,12 @@ def source_lists(variable):
 
 
 def expand(path):
-    return str(path).replace("$KOTLIN_APP", str(KOTLIN_APP)).replace("$ROOT", str(ROOT)) \
-                    .replace("$JAVA_APP", str(JAVA_APP))
+    return str(path).replace("$KOTLIN_APP", str(KOTLIN_APP)).replace("$ROOT", str(ROOT))
 
 
 def collect():
     groups = defaultdict(set)
-    for variable in ("APP_SOURCES", "JAVA_SOURCES"):
+    for variable in ("APP_SOURCES",):
         for entry in source_lists(variable):
             source = Path(expand(entry))
             if not source.is_file():
