@@ -52,12 +52,16 @@ jobs:
           packages: 'platform-tools platforms;android-36 build-tools;36.0.0'
       - name: Host regression tests, focused lint and debug APKs
         shell: bash
-        run: >-
-          ./gradlew --no-daemon
-          :app:testFdroidDebugUnitTest :app:testPlayDebugUnitTest
-          :app:lintFdroidRelease :app:lintPlayRelease
-          :app:assembleFdroidDebug :app:assemblePlayDebug
-          > gradle-host.log 2>&1
+        run: |
+          rc=0
+          ./gradlew --no-daemon \
+            :app:testFdroidDebugUnitTest :app:testPlayDebugUnitTest \
+            :app:lintFdroidRelease :app:lintPlayRelease \
+            :app:assembleFdroidDebug :app:assemblePlayDebug > gradle-host.log 2>&1 || rc=$?
+          echo "gradle exit code: $rc" >> gradle-host.log
+          free -m >> gradle-host.log 2>&1 || true
+          sudo -n dmesg 2>/dev/null | grep -i -E 'killed process|out of memory' | tail -5 >> gradle-host.log || true
+          exit $rc
       - name: Publish Gradle failure context
         if: failure()
         run: python3 scripts/ci_failure_annotation.py gradle-host.log
@@ -109,8 +113,13 @@ jobs:
           disable-animations: true
           script: |
             set -e
-            ./gradlew --no-daemon :security-test-client:installDebug > gradle-install.log 2>&1
-            ./gradlew --no-daemon :app:connected${{ matrix.flavor }}DebugAndroidTest > gradle-connected.log 2>&1
+            rc=0; ./gradlew --no-daemon :security-test-client:installDebug > gradle-install.log 2>&1 || rc=$?
+            echo "gradle exit code: $rc" >> gradle-install.log; free -m >> gradle-install.log 2>&1 || true
+            [ "$rc" -eq 0 ]
+            rc=0; ./gradlew --no-daemon :app:connected${{ matrix.flavor }}DebugAndroidTest > gradle-connected.log 2>&1 || rc=$?
+            echo "gradle exit code: $rc" >> gradle-connected.log; free -m >> gradle-connected.log 2>&1 || true
+            sudo -n dmesg 2>/dev/null | grep -i -E 'killed process|out of memory' | tail -5 >> gradle-connected.log || true
+            [ "$rc" -eq 0 ]
       - name: Publish Gradle failure context
         if: failure()
         run: |
