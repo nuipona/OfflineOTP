@@ -66,6 +66,11 @@ jobs:
                 line=${line//$'\r'/'%0D'}
                 echo "::error title=Gradle build::$line"
               done
+            tail=$(tail -60 /tmp/gradle-output.log)
+            tail=${tail//'%'/'%25'}
+            tail=${tail//$'\r'/'%0D'}
+            tail=${tail//$'\n'/'%0A'}
+            echo "::error title=Gradle failure tail::$tail"
           fi
           exit "$status"
       - name: Compare independent builds and inspect packaged manifests
