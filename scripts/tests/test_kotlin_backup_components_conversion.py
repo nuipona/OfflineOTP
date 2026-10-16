@@ -13,7 +13,7 @@ ROOT = Path(__file__).resolve().parents[2]
 KOTLIN = ROOT / "app/src/main/kotlin/org/shadowice/flocke/andotp"
 JAVA = ROOT / "app/src/main/java/org/shadowice/flocke/andotp"
 SANDBOX = ROOT / "scripts/kotlin-sandbox"
-ANDROID_TEST = ROOT / "app/src/androidTest/java/org/shadowice/flocke/andotp"
+ANDROID_TEST = ROOT / "app/src/androidTest/kotlin/org/shadowice/flocke/andotp"
 ANDROID_KOTLIN_TEST = ROOT / "app/src/androidTest/kotlin/org/shadowice/flocke/andotp"
 
 
@@ -117,7 +117,7 @@ class KotlinBackupComponentsConversionTest(unittest.TestCase):
         self.assertIn('android:permission="${applicationId}.permission.CONTROL_VAULT"', manifest)
 
     def test_the_device_test_covers_the_paths_the_sandbox_cannot_reach(self):
-        test = ANDROID_TEST / "Utilities/KotlinBackupComponentsInteropTest.java"
+        test = ANDROID_TEST / "Utilities/KotlinBackupComponentsInteropTest.kt"
         self.assertTrue(test.is_file(), "the device test for the converted components is missing")
         source = test.read_text()
         self.assertIn("EncryptedBackupBroadcastReceiver", source)

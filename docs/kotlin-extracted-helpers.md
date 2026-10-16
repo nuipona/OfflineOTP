@@ -200,7 +200,7 @@ Fourteenth batch (small password/tag dialogs and encrypted-password preference):
 - The sandbox executes the password and tag dialog control flow against recording widgets/dialogs
   and reflects all three Java surfaces. The encrypted preference compiles against the real Java
   `Settings` declaration and the converted crypto helpers but is not constructed there because that
-  resolution source has no runtime class; a checked-in Java instrumentation test covers its real
+  resolution source has no runtime class; a checked-in Kotlin instrumentation test covers its real
   AndroidKeyStore/layout path.
 
 Fifteenth batch (crypto and KeyStore helpers):
@@ -221,7 +221,7 @@ Fifteenth batch (crypto and KeyStore helpers):
 Sixteenth batch (settings facade):
 
 - `Utilities/Settings.kt` replaces the Java class of the same name — the last `Utilities` helper used
-  by the still-Java activities and by the already-converted Kotlin callers. It stays an instantiable,
+  by the activity callers and by the already-converted Kotlin callers. It stays an instantiable,
   extendable class with its single `Settings(Context)` constructor, so `KotlinSmallAdaptersInteropTest`
   keeps subclassing it and overriding `getTagToggle`, and the 16 Java construction sites keep
   compiling. Every public member stays a non-final method with its Java name, its parameter shape and
@@ -362,7 +362,7 @@ Twentieth batch (the about screens):
   whole easter egg (counter toasts and their cancellation, the slow-tap reset, the confirmation
   dialog with its cancel/confirm split and the already-enabled report) and the activity's page
   building (shell wiring, both pages, the raw-document library list including the empty-document
-  `{}` fallback, the page titles and the up/back finishing). A new Java instrumentation test
+  `{}` fallback, the page titles and the up/back finishing). A new Kotlin instrumentation test
   (`KotlinAboutScreensInteropTest`) covers the real platform side: Java construction and
   subclassing, the real layout children, the real version name, both pager pages and the clipboard
   fallback for a scheme no app handles.
@@ -409,7 +409,7 @@ Twenty-first batch (the remaining user interface):
   eight classes are shape-checked: the Java-only `Utilities/Constants` has no class file in the
   sandbox (the Java sources are resolved, not compiled), so a class whose members mention one of
   its types cannot be reflected there. Their members are pinned by
-  `test_kotlin_converted_ui_conversion.py` and by the new Java instrumentation test
+  `test_kotlin_converted_ui_conversion.py` and by the new Kotlin instrumentation test
   (`KotlinConvertedUiInteropTest`), which covers the real platform side: the credential
   preference's default, the manual entry dialog's static entry points, the settings fragment's
   members, the intro wizard's slides, the retained task fragment's members and the card adapter's
@@ -449,8 +449,8 @@ Twenty-second batch (the last two Java sources of the app):
   stub globs, not the globs themselves. It now parses each array entry as a shell word, and the closing `)` of
   `STUBS` in `run.sh` sits on its own line. `compile-only.sh` compiles the app sources and stubs cleanly again.
 - At the end of the twenty-second batch, 34 Java files remained in the repository, none production sources.
-  The 15 `Kotlin*InteropTest` classes were intentionally retained in Java because they compile and call the
-  converted APIs from Java. The 7 host tests, 11 non-interop instrumentation tests and independently signed
+  The 15 `Kotlin*InteropTest` classes are now Kotlin instrumentation tests. They retain the
+  reflection and Java-visible ABI assertions while exercising the converted APIs directly from Kotlin. The 7 host tests, 11 non-interop instrumentation tests and independently signed
   security-test-client were deferred to a separate test-source conversion.
 - Not executed in that batch: Gradle, lint, both flavors, instrumentation or the reproducible-build comparison.
   The sandbox run was non-authoritative and did not compile Java callers of `Constants`/`FileHelper`.
@@ -468,9 +468,11 @@ Twenty-third batch (Kotlin test sources and independently signed caller):
 - `EntryPersistence.save` now accepts a nullable entry list and returns `INVALID_INPUT` before backup scheduling
   when it is null. This preserves the intended fail-closed save test at the Kotlin boundary, rather than allowing
   Kotlin's generated parameter check to throw before the repository can return a typed rejection.
-- The 15 `Kotlin*InteropTest.java` suites remain Java by design: these are the intentional Java caller/ABI
-  checks for the converted Android classes. No ordinary app production source or independent test-client source
-  remains Java.
+- All 15 `Kotlin*InteropTest.kt` suites are now Kotlin instrumentation tests. The completed boundary is
+  explicit: all 15 `Kotlin*InteropTest` suites are Kotlin. They retain the reflection and Java-visible ABI
+  assertions for
+  the converted Android classes, but no Java test source remains in the repository. No ordinary app production
+  source or independent test-client source remains Java.
 - The host and Android Gradle tasks, both flavors, lint, APKs and API 28/36 device runs are still required;
   none is claimed locally because this environment has no Android SDK/JDK and cannot fetch Gradle from its
   configured distribution host.
@@ -484,15 +486,15 @@ above, plus the crypto and KeyStore helpers, the settings facade, the Android co
 activity base classes and the two small standalone activities — the
 two Java files that remained under `Utilities/` (`Constants.java` and `FileHelper.java`) were converted in the
 twenty-second batch, below, so no app main-source Java is left. The twenty-third batch then moves the
-ordinary host/device tests and the isolated security caller to Kotlin, leaving only the 15 deliberate Java
-interop suites. No coroutine, Compose, production-app dependency, SDK/bytecode target, storage format or crypto
-change is included; the test client now uses the already pinned Kotlin toolchain.
+ordinary host/device tests, the isolated security caller and all 15 interop instrumentation suites to Kotlin.
+No coroutine, Compose, production-app dependency, SDK/bytecode target, storage format or crypto change is included;
+the test client now uses the already pinned Kotlin toolchain.
 
 **Source conversion is implemented; Gradle and device acceptance is still pending.** What *has* been
 executed here is a partial sandbox compile/run check (`scripts/kotlin-sandbox/`), described under
 [tests and acceptance](#tests-and-acceptance). Python source guards, a Kotlin parse and that sandbox
 check are not the both-flavor Gradle build, lint, packaged-manifest policy, API 28/36 instrumentation
-or Java-side compilation. Do not expand to large UI classes or approve release based on them.
+or Android runtime acceptance. The requested source migration is complete; do not approve release based on the sandbox alone.
 
 ## Preserved boundaries
 
@@ -993,10 +995,9 @@ that matter:
 The characterization assertions remain in place after the twenty-third test-source batch: the 7 host tests
 (`BoundedInputReaderTest`, `EncryptedBackupHeaderTest`, `InputPolicyTest`, `ScreenTimerControllerTest`,
 `VaultSessionTest`, `EntryActionTargetTest`, `EntryListPresentationTest`) now live in Kotlin beside
-`TaskContractsTest`, `SessionContractsTest`, `OtpUriParserTest` and `BackupTaskResultTest`. The 11 ordinary
-Android suites also moved to Kotlin. The 15 `Kotlin*InteropTest.java` suites remain Java intentionally, so
-converted production APIs continue to be compiled and called from Java. New reflection/source guards were
-added where a conversion could silently change a Java-visible shape:
+`TaskContractsTest`, `SessionContractsTest`, `OtpUriParserTest` and `BackupTaskResultTest`. The 11 ordinary Android suites and all 15 `Kotlin*InteropTest.kt` interop suites also moved to Kotlin.
+Their reflection assertions continue to pin Java-visible production APIs while the tests themselves compile as Kotlin. New
+reflection/source guards were added where a conversion could silently change a Java-visible shape:
 `scripts/tests/test_ui_decomposition_policy.py` now requires the converted stems, the
 `@JvmStatic`/`@JvmField`/`const`/`@Throws`/`@Synchronized` shapes and the editor-action short-circuit,
 and the existing architecture guard reads the moved `HandlerTimerScheduler.kt`. With the task batch
@@ -1034,16 +1035,16 @@ With the crypto/KeyStore batch the stem list gains `Utilities/EncryptionHelper` 
 `Constants.EncryptionType` parameters), the ten `@Throws` declarations, the `EncryptionChangeCallback`
 SAM shape, the guard order of the staged re-encryption, the derivation bounds and the completed
 `+ PBKDF2_MIN_BACKUP_ITERATIONS` continuation, the lock/wipe policy, the Java and Kotlin call sites,
-the literal equality between `Constants.java` and the mirrored sandbox constants, and the presence of
-`KotlinCryptoInteropTest`. That instrumentation test
-(`app/src/androidTest/.../Utilities/KotlinCryptoInteropTest.java`) covers what the desktop JDK cannot:
+the literal equality between `Constants.kt` and the mirrored sandbox constants, and the presence of
+`KotlinCryptoInteropTest`. That Kotlin instrumentation test
+(`app/src/androidTest/.../Utilities/KotlinCryptoInteropTest.kt`) covers what the desktop JDK cannot:
 a real `AndroidKeyStore` alias create/load/wipe, the RSA wrap/unwrap and wrapped-key file round trip,
 the AES-GCM framing round trip for empty, Unicode and ordinary payloads, wrong-key and tag-tamper
 rejection, fresh nonces, the explicit-nonce overload, the derivation bounds and PBKDF2 fields through
-the Java-visible surface, and the Kotlin SAM callback implemented and invoked from Java. `scripts/tests/test_documentation_links.py` now fails on any relative documentation link to a file
-that no longer exists (several evidence links still pointed at converted `.java` files). A new Java
-instrumentation test, `app/src/androidTest/.../Utilities/KotlinDocumentIoInteropTest.java`,
-characterizes the real `ContentResolver`/`Uri`/`DocumentFile` paths and the Java call sites: cache
+the Java-visible surface, and the Kotlin SAM callback implemented and invoked from Kotlin. `scripts/tests/test_documentation_links.py` now fails on any relative documentation link to a file
+that no longer exists (several evidence links still pointed at converted `.java` files). A new Kotlin
+instrumentation test, `app/src/androidTest/.../Utilities/KotlinDocumentIoInteropTest.kt`,
+characterizes the real `ContentResolver`/`Uri`/`DocumentFile` paths and the app call sites: cache
 fixture reads and every refused URI (outside, sibling prefix, `..`, the cache itself, `https`, a
 missing provider), content-only writes, missing-provider failures and refused permissions,
 display-name fallback and control-character stripping, the missing-tree creation message, the
@@ -1054,7 +1055,7 @@ With the notification/QR batch the stem list gains `Utilities/NotificationHelper
 permission gate's exact form, the default-locale channel ids, names and importances, the single
 notification id, the constructor-time channel id, the QR pipeline order, both recycling points, the
 four load-error toasts, the last-failure-wins bookkeeping, the type order of the failure messages,
-the hint maps and the distinct resource stand-ins. `KotlinNotificationQrInteropTest` (Java,
+the hint maps and the distinct resource stand-ins. `KotlinNotificationQrInteropTest` (Kotlin,
 instrumentation) round-trips a QR code generated with zxing's own writer through the real
 `BitmapFactory`/zxing path, checks blank, undecodable, refused and missing images, the real channels'
 names and importances, and that both `notify` overloads are callable from Java. It has **not been
@@ -1062,7 +1063,7 @@ compiled or run** here. With the password/tag/preference batch,
 `scripts/tests/test_kotlin_dialog_preferences_conversion.py` pins the three replacements, retained
 Java/XML call sites, enum/SAM/static/override shapes, dialog state rules, privacy flags, callable
 handling, exact keystore/Base64 path and the null-default guard. `KotlinPasswordDialogsInteropTest`
-uses real inflated password widgets from Java for both modes, privacy flags, watchers, callback and
+uses real inflated password widgets from Kotlin for both modes, privacy flags, watchers, callback and
 editor-action behavior; `KotlinPasswordEncryptedPreferenceInteropTest` records preference writes
 while exercising the real AndroidKeyStore round trip, first-attachment null default, restored field,
 input modes and matching rule. Both are checked in but have **not been compiled or run** here.
@@ -1072,9 +1073,9 @@ With the component batch the stem list gains `Receivers/BackupBroadcastReceiver`
 replacements, the receiver's and worker's check order, the four distinct failure messages, the
 throttled slot in front of the password check, the `KEEP` policy and the queued worker class, the
 entry cleanup and the generation check of the backup, the private subclass that reaches the task's
-`protected doInBackground()`, the refused platform restore, the Java callers that cancel the queued
+`protected doInBackground()`, the refused platform restore, the app callers that cancel the queued
 work by its name and the manifest entry with its signature permission.
-`KotlinBackupComponentsInteropTest` (Java, instrumentation) covers what the sandbox cannot reach:
+`KotlinBackupComponentsInteropTest` (Kotlin, instrumentation) covers what the sandbox cannot reach:
 the real broadcast with a keystore-backed password queues the work, the disabled broadcast and
 another action queue nothing, and the queued work really runs the worker and reaches a terminal
 state. It has **not been compiled or run** here.
@@ -1223,8 +1224,8 @@ checks after the twentieth batch:
   mappings are also fingerprinted by a Python source guard; actual pixels are not sandbox-tested.
 - The ten converted task subclasses, the converted repository, the backup helper and the converted
   crypto helpers are **type-checked against the real Java declarations** they call: `run.sh` passes
-  `FileHelper.java` and the still-Java `Preferences/CredentialsPreference.java` (plus
-  `Constants.java`) to `kotlinc` for resolution, so the
+  the converted `FileHelper.kt` and `Preferences/CredentialsPreference.kt` (plus
+  `Constants.kt`) to `kotlinc` for resolution, so the
   Kotlin calls are verified against the actual parameter/return types instead of stub copies. Their
   bodies are not executed (the Java sources produce no class files on the desktop JVM), and
   reflection covers the members whose signatures avoid those Java-only types: constructor parameter
@@ -1319,8 +1320,8 @@ compile. The activity base classes are converted too (eighteenth batch) and so a
 standalone activities (nineteenth batch), the about screens (twentieth batch — the about
 activity and the fragments) and the remaining user interface (twenty-first batch — the six large
 activities, the credential preference, the manual entry dialog and the two card adapters). Latest local checks
-include 158 Python source tests and 93 sandbox checks. The 7 migrated host tests and 11 migrated Android tests
-also passed a non-authoritative Kotlin 2.4.21 compile-only smoke check against the sandbox's Android stubs and
-local JUnit stand-ins; this is not the project's Kotlin 2.3.20/Gradle compilation or a test run. The both-flavor
+include 158 Python source tests and 93 sandbox checks. A Kotlin 2.4.21 compile-only probe of the migrated
+interop tests was attempted against local Android/JUnit stand-ins, but it is not an authoritative Gradle result
+and the incomplete stand-ins did not produce a full test-source compile claim. The both-flavor
 Gradle host/lint/instrumentation-APK build remains blocked at the Gradle 8.13 distribution download
 (`SSLHandshakeException` from `services.gradle.org`); no Android acceptance result is claimed.

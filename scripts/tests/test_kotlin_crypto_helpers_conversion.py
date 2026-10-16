@@ -15,7 +15,7 @@ import unittest
 ROOT = Path(__file__).resolve().parents[2]
 KOTLIN = ROOT / "app/src/main/kotlin/org/shadowice/flocke/andotp"
 JAVA = ROOT / "app/src/main/java/org/shadowice/flocke/andotp"
-ANDROID_TEST = ROOT / "app/src/androidTest/java/org/shadowice/flocke/andotp"
+ANDROID_TEST = ROOT / "app/src/androidTest/kotlin/org/shadowice/flocke/andotp"
 ANDROID_KOTLIN_TEST = ROOT / "app/src/androidTest/kotlin/org/shadowice/flocke/andotp"
 SANDBOX = ROOT / "scripts/kotlin-sandbox"
 
@@ -245,8 +245,8 @@ class KotlinCryptoHelpersConversionTest(unittest.TestCase):
             self.assertTrue((ANDROID_KOTLIN_TEST / test).is_file(), f"{test} disappeared")
 
     def test_device_test_is_checked_in_for_the_paths_the_sandbox_cannot_run(self):
-        interop = (ANDROID_TEST / "Utilities/KotlinCryptoInteropTest.java").read_text()
-        # Java call sites, the real AndroidKeyStore and the AES-GCM path the desktop JDK rejects.
+        interop = (ANDROID_TEST / "Utilities/KotlinCryptoInteropTest.kt").read_text()
+        # The real AndroidKeyStore and the AES-GCM path the desktop JDK rejects.
         for used in ("EncryptionHelper.PBKDF2Credentials", "EncryptionHelper.EncryptionChangeResult",
                      "EncryptionHelper.EncryptionChangeCallback", "EncryptionHelper.encrypt(",
                      "EncryptionHelper.decrypt(", "KeyStoreHelper.createEncryptionKey(",
@@ -257,7 +257,7 @@ class KotlinCryptoHelpersConversionTest(unittest.TestCase):
         # of the KeyStore wrapping path. A device-only assertion cannot be run here, so pin the one
         # value that was wrong once; the 32-byte digest itself is executed by the sandbox checks.
         self.assertIn('MessageDigest.getInstance("SHA-256")', self.read("Utilities/EncryptionHelper.kt"))
-        self.assertIn('assertEquals(32, EncryptionHelper.generateSymmetricKeyFromPassword("synthetic").getEncoded().length)',
+        self.assertIn('assertEquals(32, EncryptionHelper.generateSymmetricKeyFromPassword("synthetic").encoded.size)',
                       interop)
         self.assertNotIn("assertEquals(16, EncryptionHelper.generateSymmetricKeyFromPassword", interop)
         self.assertEqual(1, interop.count("generateSymmetricKeyFromPassword(\"synthetic\")"),

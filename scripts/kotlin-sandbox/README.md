@@ -34,7 +34,7 @@ manifest.
 | `Utilities/ConfirmedPasswordTransformationHelper.kt` | Show/hide toggle wiring between password and confirm fields against fake inputs. |
 | `Dialogs/PasswordEntryDialog.kt` | **Executed** against scripted password/layout/button stand-ins: ENTER versus UPDATE visibility, minimum length, matching confirmation, privacy flags, editor actions, nullable callback, delivery and dismissal; its Java constructor/enum/SAM/listener shapes are reflected. No real window, IME or Material layout is involved. |
 | `Dialogs/TagsDialog.kt` | **Executed** against recording dialog/list stand-ins: row toggles, adapter replacement after adding a tag, optional callables, selection/cancel/new-tag buttons and its static Java entry point. No real window or list layout is involved. |
-| `Preferences/PasswordEncryptedPreference.kt` | Compiled and shape-checked against the converted `Settings` class (its accessors are called as methods now that they are Kotlin) and the converted crypto helpers. Construction does not run here — its `DialogPreference` layout path needs the platform — and its encryption path needs `AndroidKeyStore`; the real keystore/layout path has a Java instrumentation test. |
+| `Preferences/PasswordEncryptedPreference.kt` | Compiled and shape-checked against the converted `Settings` class (its accessors are called as methods now that they are Kotlin) and the converted crypto helpers. Construction does not run here — its `DialogPreference` layout path needs the platform — and its encryption path needs `AndroidKeyStore`; the real keystore/layout path has a Kotlin instrumentation test. |
 | `Tasks/BackupTaskResult.kt` | Factories, public-field defaults, `ResultType` constants and redacted diagnostics. |
 | `Tasks/UiBasedBackgroundTask.kt` | The real runner lifecycle on real executors: value/failure/cancelled delivery, one-shot execution, explicit and session-revocation cancellation, owned-result disposal and the legacy fallback adapter, against a queued fake main loop. |
 | `Tasks/AuthenticationTask.kt` | Type-checked against the converted `Settings` and `EncryptionHelper`; constructor and protected-member shapes asserted (its bodies call the Java-only settings/preferences surface, so they are not executed here). |
@@ -133,7 +133,7 @@ Still **not** covered, and therefore still dependent on the Gradle/device gates:
   on a device.
 - Java *compilation*: `run.sh` does not invoke `javac` or provide the Android dependency classpath, so
   no Java class file is produced and the Java callers' own compilation is never checked. No Java source
-  is passed to `kotlinc`; 15 Java `Kotlin*InteropTest` suites remain under `app/src/androidTest/java` but
+  is passed to `kotlinc`; all 15 Kotlin `Kotlin*InteropTest` suites are now migrated under `app/src/androidTest/kotlin` but
   are deliberately outside this sandbox. The test-source suites also are not part of `run.sh`; the
   Kotlinized tests require Gradle/JUnit/Android acceptance. The sandbox checks Kotlin against the real
   Kotlin declarations; the `ALGORITHM_ASYMMETRIC`/`PBKDF2_*` constants are `internal const val`s, whose
@@ -358,7 +358,7 @@ instrumentation class has been compiled or run here; only the desktop checks are
   input types and matching rule are covered by `KotlinPasswordEncryptedPreferenceInteropTest` on a
   device. That test records preference writes; it does not claim PreferenceManager disk acceptance.
 
-The Java instrumentation tests are checked in but have not been compiled or run in this environment.
+The Kotlin instrumentation tests are checked in but have not been compiled or run in this environment.
 The fake text/layout/dialog additions are recorders only and do not validate Material styling,
 selection, focus, lifecycle, rotation, keyboard behavior, accessibility service behavior or window
 privacy.
@@ -381,7 +381,7 @@ privacy.
   `backupToFile` still needs `Settings` (a Java resolution source) and the AES-GCM provider, so it
   stays device-only even though `EncryptionHelper` is Kotlin now.
 
-The checked-in Java `KotlinDocumentIoInteropTest` covers the real resolver, `Uri.fromFile`,
+The checked-in Kotlin `KotlinDocumentIoInteropTest` covers the real resolver, `Uri.fromFile`,
 `DocumentFile` tree and `Settings` paths and the Java call sites on a device, without a test provider
 (so it proves refusals and failure handling, not a successful provider write). It has not been
 compiled or run here.
@@ -407,7 +407,7 @@ compiled or run here.
   check can tell which toast or message was used. They are still not aapt's ids; nothing may rely on
   a particular number.
 
-The checked-in Java `KotlinNotificationQrInteropTest` round-trips a zxing-generated code through the
+The checked-in Kotlin `KotlinNotificationQrInteropTest` round-trips a zxing-generated code through the
 real decode path and checks the real channels on a device. It has not been compiled or run here.
 
 ## Android components follow-up
@@ -433,7 +433,7 @@ real decode path and checks the real channels on a device. It has not been compi
   is a Java class and the converted receiver calls `intent.getAction()`), and `BroadcastReceiver`
   and `IntentFilter` were added.
 
-The checked-in Java `KotlinBackupComponentsInteropTest` drives the real receiver with a
+The checked-in Kotlin `KotlinBackupComponentsInteropTest` drives the real receiver with a
 keystore-backed password, checks that the work is queued under its unique name, that a disabled
 broadcast and another action queue nothing, and that the queued work really runs the worker and
 reaches a terminal state. It has not been compiled or run here.
@@ -520,5 +520,5 @@ configuration change, the real screen-off broadcast and the activity lifecycle w
   `test_kotlin_crypto_helpers_conversion.py` keeps them equal to `Constants.kt`.
 - Not executed here: Gradle, lint, the instrumentation tests and any device run. The sandbox runner is still
   non-authoritative and compiles no Java/test source. A separate Kotlin 2.4.21 compile-only smoke check of the
-  migrated Kotlin test sources with local JUnit/Android stand-ins is also non-authoritative; the 15 Java interop
+  migrated Kotlin test sources with local JUnit/Android stand-ins is also non-authoritative; the Kotlin interop
   suites and all tests still require the Gradle/device gates in [build-and-security-tests.md](../../docs/build-and-security-tests.md).

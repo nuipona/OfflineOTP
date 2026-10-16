@@ -1,4 +1,4 @@
-"""Pins the twenty-third Kotlin test-source batch without claiming it was compiled or run."""
+"""Pins the completed Kotlin test-source migration without claiming it was compiled or run."""
 from pathlib import Path
 import unittest
 
@@ -6,7 +6,8 @@ ROOT = Path(__file__).resolve().parents[2]
 APP = ROOT / "app"
 HOST_JAVA = APP / "src/test/java"
 HOST_KOTLIN = APP / "src/test/kotlin/org/shadowice/flocke/andotp"
-ANDROID_JAVA = APP / "src/androidTest/java/org/shadowice/flocke/andotp"
+ANDROID_JAVA_ROOT = APP / "src/androidTest/java"
+ANDROID_JAVA = ANDROID_JAVA_ROOT / "org/shadowice/flocke/andotp"
 ANDROID_KOTLIN = APP / "src/androidTest/kotlin/org/shadowice/flocke/andotp"
 SECURITY_CLIENT = ROOT / "security-test-client"
 
@@ -32,6 +33,23 @@ ANDROID_TESTS = (
     "Utilities/VaultFailureSecurityTest.kt",
     "Utilities/VaultRestoreOperationTest.kt",
 )
+INTEROP_TESTS = (
+    "Activities/KotlinConvertedUiInteropTest.kt",
+    "Activities/KotlinSmallActivitiesInteropTest.kt",
+    "Dialogs/KotlinHideableDialogInteropTest.kt",
+    "Dialogs/KotlinPasswordDialogsInteropTest.kt",
+    "Fragments/KotlinAboutScreensInteropTest.kt",
+    "Preferences/KotlinNumberPickerPreferenceInteropTest.kt",
+    "Preferences/KotlinPasswordEncryptedPreferenceInteropTest.kt",
+    "Utilities/KotlinBackupComponentsInteropTest.kt",
+    "Utilities/KotlinCryptoInteropTest.kt",
+    "Utilities/KotlinDocumentIoInteropTest.kt",
+    "Utilities/KotlinNotificationQrInteropTest.kt",
+    "Utilities/KotlinOtpInteropTest.kt",
+    "Utilities/KotlinScreenTimerInteropTest.kt",
+    "Utilities/KotlinThumbnailInteropTest.kt",
+    "View/KotlinSmallAdaptersInteropTest.kt",
+)
 
 
 class KotlinTestSourceMigrationTest(unittest.TestCase):
@@ -46,12 +64,10 @@ class KotlinTestSourceMigrationTest(unittest.TestCase):
             self.assertTrue((ANDROID_KOTLIN / relative).is_file(), relative)
             self.assertFalse((ANDROID_JAVA / (relative.removesuffix(".kt") + ".java")).exists(), relative)
 
-    def test_only_java_instrumentation_sources_are_explicit_interop_suites(self):
-        remaining = sorted(path.name for path in ANDROID_JAVA.rglob("*.java"))
-        self.assertEqual(15, len(remaining))
-        self.assertTrue(all(name.startswith("Kotlin") and name.endswith("InteropTest.java") for name in remaining))
-        for name in remaining:
-            self.assertTrue(any(path.name == name for path in ANDROID_JAVA.rglob(name)), name)
+    def test_all_instrumentation_suites_are_kotlin(self):
+        self.assertFalse(ANDROID_JAVA_ROOT.exists(), "the androidTest source set must not retain Java files")
+        for relative in INTEROP_TESTS:
+            self.assertTrue((ANDROID_KOTLIN / relative).is_file(), relative)
 
     def test_independently_signed_security_client_is_kotlin_without_changing_its_identity(self):
         self.assertFalse((SECURITY_CLIENT / "src/main/java").exists())
@@ -86,10 +102,10 @@ class KotlinTestSourceMigrationTest(unittest.TestCase):
         self.assertLess(invalid, save)
         self.assertLess(save, backup)
 
-    def test_conversion_record_preserves_the_deliberate_java_boundary(self):
+    def test_conversion_record_documents_the_completed_boundary(self):
         docs = (ROOT / "docs/kotlin-extracted-helpers.md").read_text()
         self.assertIn("Twenty-third batch (Kotlin test sources and independently signed caller)", docs)
-        self.assertIn("15 `Kotlin*InteropTest.java` suites remain Java by design", docs)
+        self.assertIn("all 15 `Kotlin*InteropTest` suites are Kotlin", docs)
 
 
 if __name__ == "__main__":

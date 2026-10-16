@@ -10,7 +10,7 @@ import unittest
 ROOT = Path(__file__).resolve().parents[2]
 KOTLIN = ROOT / "app/src/main/kotlin/org/shadowice/flocke/andotp"
 JAVA = ROOT / "app/src/main/java/org/shadowice/flocke/andotp"
-ANDROID_TEST = ROOT / "app/src/androidTest/java/org/shadowice/flocke/andotp"
+ANDROID_TEST = ROOT / "app/src/androidTest/kotlin/org/shadowice/flocke/andotp"
 SANDBOX = ROOT / "scripts/kotlin-sandbox"
 
 
@@ -96,18 +96,18 @@ class KotlinSmallActivitiesConversionTest(unittest.TestCase):
                       "setting", checks)
 
     def test_the_device_test_covers_the_paths_the_sandbox_cannot_reach(self):
-        test = ANDROID_TEST / "Activities/KotlinSmallActivitiesInteropTest.java"
+        test = ANDROID_TEST / "Activities/KotlinSmallActivitiesInteropTest.kt"
         self.assertTrue(test.is_file(), "the device test for the converted activities is missing")
         source = test.read_text()
         # The destructive path is started for real on the device.
         self.assertIn("PanicResponderActivity.PANIC_TRIGGER_ACTION", source)
-        self.assertIn("theAccountsResponseWipesTheVaultAndDisablesTheBackups", source)
-        self.assertIn("theSettingsResponseClearsTheSettings", source)
-        self.assertIn("aForeignActionWipesNothing", source)
+        self.assertIn("accountsResponseWipesTheVaultAndDisablesTheBackups", source)
+        self.assertIn("settingsResponseClearsTheSettings", source)
+        self.assertIn("foreignActionWipesNothing", source)
         # The scanner activity is checked for its shape, because it needs a camera.
-        self.assertIn("theScannerActivityKeepsItsShape", source)
-        self.assertIn("CaptureActivity.class", source)
-        self.assertIn("Modifier.isProtected(initialize.getModifiers())", source)
+        self.assertIn("scannerActivityKeepsItsShape", source)
+        self.assertIn("CaptureActivity::class.java", source)
+        self.assertIn("Modifier.isProtected(initialize.modifiers)", source)
 
 
 if __name__ == "__main__":

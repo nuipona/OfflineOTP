@@ -15,7 +15,7 @@ ROOT = Path(__file__).resolve().parents[2]
 KOTLIN = ROOT / "app/src/main/kotlin/org/shadowice/flocke/andotp"
 JAVA = ROOT / "app/src/main/java/org/shadowice/flocke/andotp"
 SANDBOX = ROOT / "scripts/kotlin-sandbox"
-ANDROID_TEST = ROOT / "app/src/androidTest/java/org/shadowice/flocke/andotp"
+ANDROID_TEST = ROOT / "app/src/androidTest/kotlin/org/shadowice/flocke/andotp"
 
 CONVERTED = (
     "Activities/BackgroundTaskActivity",
@@ -208,20 +208,20 @@ class KotlinConvertedUiConversionTest(unittest.TestCase):
         self.assertNotIn("Locale.getDefault()", credentials)
 
     def test_the_device_test_covers_the_members_the_sandbox_cannot_reflect(self):
-        test = ANDROID_TEST / "Activities/KotlinConvertedUiInteropTest.java"
+        test = ANDROID_TEST / "Activities/KotlinConvertedUiInteropTest.kt"
         self.assertTrue(test.is_file(), "the device test for the converted classes is missing")
         source = test.read_text()
-        # The sandbox cannot load the Java-only Constants, so the members that mention one of its
-        # types are asserted on the device instead.
+        # The sandbox cannot load every Android-only dependency, so the same members are asserted
+        # by the Kotlin device test.
         for member in ("CredentialsPreference.DEFAULT_VALUE",
-                       "ManualEntryDialog.UpdateCallback.class.isInterface()",
-                       "SettingsActivity$SettingsFragment",
-                       "IntroScreenActivity$",
-                       "BackgroundTaskActivity$TaskFragment",
+                       "ManualEntryDialog.UpdateCallback::class.java.isInterface",
+                       "SettingsActivity\\$SettingsFragment",
+                       "IntroScreenActivity\\$",
+                       "BackgroundTaskActivity\\$TaskFragment",
                        "MainActivity.animatorDuration",
-                       "adapter.getEncryptionKey()",
-                       "adapter.setEncryptionKey(key)",
-                       "theEntryCardBindsTheTokenTheLabelsTheTagsAndTheCounter"):
+                       "adapter.encryptionKey = key",
+                       "adapter.encryptionKey",
+                       "entryCardBindsTheTokenLabelsTagsAndCounter"):
             self.assertIn(member, source)
 
     def test_the_manifest_and_the_preferences_xml_still_resolve(self):

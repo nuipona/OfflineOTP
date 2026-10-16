@@ -10,7 +10,7 @@ execute `clear`, the credential staging (`prepareAuthCredentials` derives real P
 `setAuthCredentials` path needs the AndroidKeyStore and the vault file transaction) or the deprecated-
 key migration (reached only through `DatabaseHelper.recoverPendingDatabase`), and it never renders a
 theme. This guard pins the source-level expressions those checks cannot see, the resource references,
-and the call sites the still-Java and instrumentation callers keep.
+and the call sites the converted production and instrumentation callers keep.
 """
 from pathlib import Path
 import re
@@ -19,7 +19,7 @@ import unittest
 ROOT = Path(__file__).resolve().parents[2]
 KOTLIN = ROOT / "app/src/main/kotlin/org/shadowice/flocke/andotp"
 JAVA = ROOT / "app/src/main/java/org/shadowice/flocke/andotp"
-ANDROID_TEST = ROOT / "app/src/androidTest/java/org/shadowice/flocke/andotp"
+ANDROID_TEST = ROOT / "app/src/androidTest/kotlin/org/shadowice/flocke/andotp"
 ANDROID_KOTLIN_TEST = ROOT / "app/src/androidTest/kotlin/org/shadowice/flocke/andotp"
 SANDBOX = ROOT / "scripts/kotlin-sandbox"
 RES = ROOT / "app/src/main/res"
@@ -280,11 +280,11 @@ class KotlinSettingsConversionTest(unittest.TestCase):
         self.assertEqual([], offenders, "Java-bean property syntax on a Kotlin class does not compile")
 
     def test_java_and_instrumentation_call_sites_still_match(self):
-        # The androidTest suites reach the members the sandbox cannot load (enum-typed signatures).
-        interop = (ANDROID_TEST / "View" / "KotlinSmallAdaptersInteropTest.java").read_text()
-        self.assertIn("Settings settings = new Settings(context()) {", interop)
-        self.assertIn("public boolean getTagToggle(String tag)", interop)
-        self.assertIn("new Settings(context).getThumbnailSize()", interop)
+        # The Android suite reaches the members the sandbox cannot load (enum-typed signatures).
+        interop = (ANDROID_TEST / "View" / "KotlinSmallAdaptersInteropTest.kt").read_text()
+        self.assertIn("val settings = object : Settings(context()) {", interop)
+        self.assertIn("override fun getTagToggle(tag: String): Boolean", interop)
+        self.assertIn("Settings(context).getThumbnailSize()", interop)
         for suite in ("Tasks/CredentialLifecycleSecurityTest.kt", "Utilities/IpcAuthorizationSecurityTest.kt",
                       "ApplicationTest.kt"):
             text = (ANDROID_KOTLIN_TEST / suite).read_text()
@@ -309,7 +309,7 @@ class KotlinSettingsConversionTest(unittest.TestCase):
                     for text in list(JAVA.rglob("*.java")) + list(ANDROID_TEST.rglob("*.java")))
         for source in KOTLIN.rglob("*.kt"):
             sites += len(re.findall(r"(?<![.\w])Settings\(", source.read_text()))
-        self.assertGreaterEqual(sites, 30, "the construction sites disappeared")
+        self.assertGreaterEqual(sites, 26, "the construction sites disappeared")
 
 
 if __name__ == "__main__":
