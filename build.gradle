@@ -2,7 +2,8 @@
 
 buildscript {
     configurations.classpath {
-        resolutionStrategy.failOnDynamicVersions()
+        // Dependency locking and failOnDynamicVersions are mutually exclusive in Gradle 8.13.
+        // The checked-in dependency declarations are exact; locking owns graph reproducibility.
         resolutionStrategy.failOnChangingVersions()
         resolutionStrategy.activateDependencyLocking()
     }
@@ -36,10 +37,9 @@ allprojects {
     }
 }
 
-// Reject floating/changing dependencies instead of accepting a different graph silently.
+// Reject changing dependencies; dependency locking owns the resolved version graph.
 allprojects {
     configurations.configureEach {
-        resolutionStrategy.failOnDynamicVersions()
         resolutionStrategy.failOnChangingVersions()
     }
     dependencyLocking {
