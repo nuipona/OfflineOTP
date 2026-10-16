@@ -38,9 +38,8 @@ if [[ -z "$STDLIB" || ! -f "$STDLIB" ]]; then
 fi
 
 # The converted sources covered by this check. Every entry is compiled and its Java-visible shapes
-# are asserted in Checks.kt. The task subclasses resolve the real Java settings/crypto helpers
-# through JAVA_SOURCES below. Since the twenty-first batch the whole user interface is compiled
-# too: the six activities, the manual entry dialog, the credential preference and the two card
+# are asserted in Checks.kt. The task subclasses are compiled against the real settings and crypto
+# helpers, not stand-ins. Since the twenty-first batch the whole user interface is compiled too: the six activities, the manual entry dialog, the credential preference and the two card
 # adapters. The fdroid flavor's AboutFragment is compiled as the representative flavor of the
 # about screens; the play flavor differs only by having no extras and is pinned by the Python
 # source guards instead.
@@ -70,6 +69,8 @@ APP_SOURCES=(
     "$KOTLIN_APP/Utilities/EncryptionHelper.kt"
     "$KOTLIN_APP/Utilities/KeyStoreHelper.kt"
     "$KOTLIN_APP/Utilities/Settings.kt"
+    "$KOTLIN_APP/Utilities/Constants.kt"
+    "$KOTLIN_APP/Utilities/FileHelper.kt"
     "$KOTLIN_APP/Utilities/StorageAccessHelper.kt"
     "$KOTLIN_APP/Utilities/BackupHelper.kt"
     "$KOTLIN_APP/Utilities/NotificationHelper.kt"
@@ -167,24 +168,13 @@ STUBS=("$SANDBOX"/stubs/android/*.kt
     "$SANDBOX/stubs/org/shadowice/flocke/andotp/R.kt"
     "$SANDBOX"/stubs/org/json/*.kt
     "$SANDBOX"/stubs/org/apache/commons/codec/binary/*.kt
-    "$SANDBOX"/stubs/org/apache/commons/codec/digest/*.kt)
-
-# Real Java sources, used for resolution only: kotlinc reads them so the Kotlin code is checked
-# against the actual declarations, and no Java class file is produced or verified here. Listed
-# explicitly instead of by directory so that adding one is a deliberate choice. The task
-# subclasses, the vault repository, the backup helpers and the converted settings facade are
-# compiled against the real FileHelper declaration rather than a stub copy of it; the
-# crypto/key-management helpers (fifteenth batch), Settings (sixteenth batch) and the credential
-# preference (twenty-first batch) are Kotlin and therefore compiled, not resolved.
-#
-# Because the Java sources are not compiled, the Java-only Utilities/Constants has no class file
-# at runtime here. A class whose members mention one of its types can therefore not be reflected
-# (resolving a method or a field signature would need the missing class); those members are
-# asserted by the Python source guards and by the device test instead.
-JAVA_SOURCES=(
-    "$ROOT/app/src/main/java/org/shadowice/flocke/andotp/Utilities/Constants.java"
-    "$ROOT/app/src/main/java/org/shadowice/flocke/andotp/Utilities/FileHelper.java"
+    "$SANDBOX"/stubs/org/apache/commons/codec/digest/*.kt
 )
+
+# No Java source is left in the app: the last two (Utilities/Constants and Utilities/FileHelper) are
+# compiled from Kotlin like everything else, so kotlinc reads no Java and produces class files for
+# every declaration it checks. FileHelper runs over the AtomicFile stand-in, which refuses every
+# operation, so the file transaction fails loudly here instead of touching the working directory.
 
 rm -rf "$OUT"
 mkdir -p "$OUT"
@@ -194,5 +184,5 @@ echo "java:    $JAVA_BIN"
 echo "stdlib:  $STDLIB"
 echo "output:  $OUT"
 
-"$KOTLINC" -jvm-target 1.8 -nowarn "${APP_SOURCES[@]}" "${STUBS[@]}" "${JAVA_SOURCES[@]}" "$SANDBOX/Checks.kt" -d "$OUT"
+"$KOTLINC" -jvm-target 1.8 -nowarn "${APP_SOURCES[@]}" "${STUBS[@]}" "$SANDBOX/Checks.kt" -d "$OUT"
 "$JAVA_BIN" -cp "$OUT:$STDLIB" ChecksKt

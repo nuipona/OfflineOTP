@@ -99,13 +99,21 @@ object Base64 {
         if (flags and URL_SAFE != 0) java.util.Base64.getUrlDecoder() else java.util.Base64.getDecoder()
 }
 
-/** Type-only stand-in for the atomic private-file helper the resolved Java sources use. */
+/**
+ * Stand-in for the platform's atomic private-file transaction. It refuses every operation: the
+ * real `FileHelper` runs up to this boundary and then fails with `UnsupportedOperationException`,
+ * so a check that reaches the disk fails loudly. Nothing is read or written here, because
+ * `Context.getFilesDir()` is the working directory in this sandbox.
+ */
 class AtomicFile(private val file: java.io.File) {
-    fun delete() {}
-    fun openRead(): java.io.InputStream = file.inputStream()
-    fun startWrite(): java.io.FileOutputStream = java.io.FileOutputStream(file)
-    fun finishWrite(output: java.io.FileOutputStream?) {}
-    fun failWrite(output: java.io.FileOutputStream?) {}
+    fun delete(): Unit = unavailable()
+    fun openRead(): java.io.InputStream = unavailable()
+    fun startWrite(): java.io.FileOutputStream = unavailable()
+    fun finishWrite(output: java.io.FileOutputStream?): Unit = unavailable()
+    fun failWrite(output: java.io.FileOutputStream?): Unit = unavailable()
+
+    private fun unavailable(): Nothing =
+        throw UnsupportedOperationException("AtomicFile is not available in the sandbox: $file")
 }
 
 /**

@@ -31,9 +31,10 @@ class KotlinCryptoHelpersConversionTest(unittest.TestCase):
             self.assertTrue((KOTLIN / f"{stem}.kt").is_file())
             self.assertIn(f"$KOTLIN_APP/{stem}.kt", harness)
             self.assertNotIn(f"{stem}.java", harness)
-        # The resolution sources left are the ones the compiled sources still read.
-        for resolved in ("Constants", "FileHelper"):
-            self.assertIn(f"$ROOT/app/src/main/java/org/shadowice/flocke/andotp/Utilities/{resolved}.java", harness)
+        # Constants and FileHelper are Kotlin since the twenty-second batch: compiled, not resolved.
+        for compiled in ("Constants", "FileHelper"):
+            self.assertIn(f"$KOTLIN_APP/Utilities/{compiled}.kt", harness)
+            self.assertNotIn(f"Utilities/{compiled}.java", harness)
         # The credential preference is Kotlin since the twenty-first batch: compiled, not resolved.
         self.assertIn("$KOTLIN_APP/Preferences/CredentialsPreference.kt", harness)
         self.assertNotIn("Preferences/CredentialsPreference.java", harness)
@@ -262,15 +263,15 @@ class KotlinCryptoHelpersConversionTest(unittest.TestCase):
         self.assertEqual(1, interop.count("generateSymmetricKeyFromPassword(\"synthetic\")"),
                          "the legacy key length must be asserted exactly once")
 
-    def test_sandbox_check_literals_stay_equal_to_the_java_constants(self):
-        constants = (JAVA / "Utilities/Constants.java").read_text()
+    def test_sandbox_check_literals_stay_equal_to_the_constants(self):
+        constants = (KOTLIN / "Utilities/Constants.kt").read_text()
         checks = (SANDBOX / "Checks.kt").read_text()
-        # Constants.java keeps these package-private (Kotlin has no package-private visibility), so
-        # the default-package sandbox cannot read them and mirrors the values instead. Keep them equal.
-        self.assertIn("PBKDF2_MAX_BACKUP_ITERATIONS   = 160000", constants)
-        self.assertIn("PBKDF2_MIN_BACKUP_ITERATIONS   = 140000", constants)
-        self.assertIn("PBKDF2_MIN_AUTH_ITERATIONS     = 30000", constants)
-        self.assertIn("ENCRYPTION_IV_LENGTH   = 12", constants)
+        # Checks.kt keeps its own literal copies of these values as an independent expectation. The
+        # values live in Constants.kt (internal const vals since the twenty-second batch); keep equal.
+        self.assertIn("PBKDF2_MAX_BACKUP_ITERATIONS = 160000", constants)
+        self.assertIn("PBKDF2_MIN_BACKUP_ITERATIONS = 140000", constants)
+        self.assertIn("PBKDF2_MIN_AUTH_ITERATIONS = 30000", constants)
+        self.assertIn("ENCRYPTION_IV_LENGTH = 12", constants)
         self.assertIn("private const val ENCRYPTION_IV_BYTES = 12", checks)
         self.assertIn("private const val BACKUP_ITERATIONS_MIN = 140000", checks)
         self.assertIn("private const val BACKUP_ITERATIONS_MAX = 160000", checks)

@@ -40,10 +40,11 @@ class KotlinConvertedUiConversionTest(unittest.TestCase):
             self.assertFalse((JAVA / f"{name}.java").exists(), f"{name}.java is still there")
             self.assertTrue((KOTLIN / f"{name}.kt").is_file(), f"{name}.kt is missing")
             self.assertIn(f"$KOTLIN_APP/{name}.kt", harness)
-        # Only the two documented exclusions stay Java.
+        # No main-source Java is left: the two documented exclusions became Kotlin in the
+        # twenty-second batch.
         remaining = sorted(path.relative_to(JAVA).as_posix()
                            for path in JAVA.rglob("*.java"))
-        self.assertEqual(["Utilities/Constants.java", "Utilities/FileHelper.java"], remaining)
+        self.assertEqual([], remaining)
 
     def test_the_credential_preference_keeps_its_xml_name_and_default(self):
         # The preference XML instantiates the class by name, so the fully qualified name, the

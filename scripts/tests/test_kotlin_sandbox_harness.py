@@ -43,15 +43,23 @@ class KotlinSandboxHarnessTest(unittest.TestCase):
         for gate in ("testFdroidDebugUnitTest", "lint", "instrumentation"):
             self.assertIn(gate, readme)
 
-    def test_real_java_sources_are_resolved_instead_of_shadowed(self):
+    def test_no_java_source_is_resolved_any_more(self):
         script = (SANDBOX / "run.sh").read_text()
-        constants = ROOT / "app/src/main/java/org/shadowice/flocke/andotp/Utilities/Constants.java"
-        # kotlinc reads Java sources for resolution, so the sandbox checks the Kotlin code against
-        # the real declarations (including the package-private crypto constant) instead of a copy.
-        self.assertIn("$ROOT/app/src/main/java/org/shadowice/flocke/andotp/Utilities/Constants.java", script)
-        self.assertIn('"${JAVA_SOURCES[@]}"', script)
-        # The task subclasses resolve the real Java file helper, not a stub of it.
-        self.assertIn("$ROOT/app/src/main/java/org/shadowice/flocke/andotp/Utilities/FileHelper.java", script)
+        # The sandbox used to resolve Constants.java and FileHelper.java for their declarations. Both
+        # are Kotlin since the twenty-second batch, so kotlinc compiles every declaration it checks and
+        # no Java path is listed at all.
+        self.assertNotIn("JAVA_SOURCES", script)
+        self.assertNotIn(".java", script)
+        for compiled in ("Utilities/Constants", "Utilities/FileHelper"):
+            self.assertIn(f"$KOTLIN_APP/{compiled}.kt", script)
+            self.assertFalse((ROOT / f"app/src/main/java/org/shadowice/flocke/andotp/{compiled}.java").exists())
+        # The file helper runs over the AtomicFile stand-in, which must keep refusing every operation,
+        # so a check that reaches the disk cannot touch the working directory (getFilesDir() is ".").
+        stubs = (SANDBOX / "stubs/android/android_util.kt").read_text()
+        atomic = stubs[stubs.index("class AtomicFile("):]
+        self.assertNotIn("inputStream()", atomic)
+        self.assertNotIn("FileOutputStream(file)", atomic)
+        self.assertIn("UnsupportedOperationException", atomic)
         # The credential preference is Kotlin since the twenty-first batch: compiled, never resolved.
         self.assertIn("$KOTLIN_APP/Preferences/CredentialsPreference.kt", script)
         self.assertNotIn("Preferences/CredentialsPreference.java", script)
@@ -85,11 +93,11 @@ class KotlinSandboxHarnessTest(unittest.TestCase):
         # No production class may be shadowed by a stub of the same name.
         shadows = sorted(path.name for path in (SANDBOX / "stubs/org/shadowice").rglob("*.kt"))
         self.assertEqual(["R.kt"], shadows, f"unexpected production shadows: {shadows}")
-        # The reason Constants stays Java: its parameters are package-private, and Kotlin has no
-        # package-private visibility, so converting it would widen the Java-visible API.
-        source = constants.read_text()
-        self.assertIn('final static String ALGORITHM_ASYMMETRIC    = "RSA/ECB/PKCS1Padding";', source)
-        self.assertIn("final static String PBKDF2_ALGORITHM", source)
+        # Constants is Kotlin since the twenty-second batch. Its package-private Java members are
+        # `internal const val`s; the values themselves are pinned by test_kotlin_utilities_conversion.
+        source = (KOTLIN / "Utilities/Constants.kt").read_text()
+        self.assertIn('internal const val ALGORITHM_ASYMMETRIC = "RSA/ECB/PKCS1Padding"', source)
+        self.assertIn("internal const val PBKDF2_ALGORITHM", source)
 
     def test_r_stub_matches_the_sources_the_sandbox_compiles(self):
         # The generated-resource stand-in lists exactly the ids referenced by run.sh's source
