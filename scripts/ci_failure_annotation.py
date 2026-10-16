@@ -5,6 +5,7 @@ Used only from the failure steps of the Android CI workflow, so a failed job say
 without downloading the raw job log. GitHub keeps only about 4 KB of an annotation message from its
 start, so the message is cut to fit and the Gradle deprecation noise is removed first.
 """
+import re
 import sys
 from pathlib import Path
 
@@ -46,13 +47,19 @@ def main(argv: list[str]) -> int:
     # Resource-compiler errors repeat once per occurrence; list each distinct one once with a count.
     distinct = {}
     for line in lines:
+        key = None
         if "error:" in line:
             key = line.split("error:", 1)[1].split("(aka", 1)[0].strip()
-            distinct[key] = distinct.get(key, 0) + 1
+        elif line.lstrip().startswith("e: "):
+            # Kotlin compiler: "e: file:///.../Name.kt:12:5 message" -> "Name.kt:12: message"
+            match = re.match(r"\s*e: \S*?([^/\s]+\.kt):(\d+):\d+ (.*)", line)
+            key = f"{match.group(1)}:{match.group(2)}: {match.group(3)}" if match else line.strip()
+        if key:
+            distinct[key[:220]] = distinct.get(key[:220], 0) + 1
     summary = []
     if distinct:
         summary.append(f"Distinct compiler errors: {len(distinct)} ({sum(distinct.values())} occurrences)")
-        summary.extend(f"  {count}x {key}" for key, count in list(distinct.items())[:25])
+        summary.extend(f"  {count}x {key}" for key, count in list(distinct.items())[:20])
     # Start at the first failure marker when there is one, so the error text is not cut off.
     starts = [i for i, line in enumerate(lines) if "What went wrong" in line or line.startswith("FAILURE:")]
     if starts:
