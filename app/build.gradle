@@ -88,8 +88,8 @@ dependencies {
 
     //noinspection GradleDependency - because they messed up their version numbering
     implementation "commons-codec:commons-codec:1.23.0"
-    implementation "com.github.aakira:expandable-layout:1.6.0@aar"
-    implementation "com.github.heinrichreimer:material-intro:2.0.0"
+    implementation "com.github.aakira:expandable-layout:1.6.0"
+    implementation "com.heinrichreimersoftware:material-intro:2.0.0"
     implementation("com.journeyapps:zxing-android-embedded:4.3.0") { transitive = false }
     implementation('com.google.zxing:core:3.5.4')
     implementation "me.zhanghai.android.materialprogressbar:library:1.6.1"

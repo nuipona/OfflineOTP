@@ -2,14 +2,13 @@
 
 buildscript {
     configurations.classpath {
-        // Dependency locking and the fail-on-dynamic/changing modes are mutually exclusive in
-        // Gradle 8.13. The checked-in declarations are exact; locking owns graph reproducibility.
+        resolutionStrategy.failOnDynamicVersions()
+        resolutionStrategy.failOnChangingVersions()
         resolutionStrategy.activateDependencyLocking()
     }
     repositories {
         google()
         mavenCentral()
-        gradlePluginPortal()
     }
     dependencies {
         classpath 'com.android.tools.build:gradle:8.13.2'
@@ -31,15 +30,18 @@ allprojects {
             forRepository { maven { url "https://jitpack.io" } }
             filter {
                 includeGroup 'com.github.aakira'
-                includeGroup 'com.github.heinrichreimer'
                 includeGroup 'com.github.open-keychain.open-keychain'
             }
         }
     }
 }
 
-// Dependency locking owns the resolved version graph.
+// Reject floating/changing dependencies instead of accepting a different graph silently.
 allprojects {
+    configurations.configureEach {
+        resolutionStrategy.failOnDynamicVersions()
+        resolutionStrategy.failOnChangingVersions()
+    }
     dependencyLocking {
         lockAllConfigurations()
         // Gradle's default mode permits bootstrapping when lockfiles are absent.
