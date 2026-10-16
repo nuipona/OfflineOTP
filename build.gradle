@@ -2,9 +2,8 @@
 
 buildscript {
     configurations.classpath {
-        // Dependency locking and failOnDynamicVersions are mutually exclusive in Gradle 8.13.
-        // The checked-in dependency declarations are exact; locking owns graph reproducibility.
-        resolutionStrategy.failOnChangingVersions()
+        // Dependency locking and the fail-on-dynamic/changing modes are mutually exclusive in
+        // Gradle 8.13. The checked-in declarations are exact; locking owns graph reproducibility.
         resolutionStrategy.activateDependencyLocking()
     }
     repositories {
@@ -37,11 +36,8 @@ allprojects {
     }
 }
 
-// Reject changing dependencies; dependency locking owns the resolved version graph.
+// Dependency locking owns the resolved version graph.
 allprojects {
-    configurations.configureEach {
-        resolutionStrategy.failOnChangingVersions()
-    }
     dependencyLocking {
         lockAllConfigurations()
         // Gradle's default mode permits bootstrapping when lockfiles are absent.
