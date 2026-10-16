@@ -6,6 +6,7 @@
 package androidx.work
 
 import android.content.Context
+import java.util.concurrent.TimeUnit
 
 /** The unique work policies, like the platform's enum. */
 enum class ExistingWorkPolicy { KEEP, REPLACE, APPEND, APPEND_OR_REPLACE }
@@ -73,6 +74,11 @@ class WorkManager private constructor() {
     fun cancelUniqueWork(uniqueWorkName: String) {
         cancelled.add(uniqueWorkName)
     }
+
+    /** Test-only query/lifecycle shapes for the Kotlin IPC instrumentation source. */
+    fun cancelAllWork(): Operation = Operation()
+    fun pruneWork(): Operation = Operation()
+    fun getWorkInfosForUniqueWork(uniqueWorkName: String): WorkFuture<List<WorkInfo>> = WorkFuture(emptyList())
 
     /** Discards the recorded work, so a check starts from a clean state. */
     fun reset() {

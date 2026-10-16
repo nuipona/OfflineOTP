@@ -133,8 +133,10 @@ Still **not** covered, and therefore still dependent on the Gradle/device gates:
   on a device.
 - Java *compilation*: `run.sh` does not invoke `javac` or provide the Android dependency classpath, so
   no Java class file is produced and the Java callers' own compilation is never checked. No Java source
-  is passed to `kotlinc` either (none is left in the app), so the sandbox checks the Kotlin code against the
-  real Kotlin declarations; the `ALGORITHM_ASYMMETRIC`/`PBKDF2_*` constants are `internal const val`s, whose
+  is passed to `kotlinc`; 15 Java `Kotlin*InteropTest` suites remain under `app/src/androidTest/java` but
+  are deliberately outside this sandbox. The test-source suites also are not part of `run.sh`; the
+  Kotlinized tests require Gradle/JUnit/Android acceptance. The sandbox checks Kotlin against the real
+  Kotlin declarations; the `ALGORITHM_ASYMMETRIC`/`PBKDF2_*` constants are `internal const val`s, whose
   values the compiler inlines, so the executed crypto checks in the default package still see them.
 
 ## What it proves, and what it does not
@@ -516,6 +518,7 @@ configuration change, the real screen-off broadcast and the activity lifecycle w
   expect `NoClassDefFoundError`, which still proves the wipe was reached and nothing was deleted.
 - The `Checks.kt` literal copies of the PBKDF2/backup constants are kept as an independent expectation.
   `test_kotlin_crypto_helpers_conversion.py` keeps them equal to `Constants.kt`.
-- Not executed here: Gradle, lint, the instrumentation tests and any device run. The sandbox result is still
-  non-authoritative and compiles no Java, so the Java test sources are still checked only by the gates in
-  [build-and-security-tests.md](../../docs/build-and-security-tests.md).
+- Not executed here: Gradle, lint, the instrumentation tests and any device run. The sandbox runner is still
+  non-authoritative and compiles no Java/test source. A separate Kotlin 2.4.21 compile-only smoke check of the
+  migrated Kotlin test sources with local JUnit/Android stand-ins is also non-authoritative; the 15 Java interop
+  suites and all tests still require the Gradle/device gates in [build-and-security-tests.md](../../docs/build-and-security-tests.md).

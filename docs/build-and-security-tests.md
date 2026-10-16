@@ -61,7 +61,7 @@ With a disposable API 28 or 36 emulator already running:
 
 **Never run instrumentation against an installation containing real accounts.** Database/KeyStore, IPC and credential lifecycle tests deliberately wipe the disposable target vault, preferences and KeyStore aliases. CI uses fresh debug-suffixed applications and disposable emulators. Restore-format tests separately use private cache fixture files.
 
-The test-only client is signed with an independently generated key, not the target debug key. The IPC test verifies different UIDs/certificates and denial of `CONTROL_VAULT` before launching that caller. Debug builds alone declare package visibility for this client; it is not a release component. If you delete its generated key and rebuild on an existing emulator, uninstall the old **test client** before installing the newly signed one. Never distribute this client.
+The test-only client is a Kotlin Activity signed with an independently generated key, not the target debug key; the language conversion does not change its application ID, UID or signing identity. The IPC test verifies different UIDs/certificates and denial of `CONTROL_VAULT` before launching that caller. Debug builds alone declare package visibility for this client; it is not a release component. If you delete its generated key and rebuild on an existing emulator, uninstall the old **test client** before installing the newly signed one. Never distribute this client.
 
 Reports live under `app/build/reports/` and `reports/reproducibility/`, and are uploaded on CI failure as well as success. Each independent build preserves unsigned APKs, text manifests, build logs, dependency inventory and SHA256SUMS. A `result.txt` success marker is written only after all comparisons pass. None of these generated reports/APKs should be committed.
 
@@ -88,7 +88,7 @@ After committing the baseline, rerun all CI checks in clean environments. Consid
 
 ## Security coverage
 
-### Host-side Java tests
+### Host-side JVM tests (Kotlin)
 
 `BoundedInputReaderTest`:
 
@@ -106,15 +106,17 @@ After committing the baseline, rerun all CI checks in clean environments. Consid
 
 `VaultSessionTest` covers key/generation revocation, one-use non-aliasing handoffs and listener removal. `InputPolicyTest` covers image arithmetic, OTP bounds, JSON nesting and bounded provider output.
 
-`OtpUriParserTest` exercises the production Kotlin URI parser, explicit failure categories, immutable validated metadata/owned seeds, strict decoding, all supported variants and a deterministic malformed corpus without Android mocks. `KotlinOtpInteropTest` checks the generated API from Java, Entry round trips, Android decoding and an RFC leading-zero vector. `EntryJsonTest` characterizes the Java/Android document boundary: the serialized field order and defaults (compared byte-for-byte), the malformed-field matrix with its closed error set, the seed-ownership rules, the `Entry` adapter's failure messages, its URI parameter set and the token calculators. See [Kotlin OTP parser pilot](kotlin-otp-parser-pilot.md) for compatibility changes and ownership rules.
+`OtpUriParserTest` exercises the production Kotlin URI parser, explicit failure categories, immutable validated metadata/owned seeds, strict decoding, all supported variants and a deterministic malformed corpus without Android mocks. `KotlinOtpInteropTest` checks the generated API from Java, Entry round trips, Android decoding and an RFC leading-zero vector. See [Kotlin OTP parser pilot](kotlin-otp-parser-pilot.md) for compatibility changes and ownership rules.
 
 These exercise production helpers without Android mocks or Robolectric. The helpers are used by actual document reads and restore tasks, rather than being test-only copies.
 
 ### Android/provider tests
 
-`EncryptionSecurityTest` verifies empty/Unicode round trips, wrong-key rejection, tampered nonce/ciphertext/tag rejection, short-frame rejection, and fresh nonces. `KotlinCryptoInteropTest` exercises the converted Kotlin crypto/key-store helpers from Java on a real device: a dedicated `AndroidKeyStore` alias create/load/wipe, the RSA wrap/unwrap and wrapped-key file round trip, the AES-GCM framing round trip with wrong-key and tag-tamper rejection, the explicit-nonce overload and the derivation bounds, plus the `EncryptionChangeCallback` SAM from Java. The synthetic alias and key file live in the app's private directory and are deleted afterwards, but the test also drives the production key entry points and `wipeKeys`, so it clears the app's stored vault key and keystore aliases: run it only on disposable emulators. It never opens the vault.
+The converted `ApplicationTest.kt` keeps the RFC 6238/4226 OTP vectors, entry parsing/URI checks, the temporary-database settings test and the AES-GCM provider vectors. `EntryJsonTest.kt` characterizes the stored document boundary on Android: field order/defaults, malformed-field errors, seed ownership, adapter round trips, URI parameters, token calculators and manual-entry validation.
 
-`EncryptedRestoreSecurityTest` calls the real restore task on temporary file URIs and verifies independently generated current/legacy encrypted fixtures, Unicode preservation, wrong-password/tamper failure with no plaintext payload, truncated framing, and hostile KDF counts. The timeout is a supplementary regression signal; validation is the actual resource defense.
+`EncryptionSecurityTest.kt` verifies empty/Unicode round trips, wrong-key rejection, tampered nonce/ciphertext/tag rejection, short-frame rejection, and fresh nonces. `KotlinCryptoInteropTest.java` exercises the converted Kotlin crypto/key-store helpers from Java on a real device: a dedicated `AndroidKeyStore` alias create/load/wipe, the RSA wrap/unwrap and wrapped-key file round trip, the AES-GCM framing round trip with wrong-key and tag-tamper rejection, the explicit-nonce overload and the derivation bounds, plus the `EncryptionChangeCallback` SAM from Java. The synthetic alias and key file live in the app's private directory and are deleted afterwards, but the test also drives the production key entry points and `wipeKeys`, so it clears the app's stored vault key and keystore aliases: run it only on disposable emulators. It never opens the vault.
+
+`EncryptedRestoreSecurityTest.kt` calls the real restore task on temporary file URIs and verifies independently generated current/legacy encrypted fixtures, Unicode preservation, wrong-password/tamper failure with no plaintext payload, truncated framing, and hostile KDF counts. The timeout is a supplementary regression signal; validation is the actual resource defense.
 
 `KotlinPasswordDialogsInteropTest` drives the converted password dialog through real inflated widgets
 from Java (both modes, privacy flags, watchers, IME action, callback and dismissal) and reflects the
@@ -199,4 +201,4 @@ This change enables a focused error/warning gate for `NewApi`, `InlinedApi`, `Tr
 
 ## Validation performed here
 
-The wrapper hashes/checksum/action pins, Python regression suite, shell syntax, Java/Kotlin syntax parsing, fixture regeneration and workflow YAML structure can be checked in this environment. Android/Gradle execution cannot: a locally obtained Java runtime still cannot download the Gradle distribution through the network restrictions, and no Android SDK is installed. The pinned full JDK and Google dependencies are unavailable here. No successful Java/Kotlin compilation, APK build, byte-identical APK comparison, host JUnit execution, or emulator test is claimed until CI runs.
+The wrapper hashes/checksum/action pins, Python regression suite, shell syntax, fixture regeneration and workflow YAML structure can be checked here. A non-authoritative Kotlin 2.4.21 compile-only smoke check also type-checked the migrated Kotlin test sources against the sandbox's hand-written Android/JUnit stand-ins; it is not the project's Kotlin 2.3.20/Gradle compile, and no JUnit test was executed. Android/Gradle execution cannot run here: the wrapper download fails with `SSLHandshakeException` from `services.gradle.org`, and no Android SDK is installed. The pinned full JDK and Google dependencies are unavailable. No successful project Java/Kotlin compilation, APK build, byte-identical APK comparison, host JUnit execution, or emulator test is claimed until CI runs.

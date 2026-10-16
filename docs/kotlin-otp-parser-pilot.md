@@ -71,7 +71,7 @@ The new resolved Kotlin inputs need the same trusted lockfile/checksum baseline 
 
 `OtpUriParserTest` is a JVM JUnit suite using production parsing and Commons Codec, without Android mocks. It covers defaults/RFC seed bytes, all four variants, custom numeric boundaries, Unicode/plus/issuer semantics, decoded singleton collisions, malformed escapes/UTF-8, numeric overflow, canonical Base32, URI/text/tag/decoded-seed limits, redaction, owned bytes/tags, close behavior, builder invariants and a deterministic malformed-input corpus.
 
-`KotlinOtpInteropTest` is Java instrumentation coverage for generated Kotlin APIs, Java Entry field/URI round trips, Android UTF-8 behavior, and an RFC 6238 leading-zero vector. Existing Java entry/input and RFC/AES-GCM/backup/security tests remain in place. Source-policy tests separately enforce the Kotlin pins, aligned JVM targets and Android-free scope; they do not execute Kotlin.
+`KotlinOtpInteropTest` remains Java instrumentation coverage for generated Kotlin APIs, Java Entry field/URI round trips, Android UTF-8 behavior, and an RFC 6238 leading-zero vector. The ordinary entry/input, RFC/AES-GCM/backup and security test suites were moved to Kotlin in the twenty-third batch; their assertions remain. Source-policy tests separately enforce the Kotlin pins, aligned JVM targets and Android-free scope; they do not execute Kotlin.
 
 Run both flavors in the pinned JDK/SDK environment:
 

@@ -3,12 +3,11 @@
 The sandbox executes the platform-free parts of the converted `EncryptionHelper` — the PBKDF2 split
 against an independent derivation and the RFC 6070 vector, the credential bounds, the legacy
 SHA-256 key, the RSA helpers with a real JVM key pair and the pre-provider AES-GCM framing guard —
-and reflects the whole `KeyStoreHelper` surface. It cannot run the AES-GCM provider calls (the
-desktop JDK requires `GCMParameterSpec` while the unchanged Android path passes `IvParameterSpec`),
-cannot reflect `EncryptionHelper` (resolving its declared methods eagerly loads the Java-only
-`Constants.EncryptionType`) and has no AndroidKeyStore. This guard pins the Java-visible surface and
-the security-relevant expressions those checks cannot see; real AndroidKeyStore, AES-GCM and
-wrapped-key behaviour needs a device.
+and reflects the Java-visible `EncryptionHelper`/`KeyStoreHelper` surfaces (the `Constants` enums
+are compiled into the sandbox now). It cannot run the AES-GCM provider calls (the desktop JDK requires
+`GCMParameterSpec` while the unchanged Android path passes `IvParameterSpec`) and has no
+AndroidKeyStore. This guard pins the security-relevant expressions those checks cannot execute; real
+AndroidKeyStore, AES-GCM and wrapped-key behaviour needs a device.
 """
 from pathlib import Path
 import unittest
@@ -17,6 +16,7 @@ ROOT = Path(__file__).resolve().parents[2]
 KOTLIN = ROOT / "app/src/main/kotlin/org/shadowice/flocke/andotp"
 JAVA = ROOT / "app/src/main/java/org/shadowice/flocke/andotp"
 ANDROID_TEST = ROOT / "app/src/androidTest/java/org/shadowice/flocke/andotp"
+ANDROID_KOTLIN_TEST = ROOT / "app/src/androidTest/kotlin/org/shadowice/flocke/andotp"
 SANDBOX = ROOT / "scripts/kotlin-sandbox"
 
 
@@ -239,10 +239,10 @@ class KotlinCryptoHelpersConversionTest(unittest.TestCase):
         self.assertIn("override fun onSuccessfulEncryptionChange(newEncryptionType: Constants.EncryptionType, newEncryptionKey: SecretKey)",
                       change)
         self.assertIn("@JvmField val newEncryptionKey: SecretKey?", change)
-        for test in ("Utilities/EncryptionSecurityTest.java", "Tasks/CredentialLifecycleSecurityTest.java",
-                     "Utilities/IpcAuthorizationSecurityTest.java", "Utilities/VaultFailureSecurityTest.java",
-                     "ApplicationTest.java"):
-            self.assertTrue((ANDROID_TEST / test).is_file(), f"{test} disappeared")
+        for test in ("Utilities/EncryptionSecurityTest.kt", "Tasks/CredentialLifecycleSecurityTest.kt",
+                     "Utilities/IpcAuthorizationSecurityTest.kt", "Utilities/VaultFailureSecurityTest.kt",
+                     "ApplicationTest.kt"):
+            self.assertTrue((ANDROID_KOTLIN_TEST / test).is_file(), f"{test} disappeared")
 
     def test_device_test_is_checked_in_for_the_paths_the_sandbox_cannot_run(self):
         interop = (ANDROID_TEST / "Utilities/KotlinCryptoInteropTest.java").read_text()

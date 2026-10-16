@@ -26,10 +26,11 @@ class EntryPersistence(context: Context) {
         }
     }
 
-    fun save(entries: ArrayList<Entry>, key: SecretKey?, autoBackup: Boolean,
+    fun save(entries: ArrayList<Entry>?, key: SecretKey?, autoBackup: Boolean,
             backupCallback: UiBasedBackgroundTask.OutcomeCallback<BackupTaskResult>?): VaultWriteResult {
         synchronized (VaultSession.MutationLock) {
             if (!authorized(key)) return VaultWriteResult.Rejected(VaultWriteError.MISSING_KEY)
+            if (entries == null) return VaultWriteResult.Rejected(VaultWriteError.INVALID_INPUT)
             val result = DatabaseHelper.saveVault(context, entries, key!!)
             if (result !is VaultWriteResult.Saved) return result
             if (autoBackup && BackupHelper.autoBackupType(context) == Constants.BackupType.ENCRYPTED) {

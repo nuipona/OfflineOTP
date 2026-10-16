@@ -3,6 +3,11 @@ package android.content.res
 
 import android.os.LocaleList
 
+/** Compilation-only asset access surface; no APK assets are available in the desktop sandbox. */
+class AssetManager {
+    fun open(fileName: String): java.io.InputStream = java.io.ByteArrayInputStream(ByteArray(0))
+}
+
 /**
  * Inert resource view. `open` since the settings checks substitute a resource view with distinct,
  * check-owned values (the converted `Settings` class resolves preference keys and defaults through

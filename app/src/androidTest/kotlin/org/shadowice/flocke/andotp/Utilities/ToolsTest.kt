@@ -1,0 +1,23 @@
+package org.shadowice.flocke.andotp.Utilities
+
+import androidx.test.ext.junit.runners.AndroidJUnit4
+import org.junit.Assert.assertEquals
+import org.junit.Test
+import org.junit.runner.RunWith
+
+/** Tests for the token grouping helper. */
+@RunWith(AndroidJUnit4::class)
+class ToolsTest {
+    @Test fun formatToken() {
+        assertEquals("123 456", Tools.formatToken("123456", 3))
+        assertEquals("12 34 56", Tools.formatToken("123456", 2))
+        assertEquals("123456", Tools.formatToken("123456", 0))
+        assertEquals("123456", Tools.formatToken("123456", 10))
+        assertEquals("1 234 567", Tools.formatToken("1234567", 3))
+        assertEquals("1ab 234 567", Tools.formatToken("1ab234567", 3))
+        assertEquals("123", Tools.formatToken("123", 3))
+        assertEquals("1 234", Tools.formatToken("1234", 3))
+        assertEquals("1", Tools.formatToken("1", 3))
+        assertEquals("", Tools.formatToken("", 3))
+    }
+}
