@@ -2,10 +2,6 @@
 
 ![OfflineOTP](./assets/logo.png)
 
-## Unmaintained
-
-**This repository is currently unmaintained.**
-
 ## Intro
 
 OfflineOTP is a two-factor authentication app for Android 9.0+.
@@ -16,10 +12,6 @@ Simply scan the QR code and log in with the generated 6-digit code.
 This project started out as a fork of the great [OTP Authenticator](https://github.com/0xbb/otp-authenticator) app written by [Bruno Bierbaumer](https://github.com/0xbb),
 which has sadly been inactive since 2015. By now almost every aspect of the app has been changed/re-written so the fork status of the Github repository got
 detached upon [user request](https://github.com/andOTP/andOTP/issues/145). But all credit for the original version and for starting this project still goes to Bruno!
-
-## Help wanted:
-I currently don't have that much time to spend developing OfflineOTP, so any contributions are always welcome.
-Don't worry, I will still continue to develop OfflineOTP. It will just slow down from the incredible speed I had at the beginning.
 
 ## Features:
 
@@ -126,15 +118,6 @@ If you want to show your appreciation for our work with a small donation you can
  * [DimensionConverter](https://stackoverflow.com/questions/8343971/how-to-parse-a-dimension-string-and-convert-it-to-a-dimension-value)
  * [NumberPickerPreference](https://github.com/Alobar/AndroidPreferenceTest/tree/master/alobar-preference)
 
-#### Previously used open-source components:
-
- * [FABsMenu](https://github.com/jahirfiquitiva/FABsMenu)
- * [LicensesDialog](https://github.com/PSDev/LicensesDialog)
- * [VNTNumberPickerPreference](https://github.com/vanniktech/VNTNumberPickerPreference)
-
-#### Previously used code examples:
-
- * [FloatingActionMenuAndroid](https://github.com/pmahsky/FloatingActionMenuAndroid)
 
 ## License:
 ```
