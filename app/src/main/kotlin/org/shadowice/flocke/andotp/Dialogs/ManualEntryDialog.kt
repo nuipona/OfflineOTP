@@ -91,47 +91,52 @@ object ManualEntryDialog {
         digitsInput.setText(String.format(Locale.US, "%d", TokenCalculator.TOTP_DEFAULT_DIGITS))
         counterInput.setText(String.format(Locale.US, "%d", TokenCalculator.HOTP_INITIAL_COUNTER))
 
-        typeInput.onItemSelectedListener = AdapterView.OnItemSelectedListener { _, _, _, _ ->
-            val type = typeInput.getSelectedItem() as? Entry.OTPType
+        // AdapterView.OnItemSelectedListener has two abstract methods, so it has no SAM constructor.
+        typeInput.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
+            override fun onItemSelected(parent: AdapterView<*>?, view: View?, position: Int, id: Long) {
+                val type = typeInput.getSelectedItem() as? Entry.OTPType
 
-            if (type == Entry.OTPType.STEAM) {
-                counterLayout.visibility = View.GONE
-                periodLayout.visibility = View.VISIBLE
-                expandButton.visibility = View.VISIBLE
+                if (type == Entry.OTPType.STEAM) {
+                    counterLayout.visibility = View.GONE
+                    periodLayout.visibility = View.VISIBLE
+                    expandButton.visibility = View.VISIBLE
 
-                digitsInput.setText(String.format(Locale.US, "%d", TokenCalculator.STEAM_DEFAULT_DIGITS))
-                periodInput.setText(String.format(Locale.US, "%d", TokenCalculator.TOTP_DEFAULT_PERIOD))
-                algorithmInput.setSelection(algorithmAdapter.getPosition(TokenCalculator.HashAlgorithm.SHA1))
+                    digitsInput.setText(String.format(Locale.US, "%d", TokenCalculator.STEAM_DEFAULT_DIGITS))
+                    periodInput.setText(String.format(Locale.US, "%d", TokenCalculator.TOTP_DEFAULT_PERIOD))
+                    algorithmInput.setSelection(algorithmAdapter.getPosition(TokenCalculator.HashAlgorithm.SHA1))
 
-                digitsInput.isEnabled = false
-                periodInput.isEnabled = false
-                algorithmInput.isEnabled = false
-            } else if (type == Entry.OTPType.TOTP) {
-                counterLayout.visibility = View.GONE
-                periodLayout.visibility = View.VISIBLE
-                expandButton.visibility = View.VISIBLE
+                    digitsInput.isEnabled = false
+                    periodInput.isEnabled = false
+                    algorithmInput.isEnabled = false
+                } else if (type == Entry.OTPType.TOTP) {
+                    counterLayout.visibility = View.GONE
+                    periodLayout.visibility = View.VISIBLE
+                    expandButton.visibility = View.VISIBLE
 
-                if (isNewEntry)
+                    if (isNewEntry)
+                        digitsInput.setText(String.format(Locale.US, "%d", TokenCalculator.TOTP_DEFAULT_DIGITS))
+
+                    algorithmInput.isEnabled = isNewEntry
+                } else if (type == Entry.OTPType.HOTP) {
+                    counterLayout.visibility = View.VISIBLE
+                    periodLayout.visibility = View.GONE
+                    expandButton.visibility = View.VISIBLE
+
+                    if (isNewEntry)
+                        digitsInput.setText(String.format(Locale.US, "%d", TokenCalculator.TOTP_DEFAULT_DIGITS))
+
+                    algorithmInput.isEnabled = isNewEntry
+                } else if (type == Entry.OTPType.MOTP) {
+                    counterLayout.visibility = View.GONE
+                    periodLayout.visibility = View.VISIBLE
+
                     digitsInput.setText(String.format(Locale.US, "%d", TokenCalculator.TOTP_DEFAULT_DIGITS))
-
-                algorithmInput.isEnabled = isNewEntry
-            } else if (type == Entry.OTPType.HOTP) {
-                counterLayout.visibility = View.VISIBLE
-                periodLayout.visibility = View.GONE
-                expandButton.visibility = View.VISIBLE
-
-                if (isNewEntry)
-                    digitsInput.setText(String.format(Locale.US, "%d", TokenCalculator.TOTP_DEFAULT_DIGITS))
-
-                algorithmInput.isEnabled = isNewEntry
-            } else if (type == Entry.OTPType.MOTP) {
-                counterLayout.visibility = View.GONE
-                periodLayout.visibility = View.VISIBLE
-
-                digitsInput.setText(String.format(Locale.US, "%d", TokenCalculator.TOTP_DEFAULT_DIGITS))
-                expandButton.visibility = View.GONE
-                algorithmInput.isEnabled = isNewEntry
+                    expandButton.visibility = View.GONE
+                    algorithmInput.isEnabled = isNewEntry
+                }
             }
+
+            override fun onNothingSelected(parent: AdapterView<*>?) {}
         }
 
         val allTags = adapter.getTags()

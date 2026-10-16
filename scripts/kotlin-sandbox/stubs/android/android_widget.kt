@@ -201,9 +201,11 @@ open class AdapterView<T> : android.view.ViewGroup() {
         fun onItemClick(parent: AdapterView<*>?, view: View, position: Int, id: Long)
     }
 
-    /** The platform declares the selection listener on the adapter view. */
-    fun interface OnItemSelectedListener {
+    /** The platform declares the selection listener on the adapter view. It has two abstract methods,
+     *  so it is not a SAM type and needs an object expression rather than a lambda. */
+    interface OnItemSelectedListener {
         fun onItemSelected(parent: AdapterView<*>?, view: View?, position: Int, id: Long)
+        fun onNothingSelected(parent: AdapterView<*>?)
     }
 }
 

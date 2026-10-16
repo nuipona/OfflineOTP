@@ -15,6 +15,7 @@ import android.preference.PreferenceFragment
 import android.preference.PreferenceManager
 import android.provider.DocumentsContract
 import android.util.Log
+import android.view.View
 import android.view.ViewStub
 import android.widget.Toast
 
@@ -66,6 +67,9 @@ open class SettingsActivity : BackgroundTaskActivity<ChangeEncryptionTask.Result
     SharedPreferences.OnSharedPreferenceChangeListener, EncryptionHelper.EncryptionChangeCallback {
 
     private var fragment: SettingsFragment? = null
+
+    /** The view the snackbars attach to: the settings fragment's view, or the window while it is absent. */
+    private fun snackbarAnchor(): View = fragment?.getView() ?: getWindow().decorView
     private var prefs: SharedPreferences? = null
 
     private var encryptionKey: SecretKey? = null
@@ -238,21 +242,21 @@ open class SettingsActivity : BackgroundTaskActivity<ChangeEncryptionTask.Result
                 val newKey = result.newEncryptionKey
                 if (newType != null && newKey != null)
                     onSuccessfulEncryptionChange(newType, newKey)
-                Snackbar.make(fragment?.getView(), R.string.settings_toast_encryption_change_success,
+                Snackbar.make(snackbarAnchor(), R.string.settings_toast_encryption_change_success,
                     BaseTransientBottomBar.LENGTH_SHORT).show()
             }
             EncryptionChangeResult.MISSING_NEW_KEY,
             EncryptionChangeResult.DECRYPTION_FAILED,
             EncryptionChangeResult.TASK_CREATION_FAILED -> {
-                Snackbar.make(fragment?.getView(), R.string.settings_toast_encryption_change_failed,
+                Snackbar.make(snackbarAnchor(), R.string.settings_toast_encryption_change_failed,
                     BaseTransientBottomBar.LENGTH_SHORT).show()
             }
             EncryptionChangeResult.BACKUP_FAILURE -> {
-                Snackbar.make(fragment?.getView(), R.string.settings_toast_encryption_backup_failed,
+                Snackbar.make(snackbarAnchor(), R.string.settings_toast_encryption_backup_failed,
                     BaseTransientBottomBar.LENGTH_SHORT).show()
             }
             EncryptionChangeResult.CHANGE_FAILURE -> {
-                Snackbar.make(fragment?.getView(), R.string.settings_toast_encryption_change_failed,
+                Snackbar.make(snackbarAnchor(), R.string.settings_toast_encryption_change_failed,
                     BaseTransientBottomBar.LENGTH_SHORT).show()
             }
         }
@@ -267,7 +271,7 @@ open class SettingsActivity : BackgroundTaskActivity<ChangeEncryptionTask.Result
     override fun setupUiForTaskState(taskRunning: Boolean) {
         if (taskRunning) {
             // TODO: Better in-progress notification
-            val snackbar = Snackbar.make(fragment?.getView(), R.string.settings_toast_encryption_changing,
+            val snackbar = Snackbar.make(snackbarAnchor(), R.string.settings_toast_encryption_changing,
                 BaseTransientBottomBar.LENGTH_INDEFINITE)
             inProgress = snackbar
             snackbar.show()
@@ -309,11 +313,11 @@ open class SettingsActivity : BackgroundTaskActivity<ChangeEncryptionTask.Result
                     Arrays.fill(authKey, 0)
                 } else {
                     if (authKey != null) Arrays.fill(authKey, 0)
-                    Snackbar.make(fragment?.getView(), R.string.settings_toast_encryption_no_key,
+                    Snackbar.make(snackbarAnchor(), R.string.settings_toast_encryption_no_key,
                         BaseTransientBottomBar.LENGTH_SHORT).show()
                 }
             } else {
-                Snackbar.make(fragment?.getView(), R.string.settings_toast_encryption_auth_failed,
+                Snackbar.make(snackbarAnchor(), R.string.settings_toast_encryption_auth_failed,
                     BaseTransientBottomBar.LENGTH_SHORT).show()
             }
         } else if (requestCode == Constants.INTENT_SETTINGS_BACKUP_LOCATION && resultCode == RESULT_OK) {

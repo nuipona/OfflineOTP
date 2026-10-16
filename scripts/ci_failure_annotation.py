@@ -64,9 +64,13 @@ def main(argv: list[str]) -> int:
     starts = [i for i, line in enumerate(lines) if "What went wrong" in line or line.startswith("FAILURE:")]
     if starts:
         lines = lines[starts[0]:]
-    message = "\n".join(summary + lines)
-    if len(message) > MESSAGE_CHARS:
-        message = "...\n" + message[-MESSAGE_CHARS:]
+    # The summary is kept whole at the front; the tail is trimmed to the room that is left.
+    head = "\n".join(summary)
+    tail = "\n".join(lines)
+    room = MESSAGE_CHARS - len(head) - 1
+    if len(tail) > room:
+        tail = "...\n" + tail[-max(room - 4, 0):]
+    message = "\n".join(part for part in (head, tail) if part)
     print(f"::error title=Failure context ({path.name})::{escape(message)}")
     return 0
 

@@ -9,6 +9,8 @@ package android.view
  * behaviour here.
  */
 open class Window {
+    /** The window's root view: the decor the platform places the activity content in. */
+    open val decorView: View = View()
     /** The navigation bar color that was set. */
     var navigationBarColor: Int = 0
         private set
