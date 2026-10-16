@@ -86,24 +86,27 @@ class KotlinConvertedUiInteropTest {
 
     @Test
     fun cardAdapterKeepsItsVisibleMembers() {
-        val context = context()
-        val known = HashMap<String, Boolean?>()
-        val adapter = EntriesCardAdapter(context, TagsAdapter(context, known))
+        // Views and handlers must be created on the main thread.
+        InstrumentationRegistry.getInstrumentation().runOnMainSync {
+            val context = context()
+            val known = HashMap<String, Boolean?>()
+            val adapter = EntriesCardAdapter(context, TagsAdapter(context, known))
 
-        assertNull(adapter.encryptionKey)
-        val key = javax.crypto.spec.SecretKeySpec(ByteArray(32), "AES")
-        adapter.encryptionKey = key
-        assertSame(key, adapter.encryptionKey)
+            assertNull(adapter.encryptionKey)
+            val key = javax.crypto.spec.SecretKeySpec(ByteArray(32), "AES")
+            adapter.encryptionKey = key
+            assertSame(key, adapter.encryptionKey)
 
-        assertNotNull(adapter.getEntries())
-        assertEquals(0, adapter.getItemCount())
-        assertNotNull(adapter.getFilter())
-        assertTrue(adapter.hasStableIds())
-        adapter.updateTagsFilter()
-        adapter.filterByTags(emptyList())
-        adapter.updateTimeBasedTokens()
-        adapter.lockEntries()
-        assertNull(adapter.encryptionKey)
+            assertNotNull(adapter.getEntries())
+            assertEquals(0, adapter.getItemCount())
+            assertNotNull(adapter.getFilter())
+            assertTrue(adapter.hasStableIds())
+            adapter.updateTagsFilter()
+            adapter.filterByTags(emptyList())
+            adapter.updateTimeBasedTokens()
+            adapter.lockEntries()
+            assertNull(adapter.encryptionKey)
+        }
     }
 
     @Test
@@ -112,7 +115,8 @@ class KotlinConvertedUiInteropTest {
         val field = MainActivity::class.java.getField("animatorDuration")
         assertTrue(Modifier.isPublic(field.modifiers))
         assertTrue(Modifier.isStatic(field.modifiers))
-        assertTrue(Modifier.isFinal(field.modifiers))
+        // Not final: MainActivity assigns it from the animator duration scale at runtime.
+        assertFalse(Modifier.isFinal(field.modifiers))
         assertEquals(Long::class.javaPrimitiveType, field.type)
     }
 

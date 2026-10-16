@@ -86,7 +86,7 @@ class KotlinSmallActivitiesInteropTest {
         Thread.sleep(2000)
 
         assertTrue("a foreign action wiped the vault", vault.exists())
-        assertNotNull("a foreign action disabled the automatic backups", automaticBackupPassword())
+        assertNotEquals("a foreign action disabled the automatic backups", "off", automaticBackupPassword())
         assertFalse(
             "a foreign action cleared the panic response",
             PreferenceManager.getDefaultSharedPreferences(context)

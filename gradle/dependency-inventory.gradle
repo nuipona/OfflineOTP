@@ -37,12 +37,12 @@ tasks.register('writeDependencyInventory') {
         }
         record('root-buildscript', project.buildscript.configurations.classpath)
         def app = project(':app')
-        ['fdroidDebug', 'fdroidRelease', 'playDebug', 'playRelease',
-         'fdroidDebugUnitTest', 'playDebugUnitTest',
-         'fdroidDebugAndroidTest', 'playDebugAndroidTest'].each { variant ->
+        // Test-only classpaths are not inputs to the APKs. Gradle cannot pick one variant of :app for
+        // them outside their own tasks ("Could not resolve all artifacts ... variant ambiguity"),
+        // so they are not in the inventory; the unit and instrumentation test tasks resolve them.
+        ['fdroidDebug', 'fdroidRelease', 'playDebug', 'playRelease'].each { variant ->
             ['CompileClasspath', 'RuntimeClasspath'].each { suffix ->
                 def name = "${variant}${suffix}"
-                // Missing configurations are errors: do not silently omit test inputs.
                 record(name, app.configurations.getByName(name))
             }
         }
@@ -57,7 +57,8 @@ tasks.register('writeDependencyInventory') {
         // for both Kotlin-enabled Android modules.
         [app, securityClient].each { kotlinProject ->
             def kotlinTooling = kotlinProject.configurations.findAll { configuration ->
-                configuration.canBeResolved && (configuration.name.startsWith('kotlinCompiler')
+                configuration.canBeResolved && !(configuration.name ==~ /.*(UnitTest|AndroidTest).*/)
+                        && (configuration.name.startsWith('kotlinCompiler')
                         || configuration.name.startsWith('kotlinBuildTools'))
             }.sort { it.name }
             if (!kotlinTooling.any { it.name == 'kotlinCompilerClasspath' }) {

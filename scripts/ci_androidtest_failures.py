@@ -35,10 +35,18 @@ def main() -> int:
                 problem = case.find("error")
             if problem is None:
                 continue
-            message = (problem.get("message") or problem.text or "").strip().splitlines()
+            message = (problem.get("message") or "").strip().splitlines()
             detail = message[0][:160] if message else ""
+            # The first frame in the app's own code says where the failure came from.
+            trace = (problem.text or "").splitlines()
+            frame = next((line.strip() for line in trace if "org.shadowice.flocke" in line), "")
             name = f"{case.get('classname', '?').rsplit('.', 1)[-1]}.{case.get('name', '?')}"
-            failed.append(f"  {name[:200]}" + (f" -- {detail}" if detail else ""))
+            text = f"  {name[:200]}"
+            if detail:
+                text += f" -- {detail}"
+            if frame:
+                text += f"\n      {frame[:140]}"
+            failed.append(text)
     lines = [f"androidTest: {len(failed)} failing of {tests} cases in {len(files)} report(s)"]
     lines.extend(failed)
     message = "\n".join(lines)
