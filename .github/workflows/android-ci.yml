@@ -66,11 +66,11 @@ jobs:
                 line=${line//$'\r'/'%0D'}
                 echo "::error title=Gradle build::$line"
               done
-            tail=$(tail -60 /tmp/gradle-output.log)
-            tail=${tail//'%'/'%25'}
-            tail=${tail//$'\r'/'%0D'}
-            tail=${tail//$'\n'/'%0A'}
-            echo "::error title=Gradle failure tail::$tail"
+            context=$(awk '/^\* What went wrong:/{capture=1; count=0} capture {print; count++} capture && count == 15 {exit}' /tmp/gradle-output.log)
+            context=${context//'%'/'%25'}
+            context=${context//$'\r'/'%0D'}
+            context=${context//$'\n'/'%0A'}
+            echo "::error title=Gradle failure context::$context"
           fi
           exit "$status"
       - name: Compare independent builds and inspect packaged manifests
