@@ -31,6 +31,7 @@ allprojects {
             forRepository { maven { url "https://jitpack.io" } }
             filter {
                 includeGroup 'com.github.aakira'
+                includeGroup 'com.github.heinrichreimer'
                 includeGroup 'com.github.open-keychain.open-keychain'
             }
         }
