@@ -167,7 +167,7 @@ class UiDecompositionSourceTest(unittest.TestCase):
         body = codec[codec.index("fun serialize("):]
         self.assertEqual(["JSON_SECRET", "JSON_ISSUER", "JSON_LABEL", "JSON_DIGITS", "JSON_TYPE",
                           "JSON_ALGORITHM", "JSON_THUMBNAIL", "JSON_LAST_USED", "JSON_USED_FREQUENCY",
-                          "JSON_PERIOD", "JSON_COUNTER", "JSON_TAGS"],
+                          "JSON_PERIOD", "JSON_PERIOD", "JSON_COUNTER", "JSON_TAGS"],
                          re.findall(r"jsonObj\.put\((JSON_\w+)", body))
 
         # A closed failure set, an owned one-use seed and redacted diagnostics. No generated
@@ -183,8 +183,8 @@ class UiDecompositionSourceTest(unittest.TestCase):
         self.assertIn('check(!closed) { "Entry value already closed" }', contract)
 
         # Semantics a mechanical conversion could silently drop.
-        self.assertIn("if (type == OTPType.HOTP || type == OTPType.TOTP) {", entry)
-        self.assertIn("Objects.hash(type, period, counter, digits, algorithm, secret, label, issuer)", entry)
+        self.assertIn("if (type == OTPType.HOTP || type == OTPType.TOTP || type == OTPType.STEAM) {", entry)
+        self.assertIn("Objects.hash(type, period, counter, digits, algorithm, secret?.contentHashCode(), label, issuer)", entry)
         self.assertIn('secret ?: throw NullPointerException("Entry has no secret")', entry)
         self.assertIn("if (!json.has(JSON_SECRET)) reject(EntryJsonError.MISSING_SECRET)", codec)
         self.assertIn("InputPolicy.tokenParameters(period, digits, counter)", codec)
@@ -247,7 +247,7 @@ class UiDecompositionSourceTest(unittest.TestCase):
                         'builder.appendQueryParameter("algorithm", algorithm.name)',
                         'builder.appendQueryParameter("tags", tag)'):
             self.assertIn(written, to_uri)
-        for guard_line in ("if (type == OTPType.HOTP || type == OTPType.TOTP) {",
+        for guard_line in ("if (type == OTPType.HOTP || type == OTPType.TOTP || type == OTPType.STEAM) {",
                            "if (period != TokenCalculator.TOTP_DEFAULT_PERIOD)",
                            "if (digits != TokenCalculator.TOTP_DEFAULT_DIGITS)",
                            "if (algorithm != TokenCalculator.DEFAULT_ALGORITHM)"):
@@ -259,7 +259,10 @@ class UiDecompositionSourceTest(unittest.TestCase):
         update = entry[entry.index("fun updateOTP("):entry.index("fun hasColorChanged()")]
         self.assertIn("val seed = secret ?: return false", update)
         self.assertIn("if (updateNow || counter > last_update)", update)
-        self.assertIn("prevOTP = if (currentOTP.isNullOrEmpty()) \"\" else currentOTP", update)
+        # The cached token is reused as the previous one only after a single-period advance without an edit.
+        self.assertIn("val reusePrevious = !updateNow && counter == last_update + 1", update)
+        self.assertIn("prevOTP = if (reusePrevious && !currentOTP.isNullOrEmpty()) currentOTP else \"\"", update)
+        self.assertIn("prevOTP = \"\" // the placeholder is not a token", update)
         self.assertIn("currentOTP = MOTP_NO_PIN_CODE", update)
         self.assertIn("currentOTP = TokenCalculator.HOTP(seed, counter, digits, algorithm)", update)
         self.assertIn("last_update = counter", update)

@@ -2,13 +2,15 @@
 
 buildscript {
     configurations.classpath {
+        // Gradle rejects these guards together with dependency locking (see below).
         resolutionStrategy.failOnDynamicVersions()
         resolutionStrategy.failOnChangingVersions()
-        resolutionStrategy.activateDependencyLocking()
     }
     repositories {
         google()
         mavenCentral()
+        // AboutLibraries' Gradle plugin is published to the Gradle Plugin Portal, not to Maven Central.
+        gradlePluginPortal()
     }
     dependencies {
         classpath 'com.android.tools.build:gradle:8.13.2'
@@ -31,21 +33,20 @@ allprojects {
             filter {
                 includeGroup 'com.github.aakira'
                 includeGroup 'com.github.open-keychain.open-keychain'
+                // material-intro is published to JitPack under its own group, not com.github.*.
+                includeGroup 'com.heinrichreimersoftware'
             }
         }
     }
 }
 
 // Reject floating/changing dependencies instead of accepting a different graph silently.
+// Dependency locking is not enabled: Gradle refuses it together with these guards, and no
+// lockfiles are committed. Every version is pinned, so the guards enforce the same graph today.
 allprojects {
     configurations.configureEach {
         resolutionStrategy.failOnDynamicVersions()
         resolutionStrategy.failOnChangingVersions()
-    }
-    dependencyLocking {
-        lockAllConfigurations()
-        // Gradle's default mode permits bootstrapping when lockfiles are absent.
-        // Reviewed lockfiles, once present, are enforced on normal builds.
     }
     tasks.withType(AbstractArchiveTask).configureEach {
         preserveFileTimestamps = false

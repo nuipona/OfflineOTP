@@ -12,11 +12,16 @@ import android.view.View
  * listener; nothing is shown.
  */
 open class PopupMenu(context: Context, anchor: View) {
+    /** The click callback of the popup items; the appcompat type is nested in PopupMenu. */
+    fun interface OnMenuItemClickListener {
+        fun onMenuItemClick(item: MenuItem): Boolean
+    }
+
     private val menu = Menu()
     private val inflater = MenuInflater()
 
     /** The click listener that was set. */
-    var onMenuItemClickListener: MenuItem.OnMenuItemClickListener? = null
+    var onMenuItemClickListener: OnMenuItemClickListener? = null
         private set
 
     /** How often the menu was shown. */
@@ -27,7 +32,7 @@ open class PopupMenu(context: Context, anchor: View) {
 
     fun getMenu(): Menu = menu
 
-    fun setOnMenuItemClickListener(listener: MenuItem.OnMenuItemClickListener?) {
+    fun setOnMenuItemClickListener(listener: OnMenuItemClickListener?) {
         onMenuItemClickListener = listener
     }
 

@@ -256,7 +256,8 @@ open class Entry {
         if (type == OTPType.HOTP) {
             builder.appendQueryParameter("counter", counter.toString())
         }
-        if (type == OTPType.HOTP || type == OTPType.TOTP) {
+        // Steam URIs may carry a period; keep it so a re-import does not change the code timing.
+        if (type == OTPType.HOTP || type == OTPType.TOTP || type == OTPType.STEAM) {
             if (period != TokenCalculator.TOTP_DEFAULT_PERIOD)
                 builder.appendQueryParameter("period", period.toString())
         }
@@ -393,8 +394,12 @@ open class Entry {
             val counter = time / getPeriod()
 
             if (updateNow || counter > last_update) {
-                // Keep the previous token so it does not have to be recalculated
-                prevOTP = if (currentOTP.isNullOrEmpty()) "" else currentOTP
+                // The previous token is the one for the period before `counter`. The cached current
+                // token is only that one after a single-period advance; an edit (updateNow) may have
+                // changed the seed, period or PIN, and a longer gap (e.g. after the app was paused)
+                // leaves the cached token several periods behind. Both cases recalculate it.
+                val reusePrevious = !updateNow && counter == last_update + 1
+                prevOTP = if (reusePrevious && !currentOTP.isNullOrEmpty()) currentOTP else ""
 
                 when (type) {
                     OTPType.TOTP -> {
@@ -414,6 +419,7 @@ open class Entry {
 
                         if (currentPin.isEmpty()) {
                             currentOTP = MOTP_NO_PIN_CODE
+                            prevOTP = "" // the placeholder is not a token and must not be shown as one
                         } else {
                             currentOTP = TokenCalculator.MOTP(currentPin, String(seed), time, 0)
 
@@ -504,12 +510,11 @@ open class Entry {
     }
 
     /**
-     * The Java hash: the seed contributes its *array* identity, not its contents, so two
-     * content-equal entries do not have to hash alike. Kept as it was; changing it would alter the
-     * hash distribution the existing tests and collections were characterized with.
+     * Consistent with [equals], which compares the seed by content: equal entries must hash alike.
+     * (The Java hash used the array identity of the seed, which broke that contract.)
      */
     override fun hashCode(): Int {
-        return Objects.hash(type, period, counter, digits, algorithm, secret, label, issuer)
+        return Objects.hash(type, period, counter, digits, algorithm, secret?.contentHashCode(), label, issuer)
     }
 
     fun setColor(color: Int) {

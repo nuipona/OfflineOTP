@@ -73,7 +73,7 @@ object KeyStoreHelper {
         }
     }
 
-    /** Read-only lookup; a missing alias or a non-private entry is reported as `null`. */
+    /** Read-only lookup; a missing alias is reported as `null`. A non-private entry throws ClassCastException, as the Java cast did. */
     @JvmStatic
     @Throws(GeneralSecurityException::class, IOException::class)
     fun loadAsymmetricKeyPair(context: Context, alias: String): KeyPair? {

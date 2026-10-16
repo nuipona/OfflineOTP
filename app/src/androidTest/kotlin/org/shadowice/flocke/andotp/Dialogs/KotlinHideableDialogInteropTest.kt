@@ -48,9 +48,9 @@ class KotlinHideableDialogInteropTest {
                 prefs.edit().remove(key).commit()
                 val currentDialog = RecordingDialog(context, keyId)
                 dialog = currentDialog
-                val content = currentDialog.findViewById<TextView>(R.id.dialogContent)
-                val checkbox = currentDialog.findViewById<CheckBox>(R.id.dontShowAgain)
-                val ok = currentDialog.findViewById<Button>(R.id.buttonOk)
+                val content = requireNotNull(currentDialog.findViewById<TextView>(R.id.dialogContent))
+                val checkbox = requireNotNull(currentDialog.findViewById<CheckBox>(R.id.dontShowAgain))
+                val ok = requireNotNull(currentDialog.findViewById<Button>(R.id.buttonOk))
                 assertNotNull(content)
                 assertNotNull(checkbox)
                 assertNotNull(ok)

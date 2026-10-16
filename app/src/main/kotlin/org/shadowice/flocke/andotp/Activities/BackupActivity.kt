@@ -124,8 +124,12 @@ open class BackupActivity : BackgroundTaskActivity<BackupTaskResult>() {
         setupBackupType(settings!!.getDefaultBackupType())
         spBackupType.setSelection(backupType.ordinal)
 
-        spBackupType.onItemSelectedListener = AdapterView.OnItemSelectedListener { _, _, i, _ ->
-            setupBackupType(Constants.BackupType.values()[i])
+        spBackupType.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
+            override fun onItemSelected(parent: AdapterView<*>?, selectedView: View?, i: Int, selectedId: Long) {
+                setupBackupType(Constants.BackupType.values()[i])
+            }
+
+            override fun onNothingSelected(parent: AdapterView<*>?) {}
         }
 
         btnBackup?.setOnClickListener {

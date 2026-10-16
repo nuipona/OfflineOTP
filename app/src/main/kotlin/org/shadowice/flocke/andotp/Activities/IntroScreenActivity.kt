@@ -204,16 +204,20 @@ open class IntroScreenActivity : IntroActivity() {
 
             generateSelectionMapping()
 
-            spinner.onItemSelectedListener = AdapterView.OnItemSelectedListener { _, _, i, _ ->
-                val encryptionType = selectionMapping.get(i)
+            spinner.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
+                override fun onItemSelected(parent: AdapterView<*>?, selectedView: View?, i: Int, selectedId: Long) {
+                    val encryptionType = selectionMapping.get(i)
 
-                if (encryptionType == Constants.EncryptionType.PASSWORD)
-                    description.setText(R.string.intro_slide2_desc_password)
-                else if (encryptionType == Constants.EncryptionType.KEYSTORE)
-                    description.setText(R.string.intro_slide2_desc_keystore)
+                    if (encryptionType == Constants.EncryptionType.PASSWORD)
+                        description.setText(R.string.intro_slide2_desc_password)
+                    else if (encryptionType == Constants.EncryptionType.KEYSTORE)
+                        description.setText(R.string.intro_slide2_desc_keystore)
 
-                if (encryptionType != null)
-                    encryptionChangedCallback?.onEncryptionChanged(encryptionType)
+                    if (encryptionType != null)
+                        encryptionChangedCallback?.onEncryptionChanged(encryptionType)
+                }
+
+                override fun onNothingSelected(parent: AdapterView<*>?) {}
             }
 
             spinner.setSelection(selectionMapping.indexOfValue(Constants.EncryptionType.PASSWORD))
@@ -501,24 +505,28 @@ open class IntroScreenActivity : IntroActivity() {
             spinnerArrayAdapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
             spinner.adapter = spinnerArrayAdapter
 
-            spinner.onItemSelectedListener = AdapterView.OnItemSelectedListener { adapterView, _, i, _ ->
-                val authMethod = selectionMapping.get(i)
+            spinner.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
+                override fun onItemSelected(adapterView: AdapterView<*>?, selectedView: View?, i: Int, selectedId: Long) {
+                    val authMethod = selectionMapping.get(i)
 
-                if (authMethod == Constants.AuthMethod.PASSWORD) {
-                    setupForPasswordInput()
-                } else if (authMethod == Constants.AuthMethod.PIN) {
-                    setupForPinInput()
-                } else {
-                    credentials.visibility = View.INVISIBLE
-                    UIHelper.hideKeyboard(getIntroActivity()!!, root)
+                    if (authMethod == Constants.AuthMethod.PASSWORD) {
+                        setupForPasswordInput()
+                    } else if (authMethod == Constants.AuthMethod.PIN) {
+                        setupForPinInput()
+                    } else {
+                        credentials.visibility = View.INVISIBLE
+                        UIHelper.hideKeyboard(getIntroActivity()!!, root)
+                    }
+
+                    pwdInput.setText(null)
+                    pwdConfirm.setText(null)
+
+                    authWarnings?.visibility = View.GONE
+
+                    updateNavigation()
                 }
 
-                pwdInput.setText(null)
-                pwdConfirm.setText(null)
-
-                authWarnings?.visibility = View.GONE
-
-                updateNavigation()
+                override fun onNothingSelected(parent: AdapterView<*>?) {}
             }
 
             val textWatcher = object : TextWatcher {

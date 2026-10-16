@@ -29,8 +29,8 @@ class KotlinNumberPickerPreferenceInteropTest {
         R.style.AppTheme
     )
 
-    private class TestPreference(context: Context, attrs: AttributeSet?) :
-        NumberPickerPreference(context, attrs) {
+    private class TestPreference : NumberPickerPreference {
+        constructor(context: Context, attrs: AttributeSet?) : super(context, attrs)
         constructor(context: Context, attrs: AttributeSet?, style: Int) : super(context, attrs, style)
 
         val writes = ArrayList<Int>()

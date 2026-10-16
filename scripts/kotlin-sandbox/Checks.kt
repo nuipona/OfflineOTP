@@ -5079,6 +5079,60 @@ fun main() {
         expect(second.isCanceled(), { "the canceled fragment does not report the cancellation" })
     }
 
+    check("token grouping terminates for non-positive chunks; entry hash follows content equality") {
+        expect(Tools.formatToken("12345678", 0) == "12345678", { "chunk 0 must return the input" })
+        expect(Tools.formatToken("12345678", -3) == "12345678", { "negative chunk must return the input" })
+        expect(Tools.formatToken("12345678", 3) == "12 345 678", { Tools.formatToken("12345678", 3).toString() })
+        expect(Tools.formatToken(null, 3) == null, { "null must stay null" })
+
+        // Two entries built from the same seed text hold distinct arrays but equal content.
+        val first = Entry(Entry.OTPType.TOTP, ENTRY_SEED, 30, 6, "ACME", "label",
+            TokenCalculator.HashAlgorithm.SHA1, arrayListOf())
+        val second = Entry(Entry.OTPType.TOTP, ENTRY_SEED, 30, 6, "ACME", "label",
+            TokenCalculator.HashAlgorithm.SHA1, arrayListOf())
+        expect(first == second, { "content-equal entries must be equal" })
+        expect(first.hashCode() == second.hashCode(), { "equal entries must hash alike" })
+    }
+
+    check("a non-default Steam period survives JSON and URI round trips; defaults stay unchanged") {
+        val steam = Entry(Entry.OTPType.STEAM, ENTRY_SEED, 60, TokenCalculator.STEAM_DEFAULT_DIGITS, "ACME", "steam",
+            TokenCalculator.HashAlgorithm.SHA1, arrayListOf())
+        val json = steam.toJSON()
+        expect(json.getInt("period") == 60, { "the Steam period was not serialized: $json" })
+        val restored = Entry(json)
+        expect(restored.getPeriod() == 60, { "the Steam period was lost on JSON restore: ${restored.getPeriod()}" })
+
+        val uri = steam.toUri().toString()
+        expect(uri.contains("period=60"), { "the Steam period is missing from the URI: $uri" })
+
+        val defaultSteam = Entry(Entry.OTPType.STEAM, ENTRY_SEED, 30, TokenCalculator.STEAM_DEFAULT_DIGITS, "ACME", "steam",
+            TokenCalculator.HashAlgorithm.SHA1, arrayListOf())
+        expect(!defaultSteam.toJSON().has("period"), { "a default Steam period must not be written" })
+        expect(!defaultSteam.toUri().toString().contains("period="), { "a default Steam period must not be in the URI" })
+    }
+
+    check("the previous token is the one for the period before the current one; an empty mOTP PIN shows none") {
+        val key = ascii("1234567890")
+        val totp = Entry(Entry.OTPType.TOTP, ENTRY_SEED, 30, 6, "ACME", "label",
+            TokenCalculator.HashAlgorithm.SHA1, arrayListOf())
+        val before = System.currentTimeMillis() / 1000
+        totp.updateOTP(true)
+        val after = System.currentTimeMillis() / 1000
+        // The previous token is the one for the period before the update's own time; the period
+        // boundary may pass between the two clock reads, so either reading is accepted.
+        fun prevAt(time: Long): String = Tools.formatTokenString(
+            TokenCalculator.TOTP_RFC6238(key, 30, time, 6, TokenCalculator.HashAlgorithm.SHA1, -1), 6)
+        val prev = totp.getPrevOTP()
+        expect(prev == prevAt(before) || prev == prevAt(after), { "unexpected previous token: $prev" })
+        expect(prev != totp.getCurrentOTP(), { "the previous token must differ from the current one" })
+
+        val motp = Entry(Entry.OTPType.MOTP, ENTRY_SEED, 10, 6, "ACME", "motp",
+            TokenCalculator.HashAlgorithm.SHA1, arrayListOf())
+        motp.updateOTP(true)
+        expect(motp.getCurrentOTP() == "PINREQ", { "an empty PIN must show the placeholder: ${motp.getCurrentOTP()}" })
+        expect(motp.getPrevOTP() == "", { "the placeholder must not be shown as a previous token: ${motp.getPrevOTP()}" })
+    }
+
     if (failures == 0) {
         println("\nAll sandbox checks passed.")
     } else {

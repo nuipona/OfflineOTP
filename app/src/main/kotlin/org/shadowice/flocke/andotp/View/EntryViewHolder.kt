@@ -83,9 +83,10 @@ open class EntryViewHolder(context: Context, v: View, tapToReveal: Boolean) :
         // Style the buttons in the current theme colors
         val colorFilter: ColorFilter = Tools.getThemeColorFilter(context, android.R.attr.textColorSecondary)
 
-        menuButton.getDrawable()!!.setColorFilter(colorFilter)
-        copyButton.getDrawable()!!.setColorFilter(colorFilter)
-        invisibleImg.getDrawable()!!.setColorFilter(colorFilter)
+        // app:srcCompat drawables are missing when the layout is inflated without AppCompat's factory.
+        menuButton.getDrawable()?.setColorFilter(colorFilter)
+        copyButton.getDrawable()?.setColorFilter(colorFilter)
+        invisibleImg.getDrawable()?.setColorFilter(colorFilter)
 
         setupOnClickListeners(menuButton, copyButton)
 
@@ -294,19 +295,19 @@ open class EntryViewHolder(context: Context, v: View, tapToReveal: Boolean) :
         when (labelDisplay) {
             Constants.LabelDisplay.TRUNCATE -> {
                 label.ellipsize = TextUtils.TruncateAt.END
-                label.isHorizontallyScrolling = false
+                label.setHorizontallyScrolling(false)
                 label.isSelected = false
                 label.maxLines = if (cardLayout == Constants.CardLayouts.FULL) 2 else 1
             }
             Constants.LabelDisplay.SCROLL -> {
                 label.ellipsize = TextUtils.TruncateAt.MARQUEE
-                label.isHorizontallyScrolling = true
+                label.setHorizontallyScrolling(true)
                 label.isSelected = true
                 label.maxLines = if (cardLayout == Constants.CardLayouts.FULL) 2 else 1
             }
             Constants.LabelDisplay.MULTILINE -> {
                 label.ellipsize = null
-                label.isHorizontallyScrolling = false
+                label.setHorizontallyScrolling(false)
                 label.isSelected = false
                 label.maxLines = 10
             }
@@ -367,7 +368,7 @@ open class EntryViewHolder(context: Context, v: View, tapToReveal: Boolean) :
             textColor = Tools.getThemeColor(context, android.R.attr.textColorSecondary)
         }
 
-        value.textColor = textColor
-        valuePrev.textColor = textColor
+        value.setTextColor(textColor)
+        valuePrev.setTextColor(textColor)
     }
 }

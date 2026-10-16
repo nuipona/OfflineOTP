@@ -51,13 +51,37 @@ jobs:
           cmdline-tools-version: '12266719'
           packages: 'platform-tools platforms;android-36 build-tools;36.0.0'
       - name: Host regression tests, focused lint and debug APKs
-        run: >-
-          ./gradlew --no-daemon
-          :app:testFdroidDebugUnitTest :app:testPlayDebugUnitTest
-          :app:lintFdroidRelease :app:lintPlayRelease
-          :app:assembleFdroidDebug :app:assemblePlayDebug
+        shell: bash
+        run: |
+          (while true; do echo "$(date +%T) $(free -m | awk '/Mem:/{print "used=" $3 "MB"}')"; sleep 5; done) > mem-host.log 2>&1 &
+          rc=0
+          ./gradlew --no-daemon \
+            :app:testFdroidDebugUnitTest :app:testPlayDebugUnitTest \
+            :app:lintFdroidRelease :app:lintPlayRelease \
+            :app:assembleFdroidDebug :app:assemblePlayDebug > gradle-host.log 2>&1 || rc=$?
+          echo "gradle exit code: $rc" >> gradle-host.log
+          exit $rc
+      - name: Publish Gradle failure context
+        if: failure()
+        run: |
+          python3 scripts/diagnose_ci_failure.py gradle-host.log mem-host.log
+          python3 scripts/ci_failure_annotation.py gradle-host.log
+          # Lint reports every finding in its text report; Gradle only prints the first one.
+          for report in app/build/intermediates/lint_intermediate_text_report/*/lintReport*/lint-results-*.txt; do
+            [ -f "$report" ] && python3 scripts/ci_failure_annotation.py "$report"
+          done
+          true
       - name: Compare independent builds and inspect packaged manifests
-        run: bash scripts/verify_reproducible_build.sh
+        run: |
+          set -o pipefail
+          mkdir -p reports/reproducibility
+          bash scripts/verify_reproducible_build.sh 2>&1 | tee reports/reproducibility/verify.log
+      - name: Publish reproducibility failure context
+        if: failure()
+        run: |
+          if [ -f reports/reproducibility/verify.log ]; then
+            python3 scripts/ci_failure_annotation.py reports/reproducibility/verify.log
+          fi
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         if: always()
         with:
@@ -67,6 +91,8 @@ jobs:
             reports/reproducibility/
             app/build/reports/
             app/build/test-results/
+            gradle-host.log
+            mem-host.log
 
   android-tests:
     name: ${{ matrix.flavor }} security tests on API ${{ matrix.api }}
@@ -101,10 +127,16 @@ jobs:
           arch: x86_64
           target: google_apis
           disable-animations: true
-          script: |
-            set -e
-            ./gradlew --no-daemon :security-test-client:installDebug
-            ./gradlew --no-daemon :app:connected${{ matrix.flavor }}DebugAndroidTest
+          script: bash scripts/ci_emulator_tests.sh ${{ matrix.flavor }}
+      - name: Publish Gradle failure context
+        if: failure()
+        run: |
+          python3 scripts/diagnose_ci_failure.py gradle-install.log gradle-connected.log mem-emulator.log
+          for log in gradle-install.log gradle-connected.log; do
+            [ -f "$log" ] && python3 scripts/ci_failure_annotation.py "$log"
+          done
+          python3 scripts/ci_androidtest_failures.py
+          true
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         if: always()
         with:
@@ -113,3 +145,6 @@ jobs:
           path: |
             app/build/reports/androidTests/
             app/build/outputs/androidTest-results/
+            gradle-install.log
+            gradle-connected.log
+            mem-emulator.log

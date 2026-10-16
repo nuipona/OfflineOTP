@@ -94,7 +94,7 @@ class EntryActionDialogs(private val context: Context, private val settings: Set
 
     fun pin(current: String, save: Consumer<String>) {
         val input = input()
-        input.rawInputType = InputType.TYPE_NUMBER_VARIATION_PASSWORD or InputType.TYPE_CLASS_NUMBER
+        input.setRawInputType(InputType.TYPE_NUMBER_VARIATION_PASSWORD or InputType.TYPE_CLASS_NUMBER)
         input.setText(current)
         input.transformationMethod = PasswordTransformationMethod.getInstance()
         input.requestFocus()

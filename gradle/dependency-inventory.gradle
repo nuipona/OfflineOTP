@@ -8,7 +8,7 @@ tasks.register('writeDependencyInventory') {
     outputs.upToDateWhen { false }
     doLast {
         def lines = new TreeSet<String>()
-        def record = { String label, configuration ->
+        def recordResolved = { String label, configuration ->
             configuration.incoming.resolutionResult.allDependencies.each { dependency ->
                 if (dependency instanceof org.gradle.api.artifacts.result.UnresolvedDependencyResult) {
                     throw new GradleException("Unresolved dependency in ${label}: ${dependency.attempted}", dependency.failure)
@@ -27,14 +27,22 @@ tasks.register('writeDependencyInventory') {
                 lines.add("artifact ${label} ${artifact.moduleVersion.id} ${artifact.name}:${artifact.classifier ?: ''}:${artifact.extension} ${digest.digest().encodeHex()}")
             }
         }
+        // Name the configuration in the error: Gradle's variant-ambiguity text does not say which consumer failed.
+        def record = { String label, configuration ->
+            try {
+                recordResolved(label, configuration)
+            } catch (Exception failure) {
+                throw new GradleException("Dependency inventory could not resolve ${label}", failure)
+            }
+        }
         record('root-buildscript', project.buildscript.configurations.classpath)
         def app = project(':app')
-        ['fdroidDebug', 'fdroidRelease', 'playDebug', 'playRelease',
-         'fdroidDebugUnitTest', 'playDebugUnitTest',
-         'fdroidDebugAndroidTest', 'playDebugAndroidTest'].each { variant ->
+        // Test-only classpaths are not inputs to the APKs. Gradle cannot pick one variant of :app for
+        // them outside their own tasks ("Could not resolve all artifacts ... variant ambiguity"),
+        // so they are not in the inventory; the unit and instrumentation test tasks resolve them.
+        ['fdroidDebug', 'fdroidRelease', 'playDebug', 'playRelease'].each { variant ->
             ['CompileClasspath', 'RuntimeClasspath'].each { suffix ->
                 def name = "${variant}${suffix}"
-                // Missing configurations are errors: do not silently omit test inputs.
                 record(name, app.configurations.getByName(name))
             }
         }
@@ -49,7 +57,8 @@ tasks.register('writeDependencyInventory') {
         // for both Kotlin-enabled Android modules.
         [app, securityClient].each { kotlinProject ->
             def kotlinTooling = kotlinProject.configurations.findAll { configuration ->
-                configuration.canBeResolved && (configuration.name.startsWith('kotlinCompiler')
+                configuration.canBeResolved && !(configuration.name ==~ /.*(UnitTest|AndroidTest).*/)
+                        && (configuration.name.startsWith('kotlinCompiler')
                         || configuration.name.startsWith('kotlinBuildTools'))
             }.sort { it.name }
             if (!kotlinTooling.any { it.name == 'kotlinCompilerClasspath' }) {

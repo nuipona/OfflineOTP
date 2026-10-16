@@ -5,6 +5,7 @@ import android.database.DataSetObserver
 import android.view.LayoutInflater
 import android.view.View
 import android.view.autofill.AutofillValue
+import android.widget.AbsListView
 import android.widget.CheckedTextView
 import android.widget.FrameLayout
 import android.widget.GridView
@@ -161,7 +162,7 @@ class KotlinSmallAdaptersInteropTest {
             assertEquals(size, image.layoutParams.height)
             assertEquals("GitHub", image.contentDescription.toString())
             assertNotNull(image.drawable)
-            image.layoutParams = GridView.LayoutParams(7, 9)
+            image.layoutParams = AbsListView.LayoutParams(7, 9)
             adapter.filter("Google")
             assertSame(image, adapter.getView(0, image, parent))
             assertEquals("Google", image.contentDescription.toString())
@@ -177,7 +178,7 @@ class KotlinSmallAdaptersInteropTest {
             AutoFillableTextInputEditText(context, null)
             AutoFillableTextInputEditText(context, null, androidx.appcompat.R.attr.editTextStyle)
             val layout = LayoutInflater.from(context).inflate(R.layout.content_authenticate, null, false)
-            val field = layout.findViewById<AutoFillableTextInputEditText>(R.id.passwordEdit)
+            val field = requireNotNull(layout.findViewById<AutoFillableTextInputEditText>(R.id.passwordEdit))
             assertNotNull(field)
             val callbacks = AtomicInteger()
             field.setAutoFillTextListener { text ->

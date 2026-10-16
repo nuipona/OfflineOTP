@@ -19,4 +19,12 @@
 
     <color name="expiring_red_light">#f05545</color>            <!-- Light variant of the expiring-entry red -->
     <color name="expiring_red_dark">#d50000</color>             <!-- Dark variant of the expiring-entry red -->
+    <!-- Colors of the About screen themes, with the values AboutLibraries 6.2.3 defined (the 14.x library
+         no longer defines the dark variants the app's themes reference). -->
+    <color name="about_libraries_text_openSource">#727272</color>
+    <color name="about_libraries_dividerDark_openSource">#AAA</color>
+    <color name="about_libraries_dividerLight_openSource">#DADADA</color>
+    <color name="about_libraries_text_openSource_dark">#DEDEDE</color>
+    <color name="about_libraries_dividerDark_openSource_dark">#303030</color>
+    <color name="about_libraries_dividerLight_openSource_dark">#303030</color>
 </resources>

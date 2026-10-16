@@ -43,6 +43,8 @@ class OtpUriParserTest {
             assertEquals(listOf("work space", "a+b"), it.tags)
         }
         success("otpauth://totp/a+b?secret=$seed").use { assertEquals("a+b", it.label) }
+        // A raw space is accepted as the Java parser did; the label is trimmed.
+        success("otpauth://totp/ :john.doe@email.com?secret=$seed").use { assertEquals(":john.doe@email.com", it.label) }
         success("otpauth://totp/ACME%3Aalice?secret=$seed").use { assertEquals("ACME:alice", it.label) }
         success("otpauth://totp/%252F?secret=$seed").use { assertEquals("%2F", it.label) }
     }

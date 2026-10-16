@@ -61,8 +61,12 @@ open class PanicResponderActivity : Activity() {
                 KeyStoreHelper.wipeKeys(this)
             }
 
-            if (response.contains("settings"))
+            if (response.contains("settings")) {
                 settings.clear(true)
+                // clear() removes every preference, including the "off" marker written above;
+                // the automatic backups must stay disabled after a settings wipe.
+                settings.disableAutomaticBackups()
+            }
         }
 
         finishAndRemoveTask()

@@ -92,7 +92,7 @@ class KotlinBackupComponentsInteropTest {
         )
     }
 
-    private fun queuedWork(): List<WorkInfo> = requireNotNull(work)
+    private fun queuedWork(): kotlin.collections.List<WorkInfo> = requireNotNull(work)
         .getWorkInfosForUniqueWork(EncryptedBackupBroadcastReceiver.UNIQUE_WORK_NAME)
         .get(10, TimeUnit.SECONDS)
 

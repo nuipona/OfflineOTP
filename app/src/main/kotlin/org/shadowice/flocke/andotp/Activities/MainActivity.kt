@@ -255,7 +255,7 @@ open class MainActivity : BaseActivity(), SharedPreferences.OnSharedPreferenceCh
 
         dial.setOnActionSelectedListener { speedDialActionItem ->
             if (VaultSession.getKey() == null) return@setOnActionSelectedListener false
-            val actionId = speedDialActionItem.getItemId()
+            val actionId = speedDialActionItem.getId()
 
             if (actionId == R.id.fabScanQR)
                 scanQRCode()

@@ -2,9 +2,13 @@
 package com.leinardi.android.speeddial
 
 import android.content.Context
-import android.view.MenuItem
 import android.view.View
 import android.view.ViewGroup
+
+/** An action item of the speed dial. The platform identifies it with getId(). */
+class SpeedDialActionItem(private val id: Int) {
+    fun getId(): Int = id
+}
 
 /** The floating action button menu of the main screen. */
 open class SpeedDialView(context: Context) : ViewGroup() {
@@ -52,7 +56,7 @@ open class SpeedDialView(context: Context) : ViewGroup() {
 
     /** The action callbacks of the speed dial. */
     fun interface OnActionSelectedListener {
-        fun onActionSelected(item: MenuItem): Boolean
+        fun onActionSelected(item: SpeedDialActionItem): Boolean
     }
 
     /** The state callbacks of the speed dial. */
