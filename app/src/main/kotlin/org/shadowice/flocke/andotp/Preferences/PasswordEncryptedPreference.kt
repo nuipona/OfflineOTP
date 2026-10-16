@@ -130,10 +130,11 @@ open class PasswordEncryptedPreference(context: Context, attrs: AttributeSet?) :
     }
 
     /** Loads and decrypts the stored Base64 value. */
-    private fun restoreAndDecrypt(encValue: String) {
+    private fun restoreAndDecrypt(encValue: String?) {
         try {
             val pair = requireNotNull(key)
-            val encBytes = Base64.decode(encValue, Base64.URL_SAFE)
+            val encoded = requireNotNull(encValue)
+            val encBytes = Base64.decode(encoded, Base64.URL_SAFE)
             value = String(EncryptionHelper.decrypt(pair.getPrivate(), encBytes), StandardCharsets.UTF_8)
         } catch (e: Exception) {
             e.printStackTrace()
