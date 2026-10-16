@@ -2,10 +2,9 @@
 
 buildscript {
     configurations.classpath {
-        // Gradle rejects failOnDynamicVersions() together with dependency locking, so the
-        // build plugins rely on pinned versions plus locking; changing versions still fail.
+        // Gradle rejects these guards together with dependency locking (see below).
+        resolutionStrategy.failOnDynamicVersions()
         resolutionStrategy.failOnChangingVersions()
-        resolutionStrategy.activateDependencyLocking()
     }
     repositories {
         google()
@@ -38,16 +37,12 @@ allprojects {
 }
 
 // Reject floating/changing dependencies instead of accepting a different graph silently.
+// Dependency locking is not enabled: Gradle refuses it together with these guards, and no
+// lockfiles are committed. Every version is pinned, so the guards enforce the same graph today.
 allprojects {
     configurations.configureEach {
-        // failOnDynamicVersions() is incompatible with dependency locking (Gradle rejects the
-        // combination at configuration time). All dependency versions are pinned, so nothing floats.
+        resolutionStrategy.failOnDynamicVersions()
         resolutionStrategy.failOnChangingVersions()
-    }
-    dependencyLocking {
-        lockAllConfigurations()
-        // Gradle's default mode permits bootstrapping when lockfiles are absent.
-        // Reviewed lockfiles, once present, are enforced on normal builds.
     }
     tasks.withType(AbstractArchiveTask).configureEach {
         preserveFileTimestamps = false
