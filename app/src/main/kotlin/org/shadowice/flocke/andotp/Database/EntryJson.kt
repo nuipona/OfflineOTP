@@ -119,6 +119,9 @@ object EntryJson {
 
         if (kind == OtpKind.TOTP)
             jsonObj.put(JSON_PERIOD, period)
+        else if (kind == OtpKind.STEAM && period != DEFAULT_PERIOD)
+            // Only a non-default Steam period is written, so default Steam documents stay byte-identical.
+            jsonObj.put(JSON_PERIOD, period)
         else if (kind == OtpKind.HOTP)
             jsonObj.put(JSON_COUNTER, counter)
 

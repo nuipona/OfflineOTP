@@ -76,7 +76,8 @@ object Tools {
 
     /** Splits the token into groups of {@code chunkSize} characters. */
     @JvmStatic fun formatToken(s: String?, chunkSize: Int): String? {
-        if (chunkSize == 0 || s == null) return s
+        // A non-positive chunk never shrinks the index below zero and would loop forever.
+        if (chunkSize <= 0 || s == null) return s
 
         val ret = StringBuilder()
         var index = s.length
