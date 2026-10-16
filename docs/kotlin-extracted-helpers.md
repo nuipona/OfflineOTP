@@ -256,11 +256,39 @@ Sixteenth batch (settings facade):
   `Class.getDeclaredMethods()` resolves every declared signature eagerly, so the Java-only `Constants`
   enums without a class file fail the lookup before a name is compared.
 
-No activity, entry-card list adapter/view holder, fragment, `CredentialsPreference`, receiver, worker
-or large manual-entry dialog is converted; the task runner and its subclasses are, and so are the entry
+Seventeenth batch (the Android components):
+
+- `Receivers/BackupBroadcastReceiver.kt` and `Receivers/EncryptedBackupBroadcastReceiver.kt` replace
+  their Java implementations, and `Tasks/EncryptedBackupWorker.kt` replaces the WorkManager worker.
+  The classes stay extendable, the two constants stay `public static final` fields (the panic
+  responder and the settings screen cancel the queued work by its name) and the check order —
+  action, opt-in, location, throttled slot, password, encryption type — is unchanged, with the
+  same four distinct failure messages and the same `KEEP` policy for the queued work.
+- `Utilities/BackupAgent.kt` replaces the legacy platform backup agent: the class stays extendable
+  and the restore stays refused with the same message. Its callback parameters stay nullable, so
+  the refusal is not preceded by a Kotlin null check the Java version did not have.
+- The one structural change is the worker's call into the task layer: the Java worker reached the
+  task's `protected doInBackground()` through the package, and Kotlin's `protected` has no
+  package-private part. The call is therefore made from a private nested subclass of
+  `EncryptedBackupTask`, which may reach the inherited member on itself. The task class, its
+  Java-visible surface and the fact that the backup runs on the caller's thread are unchanged.
+- The Java `@NonNull` annotations are not repeated: the Kotlin types are not nullable. The
+  `Result` of the worker is imported explicitly (`androidx.work.ListenableWorker.Result`), so it
+  cannot be confused with `kotlin.Result`.
+- The sandbox compiles all four and asserts their Java-visible shapes: the two constants, the
+  protected `canSaveBackup` helper, the abstract base class, the worker's constructor and result
+  type and the agent's `IOException`-declaring restore. It **executes** the receiver's action gate
+  (another action is ignored entirely) and the worker's early exits (stopped or disabled work
+  fails without a notification), and the agent's refusal. The failure paths behind them post a
+  notification through the Java-only `Constants.NotificationChannel`, which has no class file in
+  the sandbox, and the happy path needs the AndroidKeyStore; both are covered by the source guards
+  and by the new `KotlinBackupComponentsInteropTest` (Java, instrumentation) instead.
+
+No activity, entry-card list adapter/view holder, fragment, `CredentialsPreference` or large
+manual-entry dialog is converted; the task runner and its subclasses are, and so are the entry
 model, the vault repository, the document/backup, notification, QR-image and three small UI pieces
-above, plus the crypto and KeyStore helpers and the settings facade — the three Java files that
-remain under `Utilities/` are `Constants.java`, `FileHelper.java` and `BackupAgent.java`. The repository's own
+above, plus the crypto and KeyStore helpers, the settings facade and the Android components — the
+two Java files that remain under `Utilities/` are `Constants.java` and `FileHelper.java`. The repository's own
 storage primitives (`Utilities/FileHelper.java`) and the Android file/preference surface it uses stay
 Java and are resolved by the sandbox rather than converted. No coroutine, Compose, new
 dependency, SDK/bytecode target, storage format or crypto change is included.
@@ -842,14 +870,26 @@ uses real inflated password widgets from Java for both modes, privacy flags, wat
 editor-action behavior; `KotlinPasswordEncryptedPreferenceInteropTest` records preference writes
 while exercising the real AndroidKeyStore round trip, first-attachment null default, restored field,
 input modes and matching rule. Both are checked in but have **not been compiled or run** here.
+With the component batch the stem list gains `Receivers/BackupBroadcastReceiver`,
+`Receivers/EncryptedBackupBroadcastReceiver`, `Tasks/EncryptedBackupWorker` and
+`Utilities/BackupAgent`, and `scripts/tests/test_kotlin_backup_components_conversion.py` pins the
+replacements, the receiver's and worker's check order, the four distinct failure messages, the
+throttled slot in front of the password check, the `KEEP` policy and the queued worker class, the
+entry cleanup and the generation check of the backup, the private subclass that reaches the task's
+`protected doInBackground()`, the refused platform restore, the Java callers that cancel the queued
+work by its name and the manifest entry with its signature permission.
+`KotlinBackupComponentsInteropTest` (Java, instrumentation) covers what the sandbox cannot reach:
+the real broadcast with a keystore-backed password queues the work, the disabled broadcast and
+another action queue nothing, and the queued work really runs the worker and reaches a terminal
+state. It has **not been compiled or run** here.
 
 ### Executed here: partial sandbox compile/run check
 
 `scripts/kotlin-sandbox/` compiles the converted platform-free/low-platform sources against
 hand-written platform stubs and runs `Checks.kt` on a desktop JVM; `bootstrap-toolchain.sh` fetches
 a JDK and the Kotlin compiler from package mirrors when the machine has neither. Executed on
-2026-10-15 with **Kotlin 2.3.20 and 2.4.21 plus Temurin 25.0.2** (`-jvm-target 1.8`), it reports 63 passing
-checks after the fourteenth batch:
+2026-10-15 with **Kotlin 2.3.20 and 2.4.21 plus Temurin 25.0.2** (`-jvm-target 1.8`), it reports 81 passing
+checks after the seventeenth batch:
 
 - RFC 6238 TOTP vectors (SHA-1/256/512, six timestamps, eight digits) and RFC 4226 HOTP vectors.
 - TOTP/HOTP agreement with an independent HMAC implementation, including offsets and 1/30/60/86400 s periods.
@@ -985,6 +1025,19 @@ checks after the fourteenth batch:
 - The converted sources are compiled with the real `Utilities/Constants.java` on the resolution
   path, so `SecretKeyWrapper` is checked against the actual package-private constant rather than a copy.
 - Reflection assertions on the Java-visible shapes (static forwarders, constant fields, checked exceptions, synchronized methods, enum constants, private constructor, non-final class where the Java was extendable, abstract callbacks, and the deliberate `object` delta for static-only utilities).
+- The converted Android components: the receiver's action gate is **executed** (a null intent and
+  another action are ignored without touching the settings, the notifications or the work manager),
+  the worker's early exits are **executed** (stopped or disabled work fails without a
+  notification), the legacy agent's refusal is **executed** (the restore throws the documented
+  `IOException`, and the refusal is not preceded by a null check on the platform's arguments), and
+  the Java-visible shapes of all four are reflected (the two public static final constants, the
+  protected `canSaveBackup` helper, the abstract base class, the worker's constructor and its
+  `ListenableWorker.Result` return type, the agent's `IOException`-declaring restore). The failure
+  paths behind the action gate post a notification through the Java-only
+  `Constants.NotificationChannel` and the happy path needs the AndroidKeyStore, so they are pinned
+  by the Python source guard and by the device test instead. The sandbox gained the
+  `androidx.work` and `android.app.backup` stand-ins for this; the worker's stop flag is a
+  stand-in property, and the recorded enqueues are not work.
 - The runner's `isCanceled()` is asserted **overridable** — the regression that converting
   `EncryptedBackupTask` exposed (see [task runner and `isCanceled()`](#task-runner-and-iscanceled))
   cannot silently return.
@@ -1022,9 +1075,11 @@ tracked in the [decomposition plan](ui-decomposition-plan.md).
   resolution source (see the sandbox check) confirms that same-package Kotlin reads the
   package-private `ALGORITHM_ASYMMETRIC` constant, and the harness now resolves that Java source
   instead of mirroring it.
-- `Tasks/EncryptedBackupWorker.java`: it is a WorkManager `Worker` — an Android-scheduled entry
-  point like the activities and receivers, not a task subclass over the runner. Component
-  conversion is a separate decision from the task layer (see the sixth batch).
+- `Tasks/EncryptedBackupWorker.java` is no longer in this list: it is converted (seventeenth batch).
+  It was held back while the task layer was converted, because it is a WorkManager `Worker` — an
+  Android-scheduled entry point like the activities and receivers, not a task subclass over the
+  runner. The component conversion is a separate change from the task layer, and it needed the
+  private subclass that reaches the task's `protected doInBackground()` (see the seventeenth batch).
 
 `Utilities/DatabaseHelper` is no longer Java either: it is converted (eleventh batch), and the
 package-private-visibility rule above did not block it because the only package-private members were
@@ -1032,11 +1087,12 @@ two `String` constants and a nested class whose constructor Java never called.
 
 The drag & drop trio, `UIHelper`, `ConfirmedPasswordTransformationHelper` and `BackupTaskResult`
 are no longer in this list: they are converted (see the fourth batch above). The task subclasses
-and their runner are converted too (fifth and sixth batches); the *workers*, receivers and other
-components remain Java.
+and their runner are converted too (fifth and sixth batches), and the receivers, the worker and the
+legacy backup agent with them (seventeenth batch); the activities, the fragments, the credential
+preference and the large manual-entry dialog remain Java.
 
 The thumbnail pair has also left this list (eighth batch). The small visibility widenings are
 explicitly recorded above; these leaf renderers still need Android acceptance despite their sandbox
-compile. Latest local check after the sixteenth batch: 101 Python guards and 77 sandbox checks passed. The both-flavor Gradle
+compile. Latest local check after the seventeenth batch: 108 Python guards and 81 sandbox checks passed. The both-flavor Gradle
 host/lint/instrumentation-APK build was attempted but stopped at the Gradle 8.13 distribution download
 (`SSLHandshakeException` from `services.gradle.org`); no Android acceptance result is claimed.

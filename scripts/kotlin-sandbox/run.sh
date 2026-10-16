@@ -103,10 +103,15 @@ APP_SOURCES=(
     "$KOTLIN_APP/Utilities/ConfirmedPasswordTransformationHelper.kt"
     "$KOTLIN_APP/Utilities/EntryPersistence.kt"
     "$KOTLIN_APP/Utilities/VaultRestoreOperation.kt"
+    "$KOTLIN_APP/Receivers/BackupBroadcastReceiver.kt"
+    "$KOTLIN_APP/Receivers/EncryptedBackupBroadcastReceiver.kt"
+    "$KOTLIN_APP/Tasks/EncryptedBackupWorker.kt"
+    "$KOTLIN_APP/Utilities/BackupAgent.kt"
 )
 
 STUBS=("$SANDBOX"/stubs/android/*.kt
     "$SANDBOX"/stubs/androidx/recyclerview/widget/*.kt
+    "$SANDBOX"/stubs/androidx/work/*.kt
     "$SANDBOX"/stubs/androidx/documentfile/provider/*.kt
     "$SANDBOX"/stubs/androidx/appcompat/app/*.kt
     "$SANDBOX"/stubs/androidx/appcompat/content/res/*.kt

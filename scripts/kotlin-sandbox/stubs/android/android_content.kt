@@ -104,8 +104,37 @@ class ClipboardManager {
     fun setPrimaryClip(clip: ClipData) {}
 }
 
-/** Field/type-only stand-in; the checked code never touches Intent internals. */
-class Intent
+/**
+ * Field/type-only stand-in; the checked code only reads the action of an intent.
+ *
+ * `getAction()` is a method (not a property) on purpose: the platform class is a Java class, so
+ * the converted receivers call `intent.getAction()` and that call must resolve here as well.
+ */
+open class Intent {
+    /** The action the stand-in was created with. */
+    var intentAction: String? = null
+
+    /** The action of the intent, or null. */
+    open fun getAction(): String? = intentAction
+
+    companion object {
+        const val ACTION_SCREEN_OFF = "android.intent.action.SCREEN_OFF"
+    }
+}
+
+/**
+ * Stand-in for the platform broadcast receiver base class. Nothing is dispatched here; the
+ * converted receivers are called directly by the checks.
+ */
+abstract class BroadcastReceiver {
+    abstract fun onReceive(context: Context, intent: Intent?)
+}
+
+/** Field/type-only stand-in for the platform intent filter. */
+class IntentFilter(action: String? = null) {
+    /** The action the filter was created with. */
+    val action: String? = action
+}
 
 /** The nested listener mirrors the platform nesting; `fun interface` keeps SAM conversion working. */
 interface DialogInterface {

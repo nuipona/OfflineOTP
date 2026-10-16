@@ -80,9 +80,14 @@ import org.shadowice.flocke.andotp.Preferences.PasswordEncryptedPreference
 import org.shadowice.flocke.andotp.Dialogs.HideableDialog
 import org.shadowice.flocke.andotp.Dialogs.PasswordEntryDialog
 import org.shadowice.flocke.andotp.Dialogs.TagsDialog
+import org.shadowice.flocke.andotp.Receivers.BackupBroadcastReceiver
+import org.shadowice.flocke.andotp.Receivers.EncryptedBackupBroadcastReceiver
+import org.shadowice.flocke.andotp.Tasks.EncryptedBackupWorker
+import org.shadowice.flocke.andotp.Utilities.BackupAgent
 import org.shadowice.flocke.andotp.R
 
 import android.app.AlertDialog
+import android.app.NotificationManager
 import android.content.Context
 import android.content.DialogInterface
 import android.content.Intent
@@ -109,6 +114,8 @@ import android.view.View
 import android.view.inputmethod.EditorInfo
 import android.view.inputmethod.InputMethodManager
 import androidx.appcompat.app.AppCompatDialog
+import androidx.work.WorkManager
+import androidx.work.WorkerParameters
 import androidx.recyclerview.widget.GridLayoutManager
 import androidx.recyclerview.widget.ItemTouchHelper
 import androidx.recyclerview.widget.LinearLayoutManager
@@ -853,7 +860,7 @@ private class SettingsResources(
 }
 
 /** Context whose resource strings are the preference keys themselves, plus the default values above. */
-private class SettingsContext : Context() {
+private open class SettingsContext : Context() {
     val consulted = ArrayList<Int>()
     val config = Configuration()
     private val settingsResources = SettingsResources(consulted, config)
@@ -864,6 +871,18 @@ private class SettingsContext : Context() {
         consulted.add(resId)
         return settingsDefaultValue(resId) ?: settingsKey(resId)
     }
+}
+
+/**
+ * Context for the converted components: it reads the settings like [SettingsContext] and hands
+ * out a recording notification manager, so a check can see which message was posted.
+ */
+private class ComponentContext : SettingsContext() {
+    /** The notifications that were posted through this context. */
+    val notifications = NotificationManager()
+
+    override fun getSystemService(name: String): Any? =
+        if (name == Context.NOTIFICATION_SERVICE) notifications else null
 }
 
 /** The preference key the fake context maps a resource id to. */
@@ -877,17 +896,20 @@ private fun settingsKey(resId: Int): String = "key:" + resId
 private fun <T> withPoisonedTransaction(block: () -> T): T {
     val poison = DatabaseHelper::class.java.getDeclaredField("transactionPoisoned")
     poison.isAccessible = true
+    // The flag is restored, not cleared: a nested block (a settings fixture inside a component
+    // check) must not un-poison the block around it.
+    val previous = poison.getBoolean(null)
     poison.setBoolean(null, true)
     try {
         return block()
     } finally {
-        poison.setBoolean(null, false)
+        poison.setBoolean(null, previous)
     }
 }
 
 /** One clean in-memory preference store plus the `Settings` instance reading and writing it. */
-private class SettingsFixture {
-    val context = SettingsContext()
+private class SettingsFixture(fixtureContext: SettingsContext = SettingsContext()) {
+    val context: SettingsContext = fixtureContext
     val settings: Settings
     val store: FakeSharedPreferences
 
@@ -3925,6 +3947,105 @@ fun main() {
         fixture.settings.setAndroidBackupServiceEnabled(true)
         expect(!fixture.store.getBoolean(settingsKey(R.string.settings_key_enable_android_backup_service), true),
                 { "the setter must keep writing false" })
+    }
+
+    check("the backup broadcast receiver ignores every broadcast that is not its own") {
+        // The action gate is the first thing the receiver does: another action is not ours and
+        // must not reach the settings, the notifications or the work manager. The failure paths
+        // behind it need the Java-only Constants enum and the AndroidKeyStore, so they are
+        // covered by the source guards and the device test instead.
+        val context = ComponentContext()
+        val work = WorkManager.getInstance(context)
+        work.reset()
+        val receiver = EncryptedBackupBroadcastReceiver()
+        val foreign = Intent()
+        foreign.intentAction = "org.shadowice.flocke.andotp.broadcast.SOMETHING_ELSE"
+
+        receiver.onReceive(context, null)
+        receiver.onReceive(context, foreign)
+        expect(context.notifications.posted.isEmpty(),
+                { "an unrelated broadcast notified: ${context.notifications.posted}" })
+        expect(work.enqueued.isEmpty(), { "an unrelated broadcast queued work" })
+    }
+
+    check("the backup worker fails early when the broadcast is disabled or the work is stopped") {
+      // The worker builds its own Settings, whose construction recovers a pending vault file.
+      // That recovery needs the Java-only FileHelper, which has no class file here.
+      withPoisonedTransaction {
+        val context = ComponentContext()
+        val fixture = SettingsFixture(context)
+        val worker = EncryptedBackupWorker(context, WorkerParameters())
+
+        // The broadcast opt-in is missing: the work fails without a notification.
+        expect(worker.doWork().kind == "failure", { "the disabled broadcast did not fail the work" })
+        expect(context.notifications.posted.isEmpty(),
+                { "the disabled broadcast notified: ${context.notifications.posted}" })
+
+        // Stopped work fails the same way, before any settings are read.
+        fixture.store.edit().putStringSet(settingsKey(R.string.settings_key_backup_broadcasts), setOf("encrypted")).commit()
+        worker.stopped = true
+        expect(worker.doWork().kind == "failure", { "the stopped work did not fail" })
+        expect(context.notifications.posted.isEmpty(),
+                { "the stopped work notified: ${context.notifications.posted}" })
+      }
+    }
+
+    check("the legacy backup agent still refuses the platform restore") {
+        val agent = BackupAgent()
+        agent.onCreate()
+        agent.onBackup(null, null, null)
+        agent.onFullBackup(null)
+        // The refusal must not be preceded by a Kotlin null check on the platform's arguments.
+        val failure = try {
+            agent.onRestore(null, 1, null)
+            null
+        } catch (error: IOException) {
+            error
+        }
+        expect(failure != null, { "the platform restore was not refused" })
+        expect(failure!!.message == "Platform restore is disabled; use portable encrypted backups",
+                { "wrong message: ${failure!!.message}" })
+    }
+
+    check("the converted backup components keep their Java-visible API shapes") {
+        // The two constants stay public static final fields: the panic responder and the settings
+        // screen cancel the queued work by its name.
+        for ((name, value) in listOf("UNIQUE_WORK_NAME" to "encrypted_backup",
+                "ACTION" to "org.shadowice.flocke.andotp.broadcast.ENCRYPTED_BACKUP")) {
+            val field = EncryptedBackupBroadcastReceiver::class.java.getDeclaredField(name)
+            expect(Modifier.isPublic(field.modifiers) && Modifier.isStatic(field.modifiers)
+                    && Modifier.isFinal(field.modifiers), { "$name must stay a public static final field" })
+            expect(field.type == String::class.java, { "$name must stay a String" })
+            expect(field.get(null) == value, { "$name changed: ${field.get(null)}" })
+        }
+
+        // The receiver stays extendable, its base class stays abstract and the helper stays protected.
+        expect(!Modifier.isFinal(EncryptedBackupBroadcastReceiver::class.java.modifiers),
+                { "the receiver must stay extendable" })
+        expect(Modifier.isAbstract(BackupBroadcastReceiver::class.java.modifiers),
+                { "the receiver base class must stay abstract" })
+        val helper = BackupBroadcastReceiver::class.java.getDeclaredMethod("canSaveBackup", Context::class.java)
+        expect(Modifier.isProtected(helper.modifiers) && !Modifier.isStatic(helper.modifiers),
+                { "canSaveBackup must stay a protected instance method" })
+        expect(helper.returnType == Boolean::class.javaPrimitiveType, { "canSaveBackup must keep returning a boolean" })
+
+        // The worker keeps its WorkManager constructor and its result type.
+        val worker = EncryptedBackupWorker::class.java
+        expect(!Modifier.isFinal(worker.modifiers), { "the worker must stay extendable" })
+        val constructor = worker.getDeclaredConstructor(Context::class.java, WorkerParameters::class.java)
+        expect(Modifier.isPublic(constructor.modifiers), { "the worker constructor must stay public" })
+        val doWork = worker.getDeclaredMethod("doWork")
+        expect(doWork.returnType.name == "androidx.work.ListenableWorker\$Result",
+                { "the worker must keep returning the WorkManager result: ${doWork.returnType.name}" })
+
+        // The legacy agent keeps its class shape and the refused callback.
+        expect(!Modifier.isFinal(BackupAgent::class.java.modifiers), { "the backup agent must stay extendable" })
+        val restore = BackupAgent::class.java.getDeclaredMethod("onRestore",
+                android.app.backup.BackupDataInput::class.java, Int::class.javaPrimitiveType,
+                android.os.ParcelFileDescriptor::class.java)
+        expect(Modifier.isPublic(restore.modifiers), { "onRestore must stay public" })
+        expect(restore.exceptionTypes.toList() == listOf(IOException::class.java),
+                { "onRestore must keep declaring IOException" })
     }
 
     if (failures == 0) {

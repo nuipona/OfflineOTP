@@ -227,7 +227,7 @@ class KotlinCryptoHelpersConversionTest(unittest.TestCase):
         reset = (JAVA / "Activities/SettingsActivity.java").read_text()
         self.assertIn("KeyStoreHelper.wipeKeys(getActivity())", reset)
         self.assertIn("KeyStoreHelper.loadEncryptionKeyFromKeyStore(context, false)",
-                      (JAVA / "Tasks/EncryptedBackupWorker.java").read_text())
+                      (KOTLIN / "Tasks/EncryptedBackupWorker.kt").read_text())
         preference = self.read("Preferences/PasswordEncryptedPreference.kt")
         self.assertIn("KeyStoreHelper.loadOrGenerateAsymmetricKeyPair(context, Constants.KEYSTORE_ALIAS_PASSWORD)", preference)
         self.assertIn("EncryptionHelper.encrypt(pair.getPublic(), value.toByteArray(StandardCharsets.UTF_8))", preference)

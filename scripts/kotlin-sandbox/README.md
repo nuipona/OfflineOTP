@@ -46,6 +46,9 @@ manifest.
 | `Utilities/OtpUriParser.kt`, `Utilities/VaultContracts.kt` | Now compilable here: the stub set gained functional `Base32`/`org.json` stand-ins and the converted `Entry`/`EntryJson` are compiled here too, so the parser's secret rules are executed through the entry batch. |
 | `Utilities/EntryPersistence.kt` | Compiled with the converted `DatabaseHelper`/`BackupHelper`, including its Kotlin construction of the converted `EncryptedBackupTask`; not executed here. |
 | `Utilities/VaultRestoreOperation.kt` | Type-checked against the converted `DatabaseHelper`/`Settings`; its merge/destroy policy stays covered by the Python source guards and the repository's tests. |
+| `Receivers/BackupBroadcastReceiver.kt`, `Receivers/EncryptedBackupBroadcastReceiver.kt` | The receiver's **action gate is executed**: a null intent and another action are ignored without reaching the settings, the notifications or the work manager. The failure paths behind it post a notification through the Java-only `Constants.NotificationChannel` (no class file here), so their order and messages are pinned by `test_kotlin_backup_components_conversion.py` and by `KotlinBackupComponentsInteropTest` on a device. The Java-visible shapes (the two public static final constants, the protected `canSaveBackup` helper, the abstract base class) are reflected. |
+| `Tasks/EncryptedBackupWorker.kt` | Compiled against the converted task layer, the `androidx.work` stand-ins and the real `Constants` declaration. The **early exits are executed**: stopped or disabled work fails without a notification. The vault read, the backup and the failure notifications are not: they need the Java-only notification channel, the AndroidKeyStore and a real vault file. The constructor and the `ListenableWorker.Result` return type are reflected. |
+| `Utilities/BackupAgent.kt` | The refused platform restore is **executed**: the restore throws the documented `IOException`, and the refusal is not preceded by a null check on the platform's (unannotated) arguments. The other callbacks are inert, like the platform's. |
 | `Utilities/VaultSession.kt` | Compiled with the runner and driven live (generation advances, change listeners, mutation lock); the static facade shapes are asserted. |
 | `Database/EntryJsonResult.kt` | The closed parse-error set and the owned one-use seed: `copySecret()` returns copies, `close()` wipes and is idempotent, redacted `toString()`, no generated `data class` members. |
 | `Database/EntryJson.kt` | The stored document format, executed against the functional `org.json`/`Base32`/`Hex` stand-ins: legacy field defaults, the malformed-field matrix with its closed errors, the serialized field order, and the Base32/mOTP-hex secret rules. |
@@ -401,3 +404,32 @@ compiled or run here.
 
 The checked-in Java `KotlinNotificationQrInteropTest` round-trips a zxing-generated code through the
 real decode path and checks the real channels on a device. It has not been compiled or run here.
+
+## Android components follow-up
+
+- `Receivers/BackupBroadcastReceiver.kt` and `Receivers/EncryptedBackupBroadcastReceiver.kt` are
+  compiled and the receiver's **action gate is executed**: a null intent and an intent for another
+  action are ignored without touching the settings, the notifications or the work manager. The
+  failure paths behind that gate are not executed here: they post a notification through
+  `Constants.NotificationChannel`, and the Java-only `Constants` source is a resolution source
+  without a class file, so the enum cannot be loaded on this JVM. Their order and messages are
+  pinned by `test_kotlin_backup_components_conversion.py` and covered on a device by
+  `KotlinBackupComponentsInteropTest`.
+- `Tasks/EncryptedBackupWorker.kt` is compiled against the new `androidx.work` stand-ins
+  (`Worker`, `ListenableWorker` with its nested `Result`, `WorkerParameters`, `WorkManager`,
+  `OneTimeWorkRequest`, `ExistingWorkPolicy`) and the converted task layer. The **early exits are
+  executed**: stopped or disabled work fails without a notification. The worker's stop flag is a
+  stand-in property that the checks set; the recorded enqueues in the `WorkManager` stand-in are
+  not work, and no scheduler, database or worker thread exists here.
+- `Utilities/BackupAgent.kt` is compiled against the new `android.app.backup` stand-ins and the
+  refusal is **executed**: the restore throws the documented `IOException` even when the
+  platform's unannotated arguments are null, because the Kotlin parameters stay nullable and no
+  null check precedes the refusal.
+- The `android.content.Intent` stand-in grew a `getAction()` (a method, because the platform class
+  is a Java class and the converted receiver calls `intent.getAction()`), and `BroadcastReceiver`
+  and `IntentFilter` were added.
+
+The checked-in Java `KotlinBackupComponentsInteropTest` drives the real receiver with a
+keystore-backed password, checks that the work is queued under its unique name, that a disabled
+broadcast and another action queue nothing, and that the queued work really runs the worker and
+reaches a terminal state. It has not been compiled or run here.
