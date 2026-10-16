@@ -34,14 +34,14 @@ manifest.
 | `Utilities/ConfirmedPasswordTransformationHelper.kt` | Show/hide toggle wiring between password and confirm fields against fake inputs. |
 | `Dialogs/PasswordEntryDialog.kt` | **Executed** against scripted password/layout/button stand-ins: ENTER versus UPDATE visibility, minimum length, matching confirmation, privacy flags, editor actions, nullable callback, delivery and dismissal; its Java constructor/enum/SAM/listener shapes are reflected. No real window, IME or Material layout is involved. |
 | `Dialogs/TagsDialog.kt` | **Executed** against recording dialog/list stand-ins: row toggles, adapter replacement after adding a tag, optional callables, selection/cancel/new-tag buttons and its static Java entry point. No real window or list layout is involved. |
-| `Preferences/PasswordEncryptedPreference.kt` | Compiled and shape-checked against real `Settings`/`EncryptionHelper`/`KeyStoreHelper` declarations. Construction and encryption cannot run because those Java resolution sources have no class files; the real keystore/layout path has a Java instrumentation test. |
+| `Preferences/PasswordEncryptedPreference.kt` | Compiled and shape-checked against the real `Settings` declaration and the converted Kotlin crypto helpers. Construction cannot run because `Settings` is still a Java resolution source without a class file, and its encryption path needs `AndroidKeyStore`; the real keystore/layout path has a Java instrumentation test. |
 | `Tasks/BackupTaskResult.kt` | Factories, public-field defaults, `ResultType` constants and redacted diagnostics. |
 | `Tasks/UiBasedBackgroundTask.kt` | The real runner lifecycle on real executors: value/failure/cancelled delivery, one-shot execution, explicit and session-revocation cancellation, owned-result disposal and the legacy fallback adapter, against a queued fake main loop. |
-| `Tasks/AuthenticationTask.kt` | Type-checked against the real `Settings`/`EncryptionHelper` Java declarations; constructor and protected-member shapes asserted (its bodies call Java-only classes, so they are not executed here). |
+| `Tasks/AuthenticationTask.kt` | Type-checked against the real Java `Settings` declaration and the converted `EncryptionHelper`; constructor and protected-member shapes asserted (its bodies call the Java-only settings/preferences surface, so they are not executed here). |
 | `Tasks/GenericBackupTask.kt`, `Tasks/GenericRestoreTask.kt` | The abstract backup/restore bases, compiled with the converted `BackupHelper`/`StorageAccessHelper`; abstractness, constructor and (where reflection can see them) member shapes asserted. |
 | `Tasks/PGPBackupTask.kt`, `Tasks/PGPRestoreTask.kt` | Constructor shapes and (for the restore task) the protected `doInBackground` override asserted. |
 | `Tasks/EncryptedBackupTask.kt` | Both Java constructors (generic erasure makes them reflectable), the `Mode` enum and the class-level extendability asserted; the snapshot/canWrite policy stays source-guarded. |
-| `Tasks/EncryptedRestoreTask.kt` | Constructor and protected-member shapes asserted against the real `EncryptedBackupHeader`/`EncryptionHelper` declarations. |
+| `Tasks/EncryptedRestoreTask.kt` | Constructor and protected-member shapes asserted against the converted `EncryptedBackupHeader`/`EncryptionHelper` declarations. |
 | `Tasks/ChangeEncryptionTask.kt`, `Tasks/ChangeCredentialsTask.kt`, `Tasks/FinishIntroTask.kt` | Class-level shapes and (for the intro result DTO, whose fields are JDK types) both constructors and public final fields asserted; the credential/encryption-change members reference Java-only signature types and are covered by the Python source guards. |
 | `Utilities/OtpUriParser.kt`, `Utilities/VaultContracts.kt` | Now compilable here: the stub set gained functional `Base32`/`org.json` stand-ins and the converted `Entry`/`EntryJson` are compiled here too, so the parser's secret rules are executed through the entry batch. |
 | `Utilities/EntryPersistence.kt` | Compiled with the converted `DatabaseHelper`/`BackupHelper`, including its Kotlin construction of the converted `EncryptedBackupTask`; not executed here. |
@@ -51,7 +51,9 @@ manifest.
 | `Database/EntryJson.kt` | The stored document format, executed against the functional `org.json`/`Base32`/`Hex` stand-ins: legacy field defaults, the malformed-field matrix with its closed errors, the serialized field order, and the Base32/mOTP-hex secret rules. |
 | `Database/Entry.kt` | Shape-checked: it is non-final, has both legacy adapters, the nested `OTPType`, `COLOR_RED` and `validateSecret`; the thumbnail getter is reflected too now that `EntryThumbnail` is Kotlin. Entries are only *constructed* through the vault document check (document adapter, validation, serialization, destroy); token/URI members are not executed here. |
 | `Utilities/EntryThumbnail.kt`, `Utilities/LetterBitmap.kt` | Lookup behavior and JVM signatures only; inert graphics stand-ins do not exercise rendering. |
-| `Utilities/DatabaseHelper.kt` | The vault repository's outcome mapping and its fail-closed document boundary are executed (every `VaultReadError` -> `Status`, `LoadResult`/`VaultException` behaviour, `stringToEntries` rejections, `entriesToString` bounds), as are the stored-document round trip over real entries with whole-document rejection of a bad entry, and the poisoned-transaction short-circuits of every entry point (the poison flag is set by reflection; reaching `FileHelper` would fail the check). The file transaction itself is not: `FileHelper`/`AtomicFile`, `SharedPreferences` and `EncryptionHelper` have no class files here. Its Java-visible surface is reflected, including both public `status` fields. |
+| `Utilities/DatabaseHelper.kt` | The vault repository's outcome mapping and its fail-closed document boundary are executed (every `VaultReadError` -> `Status`, `LoadResult`/`VaultException` behaviour, `stringToEntries` rejections, `entriesToString` bounds), as are the stored-document round trip over real entries with whole-document rejection of a bad entry, and the poisoned-transaction short-circuits of every entry point (the poison flag is set by reflection; reaching `FileHelper` would fail the check). The file transaction itself is not: `FileHelper`/`AtomicFile` and `SharedPreferences` have no class files here, and the ciphertext paths need the AES-GCM provider this JDK refuses. Its Java-visible surface is reflected, including both public `status` fields. |
+| `Utilities/EncryptionHelper.kt` | **Executed** for the platform-free crypto: the credential derivation cross-checked against an independent `PBKDF2WithHmacSHA1` split plus the RFC 6070 vector, both derivation bound sets (null/over-long password, short salt, iteration range) with their accepted boundaries, the legacy SHA-256 key against known digests, `generateSymmetricKey`, the RSA encrypt/decrypt helpers against a real JVM key pair, the random/iteration/benchmark bounds, and the framed reader's pre-provider refusal of `null` and every frame shorter than nonce plus tag. The AES-GCM provider calls cannot run here (this JDK's SunJCE requires `GCMParameterSpec` while the unchanged Android path passes `IvParameterSpec`), and the class cannot be reflected at all (enumerating its declared methods eagerly loads the Java-only `Constants.EncryptionType`), so its static surface and throws clauses stay pinned by `test_kotlin_crypto_helpers_conversion.py` and by `KotlinCryptoInteropTest` on a device. |
+| `Utilities/KeyStoreHelper.kt` | Compiled and reflected only: the five static members keep their parameter and throws clauses (the three that declared no checked exceptions still declare none) and the nullable lookup results are pinned at source level. No `AndroidKeyStore` exists here, so no alias, generation, wrap/unwrap or `wipeKeys` behaviour is executed; `KotlinCryptoInteropTest` covers those paths on a device. |
 | `Utilities/StorageAccessHelper.kt` | **Executed** against a recording fake `ContentResolver` over real temporary files: chunked writes with their six permission checks, mid-write revocation, after-open/after-flush refusals, every pre-provider refusal, provider failures as `false`; bounded reads, cache-only `file:` URIs (sibling prefix, `..`, the cache itself), stream closing; display-name metadata, fallbacks, bound-before-strip and ASCII control stripping. The provider is a fake and `ParcelFileDescriptor` replicates only write-truncate, so no platform provider, URI grant or SAF write semantics are exercised. |
 | `Utilities/BackupHelper.kt` | Compiled against the real `Settings`/`EncryptionHelper`/`Constants` declarations. Its methods take the Java-only `Constants.BackupType` (no class file here), so they can be neither executed nor reflected; the nested `BackupFile` holder is instantiated and reflected, and the rest is pinned by `test_kotlin_document_io_conversion.py`. |
 | `Utilities/ScanQRCodeFromFile.kt` | **Executed** against scripted stand-ins: a `BitmapFactory` hook that reports bounds and returns pixel-holding bitmaps, a zxing `QRCodeReader` that replays results/failures, and recorded toasts. Covers load failures, bounds rejected before the full decode, rejected decoded bitmaps (recycled), pixels handed to the luminance source, the `TRY_HARDER` retry and the last-failure-wins messages. No image is decoded and zxing itself is not run. |
@@ -59,11 +61,11 @@ manifest.
 | `Database/EntryList.kt` | Compiled and shape-checked only: its sorting/filtering API takes `Constants` enums and its entries are `Entry` objects, and the `Constants` enums have no class file in this sandbox, so its behaviour stays covered by the Python source guards and `ApplicationTest`. |
 
 The task subclasses are compiled **against the real Java declarations** they call: `run.sh` passes
-`Settings.java`, `EncryptionHelper.java`, `KeyStoreHelper.java` and `FileHelper.java` to `kotlinc`
-for resolution (the same mechanism already used for `Constants.java`). `Entry.java`,
-`DatabaseHelper.java`, `StorageAccessHelper.java` and `BackupHelper.java` are no longer among them:
-all four are Kotlin now (and the converted repository and backup helper read the same real
-`FileHelper`/`Constants`/`EncryptionHelper`/`Settings` declarations), and the graphical
+`Settings.java` and `FileHelper.java` to `kotlinc` for resolution (the same mechanism already used
+for `Constants.java`). `Entry.java`, `DatabaseHelper.java`, `StorageAccessHelper.java`,
+`BackupHelper.java`, `EncryptionHelper.java` and `KeyStoreHelper.java` are no longer among them:
+all six are Kotlin now (and the converted repository, backup helper and crypto helpers read the same
+real `FileHelper`/`Constants`/`Settings` declarations), and the graphical
 `EntryThumbnail.kt`/`LetterBitmap.kt` are now compiled Kotlin, using inert graphics stand-ins.
 No class files are produced for the remaining Java resolution sources, so their bodies cannot be *executed*
 here, and reflection can only see members whose signatures avoid those Java-only types; the
@@ -95,7 +97,7 @@ Still **not** covered, and therefore still dependent on the Gradle/device gates:
 - Every activity, fragment, credential preference, receiver and worker (all still Java), and the
   entry-card adapter/view holder. `NumberPickerPreference` is covered below. The two small adapters below are the exceptions.
 - `Utilities/DatabaseHelper.kt` beyond the executed part above: the vault file transaction needs
-  `FileHelper` (`AtomicFile`), `SharedPreferences` and `EncryptionHelper`, so recovery, promotion,
+  `FileHelper` (`AtomicFile`), `SharedPreferences` and the AES-GCM provider, so recovery, promotion,
   backup/restore and wipe are covered by the instrumentation tests
   (`VaultFailureSecurityTest`, `VaultRestoreOperationTest`) rather than here.
 - `Utilities/StorageAccessHelper.kt` against a real provider, and `Utilities/BackupHelper.kt`
@@ -105,15 +107,24 @@ Still **not** covered, and therefore still dependent on the Gradle/device gates:
 - Real image decoding and zxing, notification channels/posting and the runtime-permission dialog
   (`KotlinNotificationQrInteropTest`).
 - **Execution** of the task subclass bodies (and of `EntryPersistence`/`VaultRestoreOperation`):
-  the Java resolution sources produce no class files, so `Settings`/`DatabaseHelper`/
-  `EncryptionHelper` calls inside them cannot run on the desktop JVM here; only their compile-time
-  agreement with those real declarations is checked.
+  the Java resolution sources produce no class files, so `Settings`/`DatabaseHelper` calls inside
+  them cannot run on the desktop JVM here; only their compile-time agreement with those real
+  declarations is checked. `tryEncryptionChange`, `loadOrGenerateWrappedKey` and every
+  `KeyStoreHelper` path stay in this group even though they are Kotlin now: they need `Settings`, a
+  real file transaction or `AndroidKeyStore`.
+- The AES-GCM **provider** calls and the AndroidKeyStore alias lifecycle of the fifteenth batch:
+  the desktop JDK rejects the unchanged Android nonce type and there is no keystore provider here, so
+  the vectors, tamper/tag cases, wrapped-key file round trip, alias generation/wipe and the nullable
+  lookup outcomes need `KotlinCryptoInteropTest` (and the existing `EncryptionSecurityTest`,
+  `CredentialLifecycleSecurityTest`, `IpcAuthorizationSecurityTest`, `VaultFailureSecurityTest`)
+  on a device.
 - Java *compilation*: `run.sh` does not invoke `javac` or provide the Android dependency classpath, so
   no Java class file is produced and the Java callers' own compilation is never checked. It does pass real Java sources
-  (`Utilities/Constants.java`, `Settings.java`, `EncryptionHelper.java`, ... — the full list is in
-  the script) to `kotlinc` for resolution, which is why the Kotlin code is checked
-  against the actual declarations rather than a copy — including the package-private
-  `ALGORITHM_ASYMMETRIC` constant, which Kotlin in the same package can read.
+  (`Utilities/Constants.java`, `Settings.java`, `FileHelper.java` — the full list is in the script)
+  to `kotlinc` for resolution, which is why the Kotlin code is checked against the actual declarations
+  rather than a copy — including the package-private `ALGORITHM_ASYMMETRIC`/`PBKDF2_*` constants,
+  which Kotlin in the same package can read (and whose values the compiler inlines, so the executed
+  crypto checks in the default package still see them).
 
 ## What it proves, and what it does not
 
@@ -210,8 +221,49 @@ tar xzf /tmp/kt.tgz -C /tmp && chmod +x /tmp/package/bin/kotlinc*
 ```
 
 Verified with Kotlin `2.3.20` (the app's pinned version) and `2.4.21` (the bootstrap version), plus
-Temurin `25.0.2`, on 2026-10-15 (63 checks). Pin your own compiler when recording results; the check
-is only as meaningful as the versions you run it with.
+Temurin `25.0.2`, on 2026-10-15 (63 checks). The fifteenth batch added seven checks (70 total) and
+was verified with Kotlin `2.4.21`/Temurin `25.0.2` on 2026-10-16. Pin your own compiler when
+recording results; the check is only as meaningful as the versions you run it with.
+
+## Crypto and KeyStore helper follow-up
+
+`Utilities/EncryptionHelper.kt` and `Utilities/KeyStoreHelper.kt` replace the Java helpers of the
+same names. Both were static-only, so both are the documented `object` delta with `@JvmStatic`
+forwarders; the nested `PBKDF2Credentials`/`EncryptionChangeResult`/`EncryptionChangeCallback` types
+keep their JVM names and the checked-exception lists keep their `@Throws`.
+
+What the checks execute is described in the table above. Two limits are worth repeating, because a
+green run here does not cover them:
+
+- **AES-GCM cannot run on this JDK.** The app's unchanged code passes an `IvParameterSpec` to
+  `AES/GCM/NoPadding` (the Android provider accepts it); the desktop JDK requires
+  `GCMParameterSpec` and throws `InvalidAlgorithmParameterException` before any provider work. Only
+  the framing guard that runs *before* the provider is executed here. This is a sandbox limitation,
+  not a behaviour change: the constants, the transformation name, the nonce length and the
+  nonce-prefixed framing are untouched, and `EncryptionSecurityTest`/`ApplicationTest` keep the
+  vectors and tamper cases on a device.
+- **`EncryptionHelper` cannot be reflected here.** Its declared methods mention
+  `Constants.EncryptionType`, a Java resolution source without a class file, and
+  `Class.getDeclaredMethods()` resolves parameter types eagerly, so even enumerating the class
+  fails. `KeyStoreHelper` (no `Constants` types in its signatures) and the nested
+  `PBKDF2Credentials`/`EncryptionChangeResult` types are reflected normally; the rest stays pinned
+  by `scripts/tests/test_kotlin_crypto_helpers_conversion.py`.
+
+Deliberate deltas, recorded for review: `PBKDF2Credentials` stays an `open` class with public
+mutable `@JvmField byte[]` fields, but the fields are non-null and start as empty arrays instead of
+`null`; the two lookups and both key entry points return `KeyPair?`/`SecretKey?`, matching the Java
+failure paths that returned `null`; the `EncryptionChangeCallback` parameter is non-null (the
+callback is only ever invoked with a key) so `ChangeEncryptionTask`'s override tightened from
+`SecretKey?` to `SecretKey` while its `Result` field stayed nullable; and the `encrypt`/`decrypt`
+overloads other than the framed reader declare their byte arrays non-null, so a Java caller passing
+`null` now fails at the Kotlin boundary instead of inside the JCA provider. The framed
+`decrypt(SecretKey, byte[]?)` keeps the Java `IllegalArgumentException` for `null` and every
+truncated frame.
+
+One real defect was caught by the new checks and fixed in the same batch: a line break before the
+leading `+` in `generateRandomIterations` ended the Kotlin statement after `nextInt(...)`, so raw
+`0..20000` values were returned instead of `140000..160000`. The Python guard now pins the completed
+expression so the addition cannot be dropped again.
 
 ## Thumbnail conversion follow-up
 
@@ -311,7 +363,8 @@ privacy.
   `Constants.BackupType`, which has no class file here, so even reflecting its methods fails. Its
   `BackupFile` holder is instantiated and reflected; names, the MIME mapping, the policy order and
   the encrypted-backup layout are pinned by `scripts/tests/test_kotlin_document_io_conversion.py`.
-  `backupToFile` will become executable here once `EncryptionHelper` is Kotlin.
+  `backupToFile` still needs `Settings` (a Java resolution source) and the AES-GCM provider, so it
+  stays device-only even though `EncryptionHelper` is Kotlin now.
 
 The checked-in Java `KotlinDocumentIoInteropTest` covers the real resolver, `Uri.fromFile`,
 `DocumentFile` tree and `Settings` paths and the Java call sites on a device, without a test provider

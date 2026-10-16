@@ -58,6 +58,8 @@ APP_SOURCES=(
     "$KOTLIN_APP/Database/Entry.kt"
     "$KOTLIN_APP/Database/EntryList.kt"
     "$KOTLIN_APP/Utilities/DatabaseHelper.kt"
+    "$KOTLIN_APP/Utilities/EncryptionHelper.kt"
+    "$KOTLIN_APP/Utilities/KeyStoreHelper.kt"
     "$KOTLIN_APP/Utilities/StorageAccessHelper.kt"
     "$KOTLIN_APP/Utilities/BackupHelper.kt"
     "$KOTLIN_APP/Utilities/NotificationHelper.kt"
@@ -122,12 +124,11 @@ STUBS=("$SANDBOX"/stubs/android/*.kt
 # against the actual declarations, and no Java class file is produced or verified here. Listed
 # explicitly instead of by directory so that adding one is a deliberate choice. The task
 # subclasses, the vault repository and the backup helpers are compiled against the real
-# Settings/EncryptionHelper/KeyStoreHelper/FileHelper declarations rather than stub copies of them.
+# Settings/FileHelper declarations rather than stub copies of them; the crypto/key-management
+# helpers are Kotlin since the fifteenth batch and therefore compiled, not resolved.
 JAVA_SOURCES=(
     "$ROOT/app/src/main/java/org/shadowice/flocke/andotp/Utilities/Constants.java"
     "$ROOT/app/src/main/java/org/shadowice/flocke/andotp/Utilities/Settings.java"
-    "$ROOT/app/src/main/java/org/shadowice/flocke/andotp/Utilities/EncryptionHelper.java"
-    "$ROOT/app/src/main/java/org/shadowice/flocke/andotp/Utilities/KeyStoreHelper.java"
     "$ROOT/app/src/main/java/org/shadowice/flocke/andotp/Utilities/FileHelper.java"
 )
 

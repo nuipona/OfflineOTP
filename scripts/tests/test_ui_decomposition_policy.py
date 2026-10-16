@@ -94,7 +94,8 @@ class UiDecompositionSourceTest(unittest.TestCase):
                      "Tasks/EncryptedRestoreTask", "Tasks/ChangeEncryptionTask",
                      "Tasks/ChangeCredentialsTask", "Tasks/FinishIntroTask",
                      "Database/Entry", "Database/EntryJson", "Database/EntryJsonResult",
-                     "Utilities/DatabaseHelper", "Utilities/StorageAccessHelper", "Utilities/BackupHelper",
+                     "Utilities/DatabaseHelper", "Utilities/EncryptionHelper", "Utilities/KeyStoreHelper",
+                     "Utilities/StorageAccessHelper", "Utilities/BackupHelper",
                      "Utilities/NotificationHelper", "Utilities/ScanQRCodeFromFile",
                      "Dialogs/PasswordEntryDialog", "Dialogs/TagsDialog",
                      "Preferences/PasswordEncryptedPreference"):
@@ -577,7 +578,9 @@ class UiDecompositionSourceTest(unittest.TestCase):
         # The Java callback interface stays implemented with a public override (interface methods
         # are public; a protected override would not compile), and key material is wiped.
         self.assertIn("EncryptionChangeCallback", change_encryption)
-        self.assertIn("override fun onSuccessfulEncryptionChange(newEncryptionType: Constants.EncryptionType, newEncryptionKey: SecretKey?)", change_encryption)
+        # Non-null since the fifteenth batch: the converted Kotlin interface never calls the
+        # callback without a key, so the override no longer widens the parameter to SecretKey?.
+        self.assertIn("override fun onSuccessfulEncryptionChange(newEncryptionType: Constants.EncryptionType, newEncryptionKey: SecretKey)", change_encryption)
         self.assertIn("newKey?.clone()", change_encryption)
         self.assertIn("newKeyMaterial?.fill(0.toByte())", change_encryption)
         self.assertIn("EncryptionHelper.tryEncryptionChange(context, oldEncryptionKey, newEncryptionType, newKeyMaterial, this) { !isCanceled() }", change_encryption)

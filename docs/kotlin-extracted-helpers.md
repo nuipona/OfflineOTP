@@ -199,16 +199,32 @@ Fourteenth batch (small password/tag dialogs and encrypted-password preference):
   `ManualEntryDialog`, `SettingsActivity` and preference XML retain the same Java/XML call sites.
 - The sandbox executes the password and tag dialog control flow against recording widgets/dialogs
   and reflects all three Java surfaces. The encrypted preference compiles against the real Java
-  `Settings`/`KeyStoreHelper`/`EncryptionHelper` declarations but is not constructed there because
-  those resolution sources have no runtime classes; a checked-in Java instrumentation test covers
-  its real AndroidKeyStore/layout path.
+  `Settings` declaration and the converted crypto helpers but is not constructed there because that
+  resolution source has no runtime class; a checked-in Java instrumentation test covers its real
+  AndroidKeyStore/layout path.
+
+Fifteenth batch (crypto and KeyStore helpers):
+
+- `Utilities/EncryptionHelper.kt` and `Utilities/KeyStoreHelper.kt` replace the Java helpers of the
+  same names. `Settings`, `SettingsActivity`, `PanicResponderActivity`, `CredentialsPreference`,
+  `BackupActivity`, `DatabaseHelper`, `BackupHelper` and the five task subclasses keep their existing
+  Java/Kotlin call sites and signatures. Both were static-only, so both are the documented `object`
+  delta with `@JvmStatic` forwarders; the nested `PBKDF2Credentials`, `EncryptionChangeResult` and
+  `EncryptionChangeCallback` types keep their JVM names, and every checked exception keeps its
+  `@Throws` declaration.
+- The sandbox **executes** the platform-free half of `EncryptionHelper` (PBKDF2 vectors and bounds,
+  the legacy SHA-256 key, symmetric key generation, the RSA helpers, the iteration/benchmark bounds
+  and the GCM framing guard) and reflects the whole `KeyStoreHelper` surface. The AES-GCM provider
+  calls and every AndroidKeyStore path need a device, so a new instrumentation test
+  (`KotlinCryptoInteropTest`) plus the existing security suites carry them.
 
 No activity, entry-card list adapter/view holder, fragment, `CredentialsPreference`, receiver, worker
 or large manual-entry dialog is converted; the task runner and its subclasses are, and so are the entry
-model, the vault repository and the document/backup, notification, QR-image and three small UI pieces
-above. The repository's own storage primitives
-(`Utilities/FileHelper.java`) and the Android file/preference surface it uses stay Java and are
-resolved by the sandbox rather than converted. No coroutine, Compose, new
+model, the vault repository, the document/backup, notification, QR-image and three small UI pieces
+above, plus the crypto and KeyStore helpers — the four Java files that remain under `Utilities/` are
+`Constants.java`, `FileHelper.java`, `Settings.java` and `BackupAgent.java`. The repository's own
+storage primitives (`Utilities/FileHelper.java`) and the Android file/preference surface it uses stay
+Java and are resolved by the sandbox rather than converted. No coroutine, Compose, new
 dependency, SDK/bytecode target, storage format or crypto change is included.
 
 **Source conversion is implemented; Gradle and device acceptance is still pending.** What *has* been
@@ -658,6 +674,53 @@ callers, the backup policy and the settings screen remain Java.
   the existing empty in-memory default and performs no write. Non-null explicit defaults and restored
   ciphertext follow the original paths.
 
+### Crypto and KeyStore helpers
+
+Both helpers are pure crypto/keystore code with no UI or lifecycle ownership, so their conversion is
+about preserving the exact byte formats, guard order and checked-exception surface. The boundaries
+that matter:
+
+- **Formats and algorithms are untouched.** AES-GCM with the same transformation, 12-byte nonce,
+  nonce-prefixed framing and 128-bit tag; RSA/ECB/PKCS1Padding wrapping through `SecretKeyWrapper`;
+  PBKDF2WithHmacSHA1 with the same constants (30,000 minimum and 50,000 benchmark iterations for
+  authentication, 140,000–160,000 randomly chosen for each new backup) and the same plain SHA-256
+  derivation for the legacy backup format; the same URL-safe Base64 storage strings. Nothing in
+  these formats changed with the conversion.
+- **Guard order in the staged re-encryption is load-bearing and preserved:** permission and live
+  session key (`VaultSession.getKey() !== oldKey`, reference identity) are checked before the vault
+  is read, and again with the captured generation inside the commit callback, which returns
+  `CANCELED` instead of committing when the session was revoked mid-write. A failed read still maps
+  to `DECRYPTION_FAILED`, a missing/oversized new key to `MISSING_NEW_KEY`, a failed write to
+  `CHANGE_FAILURE`, and `SUCCESS` is only reported after the staged file-plus-metadata commit has
+  been recovered.
+- **Null safety, not behavior changes**, is the documented delta: the `PBKDF2Credentials` holder
+  stays `open` with public mutable `@JvmField byte[]` fields for `password` and `key`, but the fields
+  are non-null and start as empty arrays instead of `null`; `oldKey`, `newKey`, `callback`, both
+  derived-credential passwords/salts and the framed ciphertext stay nullable exactly where the Java
+  accepted `null`; `createEncryptionKey`, the two lookups and the `EncryptionChangeCallback`
+  parameter are `SecretKey?`/`KeyPair?` only because the Java returned `null` on failure. The
+  callback parameter itself is non-null (it is only ever invoked with a key), so the Java
+  `ChangeEncryptionTask` override tightened from `SecretKey?` to `SecretKey` while its `Result` field
+  stayed nullable, and the non-framed byte-array parameters of the `encrypt`/`decrypt` overloads are
+  non-null so a Java `null` fails at the Kotlin boundary instead of inside the provider. The framed
+  `decrypt(SecretKey, byte[]?)` keeps the Java `IllegalArgumentException` for `null` and every frame
+  shorter than nonce plus tag.
+- **`KeyStoreHelper` keeps the same alias, creation and failure policy**: the RSA wrapping key is
+  created under the unchanged alias with `PURPOSE_ENCRYPT`/`PURPOSE_DECRYPT`,
+  `ENCRYPTION_PADDING_RSA_PKCS1`, the `CN=<alias>` subject, serial `1` and a 100-year validity
+  period, and with no `setUserAuthenticationRequired` policy (still tracked as an open item in the
+  security assessment); a missing alias reports `null` instead of generating a replacement in the
+  read-only lookup; `loadEncryptionKeyFromKeyStore`/`createEncryptionKey` keep their file-lock
+  synchronization and their `null`-on-`GeneralSecurityException`/`IOException`/`RuntimeException`
+  policy; `wipeKeys` deletes the wrapped-key file and both aliases inside `VaultSession.lock(RESET)`
+  and the database file lock; and the unused `context` parameter of
+  `loadOrGenerateAsymmetricKeyPair` (and the unused `failSilent` flag) is retained so call sites do
+  not change.
+- **One real defect was found and fixed during the batch**, by the new sandbox checks: a line break
+  before a leading `+` ended a Kotlin statement early in `generateRandomIterations`, so raw
+  `0..20000` values could be returned instead of `140000..160000` back up iterations. A Python guard
+  now pins the completed expression.
+
 ## Tests and acceptance
 
 Existing Java/Kotlin characterization tests remain in place and unchanged: the RFC vector tests in
@@ -697,7 +760,19 @@ the document/backup batch the stem list gains `Utilities/StorageAccessHelper` an
 static surfaces, nullability, the refusal order before the provider, the four permission checks
 around the chunked write, the cache-confinement expression, the bound-before-strip display-name
 rule, the unique backup names, the MIME mapping and the encrypted-backup byte layout.
-`scripts/tests/test_documentation_links.py` now fails on any relative documentation link to a file
+With the crypto/KeyStore batch the stem list gains `Utilities/EncryptionHelper` and
+`Utilities/KeyStoreHelper`, and `scripts/tests/test_kotlin_crypto_helpers_conversion.py` pins the two
+`object` shapes (`@JvmStatic` counts, no `INSTANCE`-style member access from Java, the retained
+`Constants.EncryptionType` parameters), the ten `@Throws` declarations, the `EncryptionChangeCallback`
+SAM shape, the guard order of the staged re-encryption, the derivation bounds and the completed
+`+ PBKDF2_MIN_BACKUP_ITERATIONS` continuation, the lock/wipe policy, the Java and Kotlin call sites,
+the literal equality between `Constants.java` and the mirrored sandbox constants, and the presence of
+`KotlinCryptoInteropTest`. That instrumentation test
+(`app/src/androidTest/.../Utilities/KotlinCryptoInteropTest.java`) covers what the desktop JDK cannot:
+a real `AndroidKeyStore` alias create/load/wipe, the RSA wrap/unwrap and wrapped-key file round trip,
+the AES-GCM framing round trip for empty, Unicode and ordinary payloads, wrong-key and tag-tamper
+rejection, fresh nonces, the explicit-nonce overload, the derivation bounds and PBKDF2 fields through
+the Java-visible surface, and the Kotlin SAM callback implemented and invoked from Java. `scripts/tests/test_documentation_links.py` now fails on any relative documentation link to a file
 that no longer exists (several evidence links still pointed at converted `.java` files). A new Java
 instrumentation test, `app/src/androidTest/.../Utilities/KotlinDocumentIoInteropTest.java`,
 characterizes the real `ContentResolver`/`Uri`/`DocumentFile` paths and the Java call sites: cache
@@ -811,6 +886,16 @@ checks after the fourteenth batch:
   fragments/activities (below API 33, missing and granted permission, detached fragment); its
   channel/notification members take the Java-only `Constants.NotificationChannel` and are pinned by
   the Python guards.
+- The converted crypto helpers: PBKDF2 derivation cross-checked against an independent
+  `PBKDF2WithHmacSHA1` split and the RFC 6070 vector, both derivation bound sets with their accepted
+  boundaries, the legacy SHA-256 key against known digests, `generateSymmetricKey`, the RSA
+  encrypt/decrypt helpers against a real JVM key pair, the random/iteration/benchmark bounds, and the
+  framed reader's pre-provider refusal of `null` and every frame shorter than nonce plus tag. The
+  AES-GCM provider calls cannot run on this JDK (it requires `GCMParameterSpec` while the unchanged
+  Android path passes `IvParameterSpec`), and `EncryptionHelper` cannot be reflected here at all
+  because its declared methods mention the Java-only `Constants.EncryptionType`; the static surface,
+  the throws clauses and the `KeyStoreHelper` member shapes are asserted where reflection works, and
+  the rest stays with the Python guard and the device test.
 - The entry document boundary executed against functional `org.json`/`Base32`/`Hex` replicas: the
   stored field order and defaults (including a reserialization that equals the legacy string
   byte-for-byte), the malformed-field matrix with its closed error set, the `ValidatedEntry`
@@ -821,10 +906,9 @@ checks after the fourteenth batch:
   above (document adapter, validation, serialization, destroy); its token/URI members are not run.
 - Thumbnail enum lookups and Java-visible rendering/lookup/getter signatures. The 346 enum/resource
   mappings are also fingerprinted by a Python source guard; actual pixels are not sandbox-tested.
-- The ten converted task subclasses, the converted repository and the backup helper are
-  **type-checked against the real Java declarations** they call: `run.sh` passes `Settings.java`,
-  `EncryptionHelper.java`, `KeyStoreHelper.java` and `FileHelper.java` (plus `Constants.java`)
-  to `kotlinc` for resolution, so the
+- The ten converted task subclasses, the converted repository, the backup helper and the converted
+  crypto helpers are **type-checked against the real Java declarations** they call: `run.sh` passes
+  `Settings.java` and `FileHelper.java` (plus `Constants.java`) to `kotlinc` for resolution, so the
   Kotlin calls are verified against the actual parameter/return types instead of stub copies. Their
   bodies are not executed (the Java sources produce no class files on the desktop JVM), and
   reflection covers the members whose signatures avoid those Java-only types: constructor parameter
@@ -852,8 +936,10 @@ Both flavors must compile and pass host tests, focused lint and packaged-manifes
 comparisons. Java-side compilation of the callers, `Handler`/`Looper` timing on a real main thread,
 `KeyEvent` delivery, `TypedValue.applyDimension` (the stub replicates the documented density formula),
 the real `View.postDelayed` scheduling, `Entry`'s thumbnail-dependent members, the vault file
-transaction itself (`FileHelper`/`AtomicFile`, `SharedPreferences`, `EncryptionHelper` and the
-staged-promotion choreography all need a device), real Storage Access Framework providers (the
+transaction itself (`FileHelper`/`AtomicFile`, `SharedPreferences` and the
+staged-promotion choreography all need a device), the AES-GCM provider calls and every
+AndroidKeyStore path of the converted crypto helpers (alias creation/loading/wipe, wrapping and
+unwrapping, the credential ciphertexts) which the desktop JDK and this sandbox cannot run at all, real Storage Access Framework providers (the
 platform `ContentResolver`/`ParcelFileDescriptor`, `DocumentFile` tree creation, URI grants and
 provider write semantics), the encrypted-backup writer and settings-driven backup names (which need
 `EncryptionHelper`/`Settings`), real image decoding, zxing, notification channels/posting and the
