@@ -41,12 +41,23 @@ def main(argv: list[str]) -> int:
     if not path.is_file():
         print(f"::warning title=Log missing::{escape(str(path))} was not written")
         return 0
-    lines = useful_lines(path.read_text(errors="replace"))
+    raw = path.read_text(errors="replace")
+    lines = useful_lines(raw)
+    # Resource-compiler errors repeat once per occurrence; list each distinct one once with a count.
+    distinct = {}
+    for line in lines:
+        if "error:" in line:
+            key = line.split("error:", 1)[1].split("(aka", 1)[0].strip()
+            distinct[key] = distinct.get(key, 0) + 1
+    summary = []
+    if distinct:
+        summary.append(f"Distinct compiler errors: {len(distinct)} ({sum(distinct.values())} occurrences)")
+        summary.extend(f"  {count}x {key}" for key, count in list(distinct.items())[:25])
     # Start at the first failure marker when there is one, so the error text is not cut off.
     starts = [i for i, line in enumerate(lines) if "What went wrong" in line or line.startswith("FAILURE:")]
     if starts:
         lines = lines[starts[0]:]
-    message = "\n".join(lines)
+    message = "\n".join(summary + lines)
     if len(message) > MESSAGE_CHARS:
         message = "...\n" + message[-MESSAGE_CHARS:]
     print(f"::error title=Failure context ({path.name})::{escape(message)}")
