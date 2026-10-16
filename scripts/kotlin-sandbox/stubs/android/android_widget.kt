@@ -10,19 +10,41 @@ import android.view.KeyEvent
 import android.view.View
 
 /** Records the resource id of every toast shown, so checks can assert the user-facing message. */
-class Toast private constructor(private val resId: Int) {
+class Toast private constructor(private val resId: Int, private val text: CharSequence?) {
+    /** Whether `cancel()` hid this toast before it was shown again. */
+    var cancelled = false
+        private set
+
     fun show() {
-        shown.add(resId)
+        if (resId != 0) shown.add(resId)
+        if (text != null) shownTexts.add(text)
+    }
+
+    fun cancel() {
+        cancelled = true
+        cancels++
     }
 
     companion object {
+        const val LENGTH_SHORT = 0
         const val LENGTH_LONG = 1
 
         @JvmField
         val shown: MutableList<Int> = ArrayList()
 
+        /** The text overload's messages, in show order. */
+        @JvmField
+        val shownTexts: MutableList<CharSequence> = ArrayList()
+
+        /** How often any toast was cancelled before being shown. */
+        @JvmField
+        var cancels = 0
+
         @JvmStatic
-        fun makeText(context: Context, resId: Int, duration: Int): Toast = Toast(resId)
+        fun makeText(context: Context, resId: Int, duration: Int): Toast = Toast(resId, null)
+
+        @JvmStatic
+        fun makeText(context: Context, text: CharSequence, duration: Int): Toast = Toast(0, text)
     }
 }
 
@@ -122,19 +144,30 @@ class GridView {
 }
 
 class ImageView(context: Context) : View() {
+    private var imageDrawable: android.graphics.drawable.Drawable? = null
+
+    /**
+     * The platform getters are Java methods, so the converted code calls `getDrawable()`;
+     * the stand-in keeps the set drawable instead of decoding anything.
+     */
+    fun getDrawable(): android.graphics.drawable.Drawable? = imageDrawable
+
+    fun setImageDrawable(drawable: android.graphics.drawable.Drawable?) {
+        imageDrawable = drawable
+    }
+
     fun setImageBitmap(bitmap: android.graphics.Bitmap?) {}
 }
 
 /** Recording-only preference/dialog widgets; no focus, range enforcement or actual UI. */
 class FrameLayout(context: Context) : android.view.ViewGroup() {
-    private val children = mutableListOf<View>()
-    fun addView(view: View) { children.add(view) }
-    fun getChildAt(index: Int): View = children[index]
-    val childCount: Int get() = children.size
     class LayoutParams(width: Int, height: Int) : android.view.ViewGroup.LayoutParams(width, height) {
         var gravity = 0
     }
 }
+
+/** Inert linear layout; the converted about screens only look children up and add extras. */
+open class LinearLayout(context: Context) : android.view.ViewGroup()
 
 class NumberPicker(context: Context) : View() {
     var minValue = 0

@@ -12,7 +12,10 @@ import android.content.Intent
 import android.content.IntentFilter
 import android.os.Bundle
 import android.view.MotionEvent
+import android.view.View
 import android.view.Window
+import androidx.appcompat.widget.Toolbar
+import androidx.fragment.app.FragmentManager
 
 /** Stand-in for the AppCompat activity. */
 open class AppCompatActivity : Context() {
@@ -35,6 +38,18 @@ open class AppCompatActivity : Context() {
     /** The bundles the activity was created with. */
     val createdWith = ArrayList<Bundle?>()
 
+    /** The title/content resources the activity set, recorded instead of resolved. */
+    var titleResource = 0
+        private set
+    var contentResource = 0
+        private set
+
+    /** The toolbar the activity installed as its support action bar. */
+    var supportActionBar: Toolbar? = null
+        private set
+
+    private val supportFragmentManager = FragmentManager()
+
     protected open fun onCreate(savedInstanceState: Bundle?) {
         createdWith.add(savedInstanceState)
     }
@@ -44,6 +59,31 @@ open class AppCompatActivity : Context() {
     protected open fun onDestroy() {}
 
     open fun getWindow(): Window = activityWindow
+
+    open fun setTitle(resId: Int) {
+        titleResource = resId
+    }
+
+    open fun setContentView(resId: Int) {
+        contentResource = resId
+    }
+
+    open fun setSupportActionBar(toolbar: Toolbar?) {
+        supportActionBar = toolbar
+    }
+
+    /**
+     * `open` so the about checks can supply the toolbar/stub/pager views; the platform resolves
+     * the real window hierarchy instead and the getter is final there.
+     */
+    open fun <T : View> findViewById(id: Int): T? = null
+
+    open fun getSupportFragmentManager(): FragmentManager = supportFragmentManager
+
+    /** The up-navigation hook; the converted about screen finishes instead of navigating. */
+    open fun onSupportNavigateUp(): Boolean = false
+
+    open fun onBackPressed() {}
 
     /** Records the delivery instead of running it on a looper; the checks drain it themselves. */
     open fun runOnUiThread(action: Runnable) {

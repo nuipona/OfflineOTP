@@ -144,6 +144,17 @@ emulators do not have. The test wipes the vault of the device it runs on, so run
 disposable emulators. The desktop sandbox executes the panic decision and the window handling
 against stand-ins, but it cannot start an activity, cannot apply a real theme and has no camera.
 
+`KotlinAboutScreensInteropTest` drives the converted about screens on a real device: the about
+activity is started for real, so the real layouts resolve their rows and image tint, the real
+version name is bound and both pager pages are built (the flavor about tab and the AboutLibraries
+list). Java construction, subclassing and the public static state of the shared fragment are
+checked directly, and the clipboard fallback of `copyToClipboard`/`openURI` is exercised with a
+scheme no installed app handles, so nothing is launched. The seven-tap easter egg stays with the
+desktop sandbox checks and the Python guards; driving seven timed taps through a real window would
+race the emulator. The test replaces the clipboard content and finishes the screen afterwards; it
+does not touch the vault. The desktop sandbox executes the row wiring, the easter egg and the page
+building against stand-ins, but it has no real window, package manager or clipboard.
+
 The new guards impose a **16 MiB document limit** and a **1,000,000-iteration backup-read ceiling**. The current writer's 140,000–160,000 range is unchanged; valid historical counts below that range remain readable. Backups above either bound now fail closed. These are explicit compatibility/security policy limits; review them rather than silently increasing them after a failing test. Decoded QR images now have dimension/pixel bounds checked before pixel-buffer allocation; account/URI/JSON limits are documented in the hardening notes.
 
 Fixtures are synthetic, contain no user accounts, and were generated with Python `cryptography==44.0.3`, not the app's crypto implementation. Fixed salt/nonces are intentionally confined to fixtures. Optional regeneration:

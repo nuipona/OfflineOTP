@@ -4,6 +4,8 @@ package android
 object R {
     object attr {
         const val dialogPreferenceStyle = 16842897
+        /** The real public framework value of android.R.attr.textColorSecondary. */
+        const val textColorSecondary = 16842814
     }
     object layout {
         const val simple_list_item_multiple_choice = 17367056

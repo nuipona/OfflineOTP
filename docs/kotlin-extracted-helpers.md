@@ -338,8 +338,45 @@ Nineteenth batch (the small standalone activities):
   the sandbox, and the real activity start, the real theme, the real camera and the real
   configuration change are not exercised.
 
-No entry-card list adapter/view holder, fragment, `CredentialsPreference` or large
-manual-entry dialog is converted, and none of the large concrete activities is; the task runner and its
+Twentieth batch (the about screens):
+
+- `Activities/AboutActivity.kt`, `Fragments/BaseAboutFragment.kt` and the two flavor
+  `Fragments/AboutFragment.kt` replace their Java implementations; the flavor fragments move to
+  `app/src/fdroid/kotlin` and `app/src/play/kotlin`, which the Kotlin Android plugin picks up as
+  per-flavor source sets without any Gradle change. These are thin Android shells — layout
+  inflation, row wiring and navigation only — which the decomposition plan allows to convert
+  without further extraction. The link rows, the clipboard fallback and the seven-quick-taps
+  easter egg are unchanged, and so are the activity's two pages (the about tab and the
+  AboutLibraries list loaded from the generated raw resource with the `Scanner` delimiter trick),
+  the up/back navigation and the fdroid flavor's two donation rows with their broad fallback.
+- The three classes stay extendable (`open`), `openURI`/`copyToClipboard` stay public and
+  overridable, and the flavor fragments keep their inheritance and extras. The four package-private
+  static fields of `BaseAboutFragment` (`imageResources`, `lastTap`, `taps`, `currentToast`) are
+  public `@JvmField` fields here, because Kotlin has no package-private visibility; they stay
+  static shared state, so the tap counter survives a fragment re-creation exactly as in Java. The
+  private URI constants and the private `enableSpecialFeatures` stay private.
+- The sandbox compiles all three (the fdroid flavor as the representative flavor — the play flavor
+  is an empty subclass and is pinned by the Python guards) and **executes** the row/link wiring of
+  every documented URI, the version-name binding (including the missing-version and
+  missing-package paths), the theme tint of the nine image rows, the clipboard fallbacks, the
+  whole easter egg (counter toasts and their cancellation, the slow-tap reset, the confirmation
+  dialog with its cancel/confirm split and the already-enabled report) and the activity's page
+  building (shell wiring, both pages, the raw-document library list including the empty-document
+  `{}` fallback, the page titles and the up/back finishing). A new Java instrumentation test
+  (`KotlinAboutScreensInteropTest`) covers the real platform side: Java construction and
+  subclassing, the real layout children, the real version name, both pager pages and the clipboard
+  fallback for a scheme no app handles.
+- Deltas (documented, not silent): the unreachable `default` branch of the adapter's `getItem` now
+  throws `IndexOutOfBoundsException` instead of returning null, because `FragmentPagerAdapter.getItem`
+  is `@NonNull` and the pager only requests the two counted pages; a missing layout child now fails
+  `requireNotNull` with `IllegalArgumentException` (consistent with the tenth batch) where Java
+  would have failed later with a `NullPointerException`; and a detached fragment fails with the
+  `NullPointerException` of `getActivity()!!` where Java would have passed the null into
+  `Settings`/`Toast` first.
+
+No entry-card list adapter/view holder, `CredentialsPreference` or large
+manual-entry dialog is converted, and none of the large concrete activities is; the about screens
+are (twentieth batch), and the task runner and its
 subclasses are, and so are the entry
 model, the vault repository, the document/backup, notification, QR-image and three small UI pieces
 above, plus the crypto and KeyStore helpers, the settings facade, the Android components, the two
@@ -949,15 +986,19 @@ obscured-touch rejection with its Android 10 gate. The nineteenth batch adds
 `scripts/tests/test_kotlin_small_activities_conversion.py` pins the replacements, the panic
 action, the order of the panic steps, the theme and the language of the scanner activity, the
 acceleration, secure and fullscreen flags, the insets controller branch, the unchanged manifest
-entries and the Java class literal in `MainActivity`.
+entries and the Java class literal in `MainActivity`. The twentieth batch adds the about screens,
+and `scripts/tests/test_kotlin_about_screens_conversion.py` pins the replacements (both flavors),
+the row/link wiring and the exact URIs, the easter-egg counter and confirmation, the clipboard
+fallbacks, the two pages and their titles, the raw-resource library load with its empty-document
+fallback, the navigation, the public `@JvmField` statics and the Java interop test.
 
 ### Executed here: partial sandbox compile/run check
 
 `scripts/kotlin-sandbox/` compiles the converted platform-free/low-platform sources against
 hand-written platform stubs and runs `Checks.kt` on a desktop JVM; `bootstrap-toolchain.sh` fetches
 a JDK and the Kotlin compiler from package mirrors when the machine has neither. Executed on
-2026-10-15 with **Kotlin 2.3.20 and 2.4.21 plus Temurin 25.0.2** (`-jvm-target 1.8`), it reports 85 passing
-checks after the nineteenth batch:
+2026-10-16 with **Kotlin 2.3.20 and 2.4.21 plus Temurin 25.0.2** (`-jvm-target 1.8`), it reports 90 passing
+checks after the twentieth batch:
 
 - RFC 6238 TOTP vectors (SHA-1/256/512, six timestamps, eight digits) and RFC 4226 HOTP vectors.
 - TOTP/HOTP agreement with an independent HMAC implementation, including offsets and 1/30/60/86400 s periods.
@@ -1109,6 +1150,17 @@ checks after the nineteenth batch:
 - The runner's `isCanceled()` is asserted **overridable** — the regression that converting
   `EncryptedBackupTask` exposed (see [task runner and `isCanceled()`](#task-runner-and-iscanceled))
   cannot silently return.
+- The about screens: the row/link wiring of every documented URI, the version-name binding (with
+  the missing-version and missing-package paths), the image tint, the clipboard fallbacks of
+  `openURI`/`copyToClipboard` (a missing handler and, in the flavor, any start failure), the whole
+  seven-tap easter egg (counter toasts and their cancellation, the slow-tap reset, the confirmation
+  dialog's cancel/confirm split and the already-enabled report) and the activity's page building
+  (shell wiring, both pages, the raw-document library list with its empty-document `{}` fallback,
+  the titles and the up/back finishing) are **executed** against scripted layout children, a
+  recording host and an in-memory store. The Java-visible shapes (three extendable classes, the
+  public `openURI`/`copyToClipboard`, the four public static fields) are reflected. What is not
+  executed: a real window, the real theme/configuration, real toasts/dialogs/clipboard, the real
+  `PackageManager`, the AboutLibraries UI and the real pager layout.
 
 That check is explicitly **non-authoritative**: its stubs are approximations of the Android platform,
 so it says nothing about Android runtime behaviour, resources, manifest or packaging. See
@@ -1162,8 +1214,9 @@ preference and the large manual-entry dialog remain Java.
 The thumbnail pair has also left this list (eighth batch). The small visibility widenings are
 explicitly recorded above; these leaf renderers still need Android acceptance despite their sandbox
 compile. The activity base classes are converted too (eighteenth batch) and so are the two small
-standalone activities (nineteenth batch); the large concrete activities, the fragments, the
-credential preference and the large manual-entry dialog remain Java. Latest local check after the
-nineteenth batch: 119 Python guards and 85 sandbox checks passed. The both-flavor Gradle
+standalone activities (nineteenth batch) and the about screens (twentieth batch — the about
+activity and the fragments); the large concrete activities, the credential preference and the
+large manual-entry dialog remain Java. Latest local check after the
+twentieth batch: 126 Python guards and 90 sandbox checks passed. The both-flavor Gradle
 host/lint/instrumentation-APK build was attempted but stopped at the Gradle 8.13 distribution download
 (`SSLHandshakeException` from `services.gradle.org`); no Android acceptance result is claimed.

@@ -80,9 +80,12 @@ import org.shadowice.flocke.andotp.Preferences.PasswordEncryptedPreference
 import org.shadowice.flocke.andotp.Dialogs.HideableDialog
 import org.shadowice.flocke.andotp.Dialogs.PasswordEntryDialog
 import org.shadowice.flocke.andotp.Dialogs.TagsDialog
+import org.shadowice.flocke.andotp.Activities.AboutActivity
 import org.shadowice.flocke.andotp.Activities.BaseActivity
 import org.shadowice.flocke.andotp.Activities.PanicResponderActivity
 import org.shadowice.flocke.andotp.Activities.SecureCaptureActivity
+import org.shadowice.flocke.andotp.Fragments.AboutFragment
+import org.shadowice.flocke.andotp.Fragments.BaseAboutFragment
 import org.shadowice.flocke.andotp.Receivers.BackupBroadcastReceiver
 import org.shadowice.flocke.andotp.Receivers.EncryptedBackupBroadcastReceiver
 import org.shadowice.flocke.andotp.Tasks.EncryptedBackupWorker
@@ -97,7 +100,14 @@ import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Canvas
+import android.graphics.drawable.Drawable
+import android.content.ActivityNotFoundException
+import android.content.ClipboardManager
+import android.content.pm.PackageInfo
 import android.content.pm.PackageManager
+import android.widget.ImageView
+import android.widget.LinearLayout
+import android.widget.TextView
 import android.widget.Toast
 import android.net.Uri
 import android.database.Cursor
@@ -112,24 +122,33 @@ import android.text.method.PasswordTransformationMethod
 import android.text.method.TransformationMethod
 import android.util.Base64
 import android.util.DisplayMetrics
+import android.graphics.ColorFilter
 import android.view.KeyEvent
+import android.view.LayoutInflater
 import android.view.MotionEvent
 import android.view.View
+import android.view.ViewStub
 import android.view.WindowInsets
 import android.view.WindowInsetsController
 import android.view.WindowManager
 import android.view.inputmethod.EditorInfo
 import android.view.inputmethod.InputMethodManager
 import androidx.appcompat.app.AppCompatDialog
+import androidx.appcompat.widget.Toolbar
+import androidx.fragment.app.FragmentActivity
+import androidx.fragment.app.FragmentPagerAdapter
+import androidx.viewpager.widget.ViewPager
 import androidx.work.WorkManager
 import androidx.work.WorkerParameters
 import androidx.recyclerview.widget.GridLayoutManager
 import androidx.recyclerview.widget.ItemTouchHelper
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
+import com.google.android.material.tabs.TabLayout
 import com.google.android.material.textfield.TextInputEditText
 import com.google.android.material.textfield.TextInputLayout
 import com.journeyapps.barcodescanner.DecoratedBarcodeView
+import com.mikepenz.aboutlibraries.LibsFragment
 import com.google.zxing.BarcodeFormat
 import com.google.zxing.ChecksumException
 import com.google.zxing.DecodeHintType
@@ -1021,6 +1040,171 @@ private class SettingsFixture(fixtureContext: SettingsContext = SettingsContext(
     fun stored(resId: Int): String? = store.getString(settingsKey(resId), null)
 
     fun storedSet(resId: Int): MutableSet<String> = HashSet(store.getStringSet(settingsKey(resId), emptySet())!!)
+}
+
+// --- fakes for the about-screen checks ----------------------------------------------------------
+
+/** An inflated about layout: scripted children per id, so lookups return the check's widgets. */
+private class AboutRoot : View() {
+    val children = HashMap<Int, View>()
+
+    @Suppress("UNCHECKED_CAST")
+    override fun <T : View> findViewById(id: Int): T? = children[id] as T?
+}
+
+/** A layout stub that inflates the check's scripted root instead of a real layout. */
+private class ScriptedViewStub(private val root: View) : ViewStub() {
+    var inflations = 0
+        private set
+
+    override fun inflate(): View {
+        inflations++
+        return root
+    }
+}
+
+/** Resources that serve one scripted raw library document instead of a real raw resource. */
+private class AboutLibResources(private val libJson: String) : Resources() {
+    override fun openRawResource(id: Int): InputStream =
+        ByteArrayInputStream(libJson.toByteArray(Charsets.UTF_8))
+}
+
+/**
+ * The host of the about fragment: mapped strings, a recording clipboard and recording (or
+ * refusing) activity starts, like [SettingsContext] plus the clipboard service.
+ */
+private class AboutHost : FragmentActivity() {
+    val started = ArrayList<Intent>()
+    val clipboard = ClipboardManager()
+    /** When set, `startActivity` throws this instead of recording the start. */
+    var startFailure: RuntimeException? = null
+
+    override fun getString(resId: Int): String = settingsKey(resId)
+
+    override fun getSystemService(name: String): Any? =
+        if (name == Context.CLIPBOARD_SERVICE) clipboard else null
+
+    override fun startActivity(intent: Intent) {
+        val failure = startFailure
+        if (failure != null) throw failure
+        started.add(intent)
+    }
+}
+
+/**
+ * The converted about activity, driven by the checks: it serves the scripted toolbar/layout
+ * stub/pager children, the mapped resource strings and a scripted raw library list.
+ */
+private class AboutScreenActivity(private val libJson: String) : AboutActivity() {
+    val toolbar = Toolbar(this)
+    val root = AboutRoot()
+    val pager = ViewPager()
+    val tabs = TabLayout(this)
+    val stub = ScriptedViewStub(root)
+
+    init {
+        root.children[R.id.viewPager] = pager
+        root.children[R.id.tabLayout] = tabs
+    }
+
+    override fun getString(resId: Int): String = settingsKey(resId)
+
+    override val resources: Resources get() = AboutLibResources(libJson)
+
+    @Suppress("UNCHECKED_CAST")
+    override fun <T : View> findViewById(id: Int): T? = when (id) {
+        R.id.container_toolbar -> toolbar as T?
+        R.id.container_stub -> stub as T?
+        else -> null
+    }
+
+    fun create() {
+        onCreate(null)
+    }
+
+    fun up(): Boolean = onSupportNavigateUp()
+
+    fun back() {
+        onBackPressed()
+    }
+}
+
+/** One about page with its scripted layout children and the host it runs against. */
+private class AboutPageFixture {
+    val host = AboutHost()
+    val root = AboutRoot()
+    val versionLayout = LinearLayout(host)
+    val license = LinearLayout(host)
+    val changelog = LinearLayout(host)
+    val source = LinearLayout(host)
+    val faq = LinearLayout(host)
+    val author1 = LinearLayout(host)
+    val author2 = LinearLayout(host)
+    val authorOriginal = LinearLayout(host)
+    val contributors = LinearLayout(host)
+    val support = LinearLayout(host)
+    val version = TextView()
+    val originalExtra = TextView()
+    val author1Content = LinearLayout(host)
+    val author2Content = LinearLayout(host)
+    /** The tint filters the image rows received; recorded instead of drawn. */
+    val imageFilters = ArrayList<ColorFilter?>()
+
+    init {
+        root.children[R.id.about_layout_version] = versionLayout
+        root.children[R.id.about_text_version] = version
+        root.children[R.id.about_layout_license] = license
+        root.children[R.id.about_layout_changelog] = changelog
+        root.children[R.id.about_layout_source] = source
+        root.children[R.id.about_layout_faq] = faq
+        root.children[R.id.aboutLayoutAuthor1] = author1
+        root.children[R.id.aboutLayoutAuthor2] = author2
+        root.children[R.id.aboutLayoutOriginalAuthor] = authorOriginal
+        root.children[R.id.about_author_original_extra] = originalExtra
+        root.children[R.id.about_layout_contributors] = contributors
+        root.children[R.id.about_layout_support] = support
+        root.children[R.id.aboutLayoutAuthor1Content] = author1Content
+        root.children[R.id.aboutLayoutAuthor2Content] = author2Content
+        for (id in BaseAboutFragment.imageResources) {
+            val image = ImageView(host)
+            image.setImageDrawable(object : Drawable() {
+                override fun setColorFilter(filter: ColorFilter?) {
+                    imageFilters.add(filter)
+                }
+            })
+            root.children[id] = image
+        }
+    }
+
+    /** Inflates the fragment's layout with the scripted children against the scripted host. */
+    fun inflate(fragment: BaseAboutFragment): View {
+        fragment.host = host
+        LayoutInflater.layoutProvider = { res, _, _ ->
+            if (res == R.layout.fragment_about) root else View()
+        }
+        try {
+            return withPoisonedTransaction {
+                fragment.onCreateView(LayoutInflater.from(host), null, null)
+            }
+        } finally {
+            LayoutInflater.layoutProvider = null
+        }
+    }
+}
+
+/** Resets the static and global state the about screens accumulate between checks. */
+private fun resetAboutState() {
+    BaseAboutFragment.lastTap = 0
+    BaseAboutFragment.taps = 0
+    BaseAboutFragment.currentToast = null
+    Toast.shown.clear()
+    Toast.shownTexts.clear()
+    Toast.cancels = 0
+    AlertDialog.Builder.created.clear()
+    AlertDialog.Builder.lastCreated = null
+    PreferenceManager.reset()
+    PackageManager.missingPackage = null
+    PackageManager.packageInfo = PackageInfo().apply { versionName = "9.9.9-test" }
 }
 
 fun main() {
@@ -4313,6 +4497,226 @@ fun main() {
         } finally {
             Build.VERSION.SDK_INT = sdk
         }
+    }
+
+    check("the about tab wires its rows, its version metadata and its image tint") {
+        resetAboutState()
+        val fixture = AboutPageFixture()
+        val view = fixture.inflate(BaseAboutFragment())
+
+        expect(view === fixture.root, { "the fragment inflated the wrong layout" })
+        expect(fixture.version.text == "9.9.9-test",
+                { "the version name was not bound: ${fixture.version.text}" })
+        expect(fixture.imageFilters.size == BaseAboutFragment.imageResources.size,
+                { "not every image row was tinted: ${fixture.imageFilters.size}" })
+        expect(fixture.imageFilters.all { it != null }, { "an image row kept no theme filter" })
+
+        // Every row opens its own link as a VIEW intent.
+        val rows = listOf(
+                fixture.license to "https://github.com/andOTP/andOTP/blob/master/LICENSE.txt",
+                fixture.changelog to "https://github.com/andOTP/andOTP/blob/master/CHANGELOG.md",
+                fixture.source to "https://github.com/andOTP/andOTP",
+                fixture.faq to "https://github.com/andOTP/andOTP/wiki/Frequently-Asked-Questions",
+                fixture.author1 to "https://github.com/flocke",
+                fixture.author2 to "https://github.com/richyhbm",
+                fixture.authorOriginal to "https://github.com/0xbb",
+                fixture.contributors to "https://github.com/andOTP/andOTP/graphs/contributors",
+                fixture.support to "https://github.com/andOTP/andOTP/blob/master/README.md#contribute",
+                fixture.originalExtra to "https://github.com/0xbb/otp-authenticator")
+        for ((row, uri) in rows) {
+            row.performClick()
+            val last = fixture.host.started.lastOrNull()
+            expect(last != null && last.getAction() == Intent.ACTION_VIEW
+                            && last.intentData.toString() == uri,
+                    { "$uri produced ${last?.getAction()} ${last?.intentData}" })
+        }
+
+        // A missing activity handler falls back to the clipboard with the copied-to-clipboard toast.
+        fixture.host.startFailure = ActivityNotFoundException()
+        fixture.host.started.clear()
+        fixture.license.performClick()
+        expect(fixture.host.started.isEmpty(), { "a refused start still recorded an intent" })
+        val clips = fixture.host.clipboard.clips
+        expect(clips.size == 1 && clips[0].text == "https://github.com/andOTP/andOTP/blob/master/LICENSE.txt",
+                { "the URI was not copied: ${clips.map { it.text }}" })
+        expect(Toast.shownTexts == listOf<CharSequence>("key:" + R.string.about_toast_copied_to_clipboard),
+                { "the fallback did not toast the copied message: ${Toast.shownTexts}" })
+
+        // A package without a version name keeps an empty version text; a missing package does too.
+        resetAboutState()
+        PackageManager.packageInfo = PackageInfo()
+        val withoutVersion = AboutPageFixture()
+        withoutVersion.inflate(BaseAboutFragment())
+        expect(withoutVersion.version.text == null,
+                { "a missing version name became ${withoutVersion.version.text}" })
+
+        resetAboutState()
+        PackageManager.missingPackage = "org.shadowice.flocke.andotp"
+        val missingPackage = AboutPageFixture()
+        missingPackage.inflate(BaseAboutFragment())
+        expect(missingPackage.version.text == "",
+                { "a missing package kept a version name: ${missingPackage.version.text}" })
+    }
+
+    check("seven quick taps on the version enable the hidden special features") {
+        resetAboutState()
+        val fixture = AboutPageFixture()
+        fixture.inflate(BaseAboutFragment())
+        val store = PreferenceManager.getDefaultSharedPreferences(fixture.host) as FakeSharedPreferences
+
+        // The first tap of a burst only starts it; the counter toasts appear from the third count.
+        fixture.versionLayout.performClick()
+        expect(BaseAboutFragment.taps == 0, { "the first tap counted" })
+        for (tap in 1..7) fixture.versionLayout.performClick()
+        expect(BaseAboutFragment.taps == 7, { "the quick taps did not count up: ${BaseAboutFragment.taps}" })
+        expect(Toast.shownTexts == listOf<CharSequence>("3", "4", "5", "6", "7"),
+                { "the counter toasts are wrong: ${Toast.shownTexts}" })
+        // Each new count toast cancels its predecessor (four cancellations after the third count).
+        expect(Toast.cancels == 4, { "the counter toasts were not cancelled: ${Toast.cancels}" })
+
+        // The seventh count opens the confirmation dialog instead of enabling anything yet.
+        expect(!store.getBoolean(settingsKey(R.string.settings_key_special_features), false),
+                { "the special features were enabled without confirmation" })
+        val dialog = AlertDialog.Builder.lastCreated
+        expect(dialog != null && dialog.positiveButtonListener != null && dialog.negativeButtonListener != null,
+                { "the confirmation dialog did not wire both buttons" })
+
+        // Cancelling changes nothing; confirming enables the feature and toasts it.
+        dialog!!.negativeButtonListener!!.onClick(dialog, DialogInterface.BUTTON_NEGATIVE)
+        expect(!store.getBoolean(settingsKey(R.string.settings_key_special_features), false),
+                { "cancel enabled the special features" })
+        dialog.positiveButtonListener!!.onClick(dialog, DialogInterface.BUTTON_POSITIVE)
+        expect(store.getBoolean(settingsKey(R.string.settings_key_special_features), false),
+                { "the confirmation did not enable the special features" })
+        expect(Toast.shown == listOf(R.string.about_toast_special_features),
+                { "the enabling was not toasted: ${Toast.shown}" })
+
+        // A slow tap restarts the count instead of adding to it, and toasts nothing.
+        Toast.shownTexts.clear()
+        Thread.sleep(600)
+        fixture.versionLayout.performClick()
+        expect(BaseAboutFragment.taps == 0, { "a slow tap kept the count: ${BaseAboutFragment.taps}" })
+        expect(Toast.shownTexts.isEmpty(), { "a slow tap toasted the counter: ${Toast.shownTexts}" })
+
+        // With the features already enabled the second burst only reports them on the seventh count.
+        // Counts 1 and 2 re-show the stale "7" toast first, exactly as the Java `currentToast.show()`
+        // at the end of the quick-tap branch did; the counter texts then replace it and the seventh
+        // count swaps in the already-enabled message before it is shown.
+        for (tap in 1..7) fixture.versionLayout.performClick()
+        expect(BaseAboutFragment.taps == 7, { "the count after the restart is wrong: ${BaseAboutFragment.taps}" })
+        expect(Toast.shownTexts == listOf<CharSequence>("7", "7", "3", "4", "5", "6"),
+                { "the restarted counter toasts are wrong: ${Toast.shownTexts}" })
+        expect(Toast.shown == listOf(R.string.about_toast_special_features,
+                R.string.about_toast_special_features_enabled),
+                { "the already-enabled toast is wrong: ${Toast.shown}" })
+        expect(AlertDialog.Builder.created.size == 1,
+                { "the dialog was shown again: ${AlertDialog.Builder.created.size}" })
+    }
+
+    check("the fdroid about tab adds the donation rows with the clipboard fallback") {
+        resetAboutState()
+        val fixture = AboutPageFixture()
+        val view = fixture.inflate(AboutFragment())
+        expect(view === fixture.root, { "the fdroid fragment inflated the wrong layout" })
+        expect(fixture.author1Content.childCount == 1 && fixture.author2Content.childCount == 1,
+                { "the donation rows were not added: ${fixture.author1Content.childCount}/${fixture.author2Content.childCount}" })
+
+        fixture.author1Content.getChildAt(0).performClick()
+        val first = fixture.host.started.lastOrNull()
+        expect(first != null && first.intentData.toString() == "https://flocke.shadowice.org/donate.html",
+                { "the first donation link is wrong: ${first?.intentData}" })
+
+        // Any start failure falls back to the clipboard, not only a missing handler.
+        fixture.host.startFailure = IllegalStateException("synthetic refusal")
+        fixture.host.started.clear()
+        fixture.author2Content.getChildAt(0).performClick()
+        val clips = fixture.host.clipboard.clips
+        expect(clips.size == 1 && clips[0].text == "https://richyhbm.co.uk/donate",
+                { "the donation link was not copied: ${clips.map { it.text }}" })
+    }
+
+    check("the about screen builds the about tab and the library tab") {
+        resetAboutState()
+        val activity = withPoisonedTransaction {
+            val screen = AboutScreenActivity("""{"libraries":[{"name":"a"}]}""")
+            screen.create()
+            screen
+        }
+
+        // The shell wiring: title, container layout, toolbar and the inflated about component.
+        expect(activity.titleResource == R.string.about_activity_title, { "wrong title: ${activity.titleResource}" })
+        expect(activity.contentResource == R.layout.activity_container, { "wrong content layout" })
+        expect(activity.supportActionBar === activity.toolbar, { "the toolbar was not installed" })
+        expect(activity.stub.getLayoutResource() == R.layout.component_about, { "wrong stub layout" })
+        expect(activity.stub.inflations == 1, { "the stub layout was not inflated" })
+
+        val adapter = activity.pager.getAdapter() as FragmentPagerAdapter
+        expect(activity.tabs.getWiredPager() === activity.pager, { "the tabs were not wired to the pager" })
+        expect(adapter.getCount() == 2, { "wrong page count: ${adapter.getCount()}" })
+
+        // Page 0 is the flavor's about tab; page 1 is the library list built from the raw document.
+        expect(adapter.getItem(0) is AboutFragment, { "the first page is not the about tab" })
+        val libsPage = adapter.getItem(1) as LibsFragment
+        expect(libsPage.licenseShown && libsPage.versionShown, { "the library page lost its flags" })
+        expect(libsPage.libs?.json == """{"libraries":[{"name":"a"}]}""",
+                { "the library list was not loaded: ${libsPage.libs?.json}" })
+        expect(adapter.getPageTitle(0) == settingsKey(R.string.about_tab_about),
+                { "wrong first page title: ${adapter.getPageTitle(0)}" })
+        expect(adapter.getPageTitle(1) == settingsKey(R.string.about_tab_libraries),
+                { "wrong second page title: ${adapter.getPageTitle(1)}" })
+        expect(adapter.getPageTitle(2) == null, { "an unknown page got a title" })
+        expectThrows(IndexOutOfBoundsException::class.java) { adapter.getItem(2) }
+
+        // An empty raw document becomes an empty library list, not a parse failure.
+        val empty = withPoisonedTransaction {
+            val screen = AboutScreenActivity("")
+            screen.create()
+            screen
+        }
+        val emptyPage = (empty.pager.getAdapter() as FragmentPagerAdapter).getItem(1) as LibsFragment
+        expect(emptyPage.libs?.json == "{}",
+                { "an empty document did not become the empty list: ${emptyPage.libs?.json}" })
+
+        // Up-navigation and back both finish the screen.
+        val finishesBefore = activity.finishes
+        expect(activity.up(), { "the up navigation was refused" })
+        activity.back()
+        expect(activity.finishes == finishesBefore + 2,
+                { "the screen was not finished: ${activity.finishes}" })
+    }
+
+    check("the about screens keep their Java-visible API shapes") {
+        val base = BaseAboutFragment::class.java
+        val flavor = AboutFragment::class.java
+        val screen = AboutActivity::class.java
+
+        // The Java classes were all extendable and kept their inheritance.
+        expect(!Modifier.isFinal(base.modifiers), { "BaseAboutFragment became final" })
+        expect(!Modifier.isFinal(flavor.modifiers), { "AboutFragment became final" })
+        expect(!Modifier.isFinal(screen.modifiers), { "AboutActivity became final" })
+        expect(BaseActivity::class.java.isAssignableFrom(screen), { "AboutActivity lost its base" })
+        expect(base.isAssignableFrom(flavor), { "AboutFragment lost its base" })
+
+        // The two public helpers keep their names and stay overridable.
+        for (name in (arrayOf("openURI", "copyToClipboard"))) {
+            val method = base.getMethod(name, String::class.java)
+            expect(Modifier.isPublic(method.modifiers) && !Modifier.isFinal(method.modifiers),
+                    { "$name lost its public overridable shape" })
+        }
+
+        // The Java package-private statics are public static fields here (documented widening).
+        val images = base.getField("imageResources")
+        expect(Modifier.isStatic(images.modifiers) && images.type == IntArray::class.java,
+                { "imageResources lost its static array shape" })
+        val lastTap = base.getField("lastTap")
+        expect(Modifier.isStatic(lastTap.modifiers) && lastTap.type == java.lang.Long.TYPE,
+                { "lastTap lost its static long shape" })
+        val taps = base.getField("taps")
+        expect(Modifier.isStatic(taps.modifiers) && taps.type == Integer.TYPE,
+                { "taps lost its static int shape" })
+        val currentToast = base.getField("currentToast")
+        expect(Modifier.isStatic(currentToast.modifiers) && currentToast.type == Toast::class.java,
+                { "currentToast lost its static toast shape" })
     }
 
     if (failures == 0) {

@@ -40,8 +40,10 @@ fi
 # Converted platform-free and low-platform utilities covered by this check. Every entry is
 # compiled and its Java-visible shapes are asserted in Checks.kt. The task subclasses resolve the
 # real Java settings/crypto helpers through JAVA_SOURCES below. Files that still depend
-# on the full Android/AndroidX graph (the larger dialogs, adapters, credential preference,
-# activities) are deliberately absent: see README.md for the list and the reason.
+# on the full Android/AndroidX graph (the larger dialogs, adapters, credential preference and the
+# large activities) are deliberately absent: see README.md for the list and the reason. The fdroid
+# flavor's AboutFragment is compiled as the representative flavor of the about screens; the play
+# flavor differs only by having no extras and is pinned by the Python source guards instead.
 APP_SOURCES=(
     "$KOTLIN_APP/Preferences/NumberPickerPreference.kt"
     "$KOTLIN_APP/Preferences/PasswordEncryptedPreference.kt"
@@ -111,6 +113,9 @@ APP_SOURCES=(
     "$KOTLIN_APP/Activities/BaseActivity.kt"
     "$KOTLIN_APP/Activities/PanicResponderActivity.kt"
     "$KOTLIN_APP/Activities/SecureCaptureActivity.kt"
+    "$KOTLIN_APP/Activities/AboutActivity.kt"
+    "$KOTLIN_APP/Fragments/BaseAboutFragment.kt"
+    "$ROOT/app/src/fdroid/kotlin/org/shadowice/flocke/andotp/Fragments/AboutFragment.kt"
 )
 
 STUBS=("$SANDBOX"/stubs/android/*.kt
@@ -118,14 +123,19 @@ STUBS=("$SANDBOX"/stubs/android/*.kt
     "$SANDBOX"/stubs/androidx/work/*.kt
     "$SANDBOX"/stubs/androidx/documentfile/provider/*.kt
     "$SANDBOX"/stubs/androidx/appcompat/app/*.kt
+    "$SANDBOX"/stubs/androidx/appcompat/widget/*.kt
+    "$SANDBOX"/stubs/androidx/fragment/app/*.kt
+    "$SANDBOX"/stubs/androidx/viewpager/widget/*.kt
     "$SANDBOX"/stubs/androidx/appcompat/content/res/*.kt
     "$SANDBOX"/stubs/androidx/core/app/*.kt
     "$SANDBOX"/stubs/androidx/core/content/*.kt
     "$SANDBOX"/stubs/com/google/android/material/textfield/*.kt
+    "$SANDBOX"/stubs/com/google/android/material/tabs/*.kt
     "$SANDBOX"/stubs/com/journeyapps/barcodescanner/*.kt
     "$SANDBOX"/stubs/com/google/zxing/*.kt
     "$SANDBOX"/stubs/com/google/zxing/common/*.kt
     "$SANDBOX"/stubs/com/google/zxing/qrcode/*.kt
+    "$SANDBOX"/stubs/com/mikepenz/aboutlibraries/*.kt
     "$SANDBOX/stubs/org/shadowice/flocke/andotp/R.kt"
     "$SANDBOX"/stubs/org/json/*.kt
     "$SANDBOX"/stubs/org/apache/commons/codec/binary/*.kt
