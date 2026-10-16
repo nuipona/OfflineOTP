@@ -37,13 +37,13 @@ if [[ -z "$STDLIB" || ! -f "$STDLIB" ]]; then
     exit 2
 fi
 
-# Converted platform-free and low-platform utilities covered by this check. Every entry is
-# compiled and its Java-visible shapes are asserted in Checks.kt. The task subclasses resolve the
-# real Java settings/crypto helpers through JAVA_SOURCES below. Files that still depend
-# on the full Android/AndroidX graph (the larger dialogs, adapters, credential preference and the
-# large activities) are deliberately absent: see README.md for the list and the reason. The fdroid
-# flavor's AboutFragment is compiled as the representative flavor of the about screens; the play
-# flavor differs only by having no extras and is pinned by the Python source guards instead.
+# The converted sources covered by this check. Every entry is compiled and its Java-visible shapes
+# are asserted in Checks.kt. The task subclasses resolve the real Java settings/crypto helpers
+# through JAVA_SOURCES below. Since the twenty-first batch the whole user interface is compiled
+# too: the six activities, the manual entry dialog, the credential preference and the two card
+# adapters. The fdroid flavor's AboutFragment is compiled as the representative flavor of the
+# about screens; the play flavor differs only by having no extras and is pinned by the Python
+# source guards instead.
 APP_SOURCES=(
     "$KOTLIN_APP/Preferences/NumberPickerPreference.kt"
     "$KOTLIN_APP/Preferences/PasswordEncryptedPreference.kt"
@@ -51,6 +51,13 @@ APP_SOURCES=(
     "$KOTLIN_APP/Dialogs/PasswordEntryDialog.kt"
     "$KOTLIN_APP/Dialogs/TagsDialog.kt"
     "$KOTLIN_APP/View/TagsAdapter.kt"
+    "$KOTLIN_APP/View/EntryActionDialogs.kt"
+    "$KOTLIN_APP/View/EntryActionTarget.kt"
+    "$KOTLIN_APP/View/EntryListPresentation.kt"
+    "$KOTLIN_APP/View/EntryViewHolder.kt"
+    "$KOTLIN_APP/View/EntriesCardAdapter.kt"
+    "$KOTLIN_APP/Dialogs/ManualEntryDialog.kt"
+    "$KOTLIN_APP/Preferences/CredentialsPreference.kt"
     "$KOTLIN_APP/View/ThumbnailSelectionAdapter.kt"
     "$KOTLIN_APP/View/AutoFillable/AutoFillableTextInputEditText.kt"
     "$KOTLIN_APP/Utilities/EntryThumbnail.kt"
@@ -111,6 +118,12 @@ APP_SOURCES=(
     "$KOTLIN_APP/Utilities/BackupAgent.kt"
     "$KOTLIN_APP/Activities/ThemedActivity.kt"
     "$KOTLIN_APP/Activities/BaseActivity.kt"
+    "$KOTLIN_APP/Activities/BackgroundTaskActivity.kt"
+    "$KOTLIN_APP/Activities/AuthenticateActivity.kt"
+    "$KOTLIN_APP/Activities/BackupActivity.kt"
+    "$KOTLIN_APP/Activities/MainActivity.kt"
+    "$KOTLIN_APP/Activities/IntroScreenActivity.kt"
+    "$KOTLIN_APP/Activities/SettingsActivity.kt"
     "$KOTLIN_APP/Activities/PanicResponderActivity.kt"
     "$KOTLIN_APP/Activities/SecureCaptureActivity.kt"
     "$KOTLIN_APP/Activities/AboutActivity.kt"
@@ -129,6 +142,21 @@ STUBS=("$SANDBOX"/stubs/android/*.kt
     "$SANDBOX"/stubs/androidx/appcompat/content/res/*.kt
     "$SANDBOX"/stubs/androidx/core/app/*.kt
     "$SANDBOX"/stubs/androidx/core/content/*.kt
+    "$SANDBOX"/stubs/androidx/lifecycle/*.kt
+    "$SANDBOX"/stubs/androidx/core/view/*.kt
+    "$SANDBOX"/stubs/androidx/core/content/res/*.kt
+    "$SANDBOX"/stubs/androidx/drawerlayout/widget/*.kt
+    "$SANDBOX"/stubs/androidx/cardview/widget/*.kt
+    "$SANDBOX"/stubs/com/google/zxing/integration/android/*.kt
+    "$SANDBOX"/stubs/com/leinardi/android/speeddial/*.kt
+    "$SANDBOX"/stubs/com/github/aakira/expandablelayout/*.kt
+    "$SANDBOX"/stubs/me/zhanghai/android/materialprogressbar/*.kt
+    "$SANDBOX"/stubs/com/heinrichreimersoftware/materialintro/app/*.kt
+    "$SANDBOX"/stubs/com/heinrichreimersoftware/materialintro/slide/*.kt
+    "$SANDBOX"/stubs/com/google/android/material/snackbar/*.kt
+    "$SANDBOX"/stubs/com/google/android/material/switchmaterial/*.kt
+    "$SANDBOX"/stubs/org/openintents/openpgp/*.kt
+    "$SANDBOX"/stubs/org/openintents/openpgp/util/*.kt
     "$SANDBOX"/stubs/com/google/android/material/textfield/*.kt
     "$SANDBOX"/stubs/com/google/android/material/tabs/*.kt
     "$SANDBOX"/stubs/com/journeyapps/barcodescanner/*.kt
@@ -145,14 +173,17 @@ STUBS=("$SANDBOX"/stubs/android/*.kt
 # against the actual declarations, and no Java class file is produced or verified here. Listed
 # explicitly instead of by directory so that adding one is a deliberate choice. The task
 # subclasses, the vault repository, the backup helpers and the converted settings facade are
-# compiled against the real FileHelper declaration rather than a stub copy of it, and against the
-# real CredentialsPreference.DEFAULT_VALUE the settings default uses; the crypto/key-management
-# helpers (fifteenth batch) and Settings (sixteenth batch) are Kotlin and therefore compiled, not
-# resolved.
+# compiled against the real FileHelper declaration rather than a stub copy of it; the
+# crypto/key-management helpers (fifteenth batch), Settings (sixteenth batch) and the credential
+# preference (twenty-first batch) are Kotlin and therefore compiled, not resolved.
+#
+# Because the Java sources are not compiled, the Java-only Utilities/Constants has no class file
+# at runtime here. A class whose members mention one of its types can therefore not be reflected
+# (resolving a method or a field signature would need the missing class); those members are
+# asserted by the Python source guards and by the device test instead.
 JAVA_SOURCES=(
     "$ROOT/app/src/main/java/org/shadowice/flocke/andotp/Utilities/Constants.java"
     "$ROOT/app/src/main/java/org/shadowice/flocke/andotp/Utilities/FileHelper.java"
-    "$ROOT/app/src/main/java/org/shadowice/flocke/andotp/Preferences/CredentialsPreference.java"
 )
 
 rm -rf "$OUT"

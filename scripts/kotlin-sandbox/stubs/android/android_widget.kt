@@ -4,6 +4,7 @@ package android.widget
 import android.content.Context
 import android.text.Editable
 import android.text.SimpleEditable
+import android.text.TextUtils
 import android.text.TextWatcher
 import android.text.method.TransformationMethod
 import android.view.KeyEvent
@@ -49,15 +50,61 @@ class Toast private constructor(private val resId: Int, private val text: CharSe
 }
 
 open class TextView : View() {
-    open var text: CharSequence? = null
+    /**
+     * The text of the view.
+     *
+     * The platform getter is `getText()`/`setText(CharSequence)`, but `EditText` narrows the
+     * getter to `Editable`, which turns the synthetic Kotlin property into a read-only one there.
+     * The stand-in therefore models the text as a read-only property plus the `setText` method,
+     * which is the strict shape every receiver accepts.
+     */
+    open val text: CharSequence? get() = textValue
+    private var textValue: CharSequence? = null
     open var hint: CharSequence? = null
+    /** The text size in pixels; the card view holder scales the label with it. */
+    var textSize: Float = 0f
+    /** The ellipsizing mode; the card view holder configures it per label display mode. */
+    var ellipsize: TextUtils.TruncateAt? = null
+    /** Whether the text scrolls horizontally (the marquee label mode). */
+    var isHorizontallyScrolling: Boolean = false
+    /** Whether the view is selected (the marquee label mode). */
+    var isSelected: Boolean = false
+    /** The maximum number of lines. */
+    var maxLines: Int = 0
+    /** The text colour. */
+    var textColor: Int = 0
+
+    /** Whether the text is a single line. */
+    var isSingleLine: Boolean = false
+
+    /** The raw input type of the field. */
+    var rawInputType: Int = 0
+
+    /** The error text that was set. */
+    var error: CharSequence? = null
+        private set
+
+    fun setError(error: CharSequence?) {
+        this.error = error
+    }
 
     private val textWatchers = ArrayList<TextWatcher>()
     private var editorActionListener: OnEditorActionListener? = null
 
+    open fun setText(text: CharSequence?) {
+        textValue = text
+    }
     fun setText(resource: Int) {}
     fun setHint(resource: Int) {
         hint = "res:$resource"
+    }
+
+    /** The platform colours the text through a colour state list. */
+    fun getTextColors(): ColorStateList = ColorStateList(textColor)
+
+    /** The platform resolves a colour for the given view state. */
+    class ColorStateList(private val defaultColor: Int) {
+        fun getColorForState(state: IntArray, defaultColor: Int): Int = this.defaultColor
     }
 
     fun addTextChangedListener(watcher: TextWatcher) {
@@ -90,11 +137,12 @@ open class EditText : TextView {
     open val selectionEnd: Int = -1
     open var inputType: Int = 0
 
-    override var text: CharSequence?
-        get() = buffer
-        set(value) {
-            buffer.set(value?.toString() ?: "")
-        }
+    /** The platform narrows `getText()` to `Editable`; the text is the editable buffer. */
+    override val text: CharSequence? get() = buffer
+
+    override fun setText(text: CharSequence?) {
+        buffer.set(text?.toString() ?: "")
+    }
 
     open val editableText: Editable get() = buffer
 
@@ -119,6 +167,24 @@ open class ArrayAdapter<T>(val context: Context, resource: Int, objects: Mutable
     override fun getCount(): Int = items.size
     override fun getItem(position: Int): T = items[position]
     override fun getItemId(position: Int): Long = position.toLong()
+
+    /** The position of the given item in the list. */
+    fun getPosition(item: T?): Int = items.indexOf(item)
+
+    /** The drop-down view resource that was set. */
+    var dropDownViewResource = 0
+        private set
+
+    fun setDropDownViewResource(resId: Int) {
+        dropDownViewResource = resId
+    }
+
+    /** Whether the item at the position is enabled. */
+    open fun isEnabled(position: Int): Boolean = true
+
+    /** The view shown in the drop-down list. */
+    open fun getDropDownView(position: Int, convertView: View?, parent: android.view.ViewGroup): View =
+        android.widget.CheckedTextView()
     override fun getView(position: Int, convertView: View?, parent: android.view.ViewGroup): View = View()
 }
 
@@ -128,22 +194,71 @@ class CheckedTextView : TextView() {
 
 /** Base of the list widgets; the converted tag picker only needs the item-click listener slot. */
 open class AdapterView<T> : android.view.ViewGroup() {
+    /** The item click listener that was set. */
+    var onItemClickListener: OnItemClickListener? = null
+
     fun interface OnItemClickListener {
         fun onItemClick(parent: AdapterView<*>?, view: View, position: Int, id: Long)
+    }
+
+    /** The platform declares the selection listener on the adapter view. */
+    fun interface OnItemSelectedListener {
+        fun onItemSelected(parent: AdapterView<*>?, view: View?, position: Int, id: Long)
     }
 }
 
 class ListView(context: Context) : AdapterView<Any?>() {
     var divider: android.graphics.drawable.Drawable? = null
     var adapter: BaseAdapter? = null
-    var onItemClickListener: OnItemClickListener? = null
+
+    /** The selected position of the list. */
+    var selectedPosition: Int = 0
+        private set
+
+    /** The positions that are checked. */
+    val checkedPositions: MutableSet<Int> = LinkedHashSet()
+
+    fun setSelection(position: Int) {
+        selectedPosition = position
+    }
+
+    fun setItemChecked(position: Int, checked: Boolean) {
+        if (checked) checkedPositions.add(position) else checkedPositions.remove(position)
+    }
+
+    fun isItemChecked(position: Int): Boolean = checkedPositions.contains(position)
 }
 
-class GridView {
+open class GridView(context: Context) : AdapterView<Any?>() {
     class LayoutParams(width: Int, height: Int) : android.view.ViewGroup.LayoutParams(width, height)
+
+    /** The adapter that fills the grid. */
+    var adapter: BaseAdapter? = null
+
+    /** The column width of the grid. */
+    var columnWidth: Int = 0
+
+    /** The number of columns. */
+    var numColumns: Int = 1
+
+    /** The vertical spacing between the cells. */
+    var verticalSpacing: Int = 0
+
+    /** The horizontal spacing between the cells. */
+    var horizontalSpacing: Int = 0
+
+    /** The stretch mode of the grid. */
+    var stretchMode: Int = STRETCH_COLUMN_WIDTH
+
+    companion object {
+        const val AUTO_FIT = -1
+        const val STRETCH_COLUMN_WIDTH = 0
+        const val STRETCH_COLUMN_HEIGHT = 1
+        const val STRETCH_UNIFORM = 2
+    }
 }
 
-class ImageView(context: Context) : View() {
+open class ImageView(context: Context) : View() {
     private var imageDrawable: android.graphics.drawable.Drawable? = null
 
     /**
@@ -157,17 +272,51 @@ class ImageView(context: Context) : View() {
     }
 
     fun setImageBitmap(bitmap: android.graphics.Bitmap?) {}
+
+    /** How the image is scaled into its bounds. */
+    enum class ScaleType {
+        MATRIX, FIT_XY, FIT_START, FIT_CENTER, FIT_END, CENTER, CENTER_CROP, CENTER_INSIDE
+    }
+
+    /**
+     * The platform only has `setAdjustViewBounds(boolean)` (there is no getter), so the stand-in
+     * keeps the setter as a function and stores the state privately.
+     */
+    private var adjustViewBoundsFlag: Boolean = false
+
+    /** The platform's `getScaleType()`/`setScaleType(ScaleType)` pair; see [adjustViewBoundsFlag]. */
+    private var scaleTypeValue: ScaleType = ScaleType.FIT_CENTER
+
+    /** The scale type of the image. */
+    val scaleType: ScaleType
+        get() = scaleTypeValue
+
+    fun setAdjustViewBounds(adjustViewBounds: Boolean) {
+        adjustViewBoundsFlag = adjustViewBounds
+    }
+
+    fun setScaleType(scaleType: ScaleType) {
+        scaleTypeValue = scaleType
+    }
 }
 
 /** Recording-only preference/dialog widgets; no focus, range enforcement or actual UI. */
-class FrameLayout(context: Context) : android.view.ViewGroup() {
+open class FrameLayout(context: Context) : android.view.ViewGroup() {
     class LayoutParams(width: Int, height: Int) : android.view.ViewGroup.LayoutParams(width, height) {
         var gravity = 0
     }
 }
 
 /** Inert linear layout; the converted about screens only look children up and add extras. */
-open class LinearLayout(context: Context) : android.view.ViewGroup()
+open class LinearLayout(context: Context) : android.view.ViewGroup() {
+    /** The orientation of the layout. */
+    var orientation: Int = HORIZONTAL
+
+    companion object {
+        const val HORIZONTAL = 0
+        const val VERTICAL = 1
+    }
+}
 
 class NumberPicker(context: Context) : View() {
     var minValue = 0
@@ -180,8 +329,51 @@ class NumberPicker(context: Context) : View() {
 }
 
 open class CompoundButton : TextView() {
-    fun interface OnCheckedChangeListener { fun onCheckedChanged(buttonView: CompoundButton?, isChecked: Boolean) }
+    open var isChecked: Boolean = false
+    fun interface OnCheckedChangeListener { fun onCheckedChanged(buttonView: CompoundButton, isChecked: Boolean) }
     fun setOnCheckedChangeListener(listener: OnCheckedChangeListener?) {}
 }
 class CheckBox : CompoundButton()
-class Button : TextView()
+class Button : TextView() {
+    /** The compound drawables that were set, as (left, top, right, bottom) resource ids. */
+    var compoundDrawables: IntArray = intArrayOf(0, 0, 0, 0)
+        private set
+
+    fun setCompoundDrawablesWithIntrinsicBounds(left: Int, top: Int, right: Int, bottom: Int) {
+        compoundDrawables = intArrayOf(left, top, right, bottom)
+    }
+
+    fun setCompoundDrawablesWithIntrinsicBounds(left: android.graphics.drawable.Drawable?,
+                                                top: android.graphics.drawable.Drawable?,
+                                                right: android.graphics.drawable.Drawable?,
+                                                bottom: android.graphics.drawable.Drawable?) {
+        compoundDrawables = intArrayOf(0, 0, 0, 0)
+    }
+
+    fun setCompoundDrawablesRelativeWithIntrinsicBounds(start: Int, top: Int, end: Int, bottom: Int) {
+        compoundDrawables = intArrayOf(start, top, end, bottom)
+    }
+}
+
+/** The card progress bar; the holder animates its progress. */
+open class ProgressBar(context: Context) : View() {
+    var max: Int = 0
+    var progress: Int = 0
+}
+
+/** An image button; the card view holder tints its drawable. */
+open class ImageButton(context: Context) : ImageView(context)
+
+/** The spinner used by the manual-entry dialog and the intro slides. */
+open class Spinner(context: Context) : AdapterView<Any?>() {
+    var adapter: BaseAdapter? = null
+    var selectedItemPosition: Int = 0
+    var onItemSelectedListener: OnItemSelectedListener? = null
+
+    fun setSelection(position: Int) {
+        selectedItemPosition = position
+    }
+
+    fun getSelectedItem(): Any? = adapter?.getItem(selectedItemPosition)
+
+}

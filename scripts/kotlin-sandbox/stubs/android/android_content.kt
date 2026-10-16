@@ -37,14 +37,24 @@ open class Context {
     /** The base context; the platform returns the context the application context was made from. */
     open fun getBaseContext(): Context = this
 
-    /** Format overload; the result stays a recognisable placeholder, arguments are not applied. */
-    fun getString(resId: Int, vararg formatArgs: Any?): String = "text:$resId"
+    /**
+     * Format overload; the result stays a recognisable placeholder, arguments are not applied.
+     * `open` so the checks can substitute a value that carries the formatted arguments, the way
+     * the platform's `Context.getString(int, Object...)` does.
+     */
+    open fun getString(resId: Int, vararg formatArgs: Any?): String = "text:$resId"
     /** Resolves to a recognisable placeholder so the checks can tell which resource was read. */
     fun getText(resId: Int): CharSequence = "text:$resId"
     /** `open` so a fake activity can grant or deny; the default denies, like an ungranted app. */
     open fun checkSelfPermission(permission: String): Int = android.content.pm.PackageManager.PERMISSION_DENIED
     /** `open` so checks can return a recording service instead of the null default. */
     open fun getSystemService(name: String): Any? = null
+
+    /** The context itself; the platform returns the wrapper's base context. */
+    open val context: Context get() = this
+
+    /** The layout inflater of the context. */
+    open fun getLayoutInflater(): android.view.LayoutInflater = android.view.LayoutInflater.from(this)
     /** The task classes keep only the application context; the checks substitute their own. */
     open fun getApplicationContext(): Context = this
     fun getFilesDir(): java.io.File = java.io.File(".")
@@ -62,6 +72,7 @@ open class Context {
         const val CLIPBOARD_SERVICE = "clipboard"
         const val INPUT_METHOD_SERVICE = "input_method"
         const val NOTIFICATION_SERVICE = "notification"
+        const val KEYGUARD_SERVICE = "keyguard"
     }
 }
 
@@ -76,6 +87,13 @@ open class ContentResolver {
     open fun openInputStream(uri: Uri?): java.io.InputStream? = null
     open fun openOutputStream(uri: Uri?): java.io.OutputStream? = null
     open fun getType(uri: Uri?): String? = null
+
+    /** The persistable permissions that were taken. */
+    val takenPermissions: MutableList<Pair<Uri?, Int>> = ArrayList()
+
+    open fun takePersistableUriPermission(uri: Uri?, takeFlags: Int) {
+        takenPermissions.add(uri to takeFlags)
+    }
 }
 
 /**
@@ -139,23 +157,116 @@ open class Intent(action: String? = null) {
     /** The action the stand-in was created with. */
     var intentAction: String? = action
 
-    /** The data URI the stand-in received via [setData]. */
-    var intentData: android.net.Uri? = null
-        private set
+    /** The data URI the stand-in received; the platform resolves it into the intent. */
+    var data: android.net.Uri? = null
 
     /** The action of the intent, or null. */
     open fun getAction(): String? = intentAction
 
-    /** Records the data; the platform resolves it into the intent. */
-    open fun setData(uri: android.net.Uri?): Intent {
-        intentData = uri
+    /** The data URI as a string, the way the platform hands it to the URI parser. */
+    open fun getDataString(): String? = data?.toString()
+
+    /** The flags the intent carries. */
+    var intentFlags: Int = 0
+        private set
+
+    /** The class the intent targets. */
+    var targetClass: Class<*>? = null
+        private set
+
+    /** The intent that targets a class. */
+    constructor(context: Context, target: Class<*>?) : this() {
+        targetClass = target
+    }
+
+    /** The extras the intent received; the platform stores them in a bundle. */
+    val extras: MutableMap<String, Any?> = LinkedHashMap()
+
+    open fun getStringExtra(name: String): String? = extras[name] as? String
+
+    open fun getIntExtra(name: String, defaultValue: Int): Int = extras[name] as? Int ?: defaultValue
+
+    open fun getBooleanExtra(name: String, defaultValue: Boolean): Boolean =
+        extras[name] as? Boolean ?: defaultValue
+
+    open fun putExtra(name: String, value: String?): Intent {
+        extras[name] = value
         return this
     }
+
+    open fun putExtra(name: String, value: Int): Intent {
+        extras[name] = value
+        return this
+    }
+
+    open fun putExtra(name: String, value: android.net.Uri?): Intent {
+        extras[name] = value
+        return this
+    }
+
+    open fun putExtra(name: String, value: Long): Intent {
+        extras[name] = value
+        return this
+    }
+
+    open fun putExtra(name: String, value: Boolean): Intent {
+        extras[name] = value
+        return this
+    }
+
+    open fun putExtra(name: String, value: Array<String>?): Intent {
+        extras[name] = value
+        return this
+    }
+
+    /** The platform declares this as `<T extends Parcelable> T getParcelableExtra(String)`. */
+    @Suppress("UNCHECKED_CAST")
+    open fun <T : android.os.Parcelable> getParcelableExtra(name: String): T? =
+        extras[name] as? T
+
+    /** The activity that would handle the intent; the platform queries the package manager. */
+    open fun resolveActivity(pm: android.content.pm.PackageManager): android.content.ComponentName? = null
+
+    open fun addCategory(category: String): Intent = this
+
+    open fun addFlags(flags: Int): Intent = this
+
+    open fun getFlags(): Int = intentFlags
+
+    open fun setType(type: String?): Intent = this
+
+    open fun setAction(action: String?): Intent {
+        intentAction = action
+        return this
+    }
+
 
     companion object {
         const val ACTION_SCREEN_OFF = "android.intent.action.SCREEN_OFF"
         const val ACTION_VIEW = "android.intent.action.VIEW"
+        const val ACTION_SEND = "android.intent.action.SEND"
+        const val ACTION_OPEN_DOCUMENT = "android.intent.action.OPEN_DOCUMENT"
+        const val ACTION_CREATE_DOCUMENT = "android.intent.action.CREATE_DOCUMENT"
+        const val ACTION_GET_CONTENT = "android.intent.action.GET_CONTENT"
+        const val ACTION_OPEN_DOCUMENT_TREE = "android.intent.action.OPEN_DOCUMENT_TREE"
+        const val FLAG_GRANT_READ_URI_PERMISSION = 0x00000001
+        const val FLAG_GRANT_WRITE_URI_PERMISSION = 0x00000002
+        const val FLAG_GRANT_PERSISTABLE_URI_PERMISSION = 0x00000040
+        const val FLAG_GRANT_PREFIX_URI_PERMISSION = 0x00000080
+        const val CATEGORY_OPENABLE = "android.intent.category.OPENABLE"
+        const val EXTRA_TEXT = "android.intent.extra.TEXT"
+        const val EXTRA_TITLE = "android.intent.extra.TITLE"
     }
+}
+
+/** The name of the activity that handles an intent. */
+class ComponentName(private val packageName: String, private val className: String) {
+    override fun toString(): String = "$packageName/$className"
+}
+
+/** The platform's intent sender; the backup screen hands it back to the OpenPGP app. */
+class IntentSender {
+    class SendIntentException : Exception()
 }
 
 /** Thrown when no activity can handle an intent; the fallback paths catch it. */
@@ -178,6 +289,14 @@ class IntentFilter(action: String? = null) {
 /** The nested listener mirrors the platform nesting; `fun interface` keeps SAM conversion working. */
 interface DialogInterface {
     fun dismiss()
+
+    fun interface OnCancelListener {
+        fun onCancel(dialog: DialogInterface?)
+    }
+
+    fun interface OnDismissListener {
+        fun onDismiss(dialog: DialogInterface?)
+    }
 
     fun interface OnClickListener {
         fun onClick(dialog: DialogInterface, which: Int)

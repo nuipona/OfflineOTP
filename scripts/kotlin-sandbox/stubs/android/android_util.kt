@@ -41,6 +41,8 @@ class TypedValue {
 /** Sink for the task runner's error path; the checks never read logged text. */
 object Log {
     @JvmStatic
+    fun d(tag: String?, msg: String?): Int = 0
+    @JvmStatic
     fun e(tag: String?, msg: String?): Int = 0
     @JvmStatic
     fun w(tag: String?, msg: String?): Int = 0
@@ -104,6 +106,27 @@ class AtomicFile(private val file: java.io.File) {
     fun startWrite(): java.io.FileOutputStream = java.io.FileOutputStream(file)
     fun finishWrite(output: java.io.FileOutputStream?) {}
     fun failWrite(output: java.io.FileOutputStream?) {}
+}
+
+/**
+ * The sparse array the intro slides map their spinner positions with. The stand-in keeps the
+ * entries in a map; no sparse storage is modelled.
+ */
+class SparseArray<T> {
+    private val values = LinkedHashMap<Int, T>()
+
+    val size: Int get() = values.size
+
+    fun put(key: Int, value: T) {
+        values[key] = value
+    }
+
+    fun get(key: Int): T? = values[key]
+
+    fun indexOfValue(value: T): Int {
+        for ((key, entry) in values) if (entry == value) return key
+        return -1
+    }
 }
 
 /** XML attributes are not parsed by this harness. */

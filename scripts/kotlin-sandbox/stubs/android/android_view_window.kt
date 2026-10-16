@@ -19,8 +19,17 @@ open class Window {
     /** The insets controller of this window; the platform creates it with the window. */
     var windowInsetsController: WindowInsetsController? = null
 
+    /** The soft input mode that was requested. */
+    var softInputMode: Int = 0
+        private set
+
     open fun setNavigationBarColor(color: Int) {
         navigationBarColor = color
+    }
+
+    /** Records the soft input mode; the platform applies it when the window is shown. */
+    open fun setSoftInputMode(mode: Int) {
+        softInputMode = mode
     }
 
     /** Records the flags; the platform turns the masked bits on or off. */
@@ -44,6 +53,9 @@ open class WindowManager {
             const val FLAG_FULLSCREEN: Int = 0x00000400
             const val FLAG_SECURE: Int = 0x00002000
             const val FLAG_HARDWARE_ACCELERATED: Int = 0x01000000
+            /** The soft input state constants the authenticate screen uses. */
+            const val SOFT_INPUT_STATE_ALWAYS_VISIBLE: Int = 0x00000005
+            const val SOFT_INPUT_STATE_HIDDEN: Int = 0x00000004
         }
     }
 }

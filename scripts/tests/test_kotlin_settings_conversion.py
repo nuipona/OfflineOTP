@@ -46,8 +46,9 @@ class KotlinSettingsConversionTest(unittest.TestCase):
         # The resolution sources left are the ones the compiled sources still read.
         for resolved in ("Constants", "FileHelper"):
             self.assertIn(f"$ROOT/app/src/main/java/org/shadowice/flocke/andotp/Utilities/{resolved}.java", harness)
-        self.assertIn("$ROOT/app/src/main/java/org/shadowice/flocke/andotp/Preferences/CredentialsPreference.java",
-                      harness)
+        # The credential preference is Kotlin since the twenty-first batch: compiled, not resolved.
+        self.assertIn("$KOTLIN_APP/Preferences/CredentialsPreference.kt", harness)
+        self.assertNotIn("Preferences/CredentialsPreference.java", harness)
         self.assertIn('"${JAVA_SOURCES[@]}"', harness)
         checks = (SANDBOX / "Checks.kt").read_text()
         # The settings checks execute the converted class and read its compiled surface.
@@ -298,14 +299,13 @@ class KotlinSettingsConversionTest(unittest.TestCase):
         self.assertIn("if (settings.getBlockAccessibility()) {", preference)
         self.assertIn("if (settings.getBlockAutofill()) {", preference)
         self.assertNotIn("settings.blockAccessibility", preference)
-        # The still-Java and instrumentation callers keep constructing the class with its single
-        # Context parameter (11 in the app sources, 5 in the instrumentation suites). The two
-        # converted activities construct it in Kotlin since the nineteenth batch.
+        # The instrumentation callers keep constructing the class with its single Context
+        # parameter, and the app sources do the same in Kotlin since the twenty-first batch.
         sites = sum(text.read_text().count("new Settings(")
                     for text in list(JAVA.rglob("*.java")) + list(ANDROID_TEST.rglob("*.java")))
-        sites += sum(text.read_text().count("Settings(this)")
-                     for text in KOTLIN.rglob("*.kt"))
-        self.assertGreaterEqual(sites, 16, "the construction sites disappeared")
+        for source in KOTLIN.rglob("*.kt"):
+            sites += len(re.findall(r"(?<![.\w])Settings\(", source.read_text()))
+        self.assertGreaterEqual(sites, 30, "the construction sites disappeared")
 
 
 if __name__ == "__main__":

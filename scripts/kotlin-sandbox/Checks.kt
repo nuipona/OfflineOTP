@@ -90,6 +90,18 @@ import org.shadowice.flocke.andotp.Receivers.BackupBroadcastReceiver
 import org.shadowice.flocke.andotp.Receivers.EncryptedBackupBroadcastReceiver
 import org.shadowice.flocke.andotp.Tasks.EncryptedBackupWorker
 import org.shadowice.flocke.andotp.Utilities.BackupAgent
+import org.shadowice.flocke.andotp.Activities.AuthenticateActivity
+import org.shadowice.flocke.andotp.Activities.BackupActivity
+import org.shadowice.flocke.andotp.Activities.BackgroundTaskActivity
+import org.shadowice.flocke.andotp.Activities.IntroScreenActivity
+import org.shadowice.flocke.andotp.Activities.MainActivity
+import org.shadowice.flocke.andotp.Activities.SettingsActivity
+import org.shadowice.flocke.andotp.Database.EntryList
+import org.shadowice.flocke.andotp.Dialogs.ManualEntryDialog
+import org.shadowice.flocke.andotp.Preferences.CredentialsPreference
+import org.shadowice.flocke.andotp.View.EntriesCardAdapter
+import org.shadowice.flocke.andotp.View.EntryListPresentation
+import org.shadowice.flocke.andotp.View.EntryViewHolder
 import org.shadowice.flocke.andotp.R
 
 import android.app.AlertDialog
@@ -109,6 +121,16 @@ import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
+import android.widget.Filterable
+import android.widget.FrameLayout
+import android.widget.ImageButton
+import androidx.cardview.widget.CardView
+import me.zhanghai.android.materialprogressbar.MaterialProgressBar
+import org.openintents.openpgp.util.OpenPgpAppPreference
+import org.openintents.openpgp.util.OpenPgpKeyPreference
+import com.heinrichreimersoftware.materialintro.app.IntroActivity
+import javax.crypto.SecretKey
+import java.io.ByteArrayOutputStream
 import android.net.Uri
 import android.database.Cursor
 import android.os.ParcelFileDescriptor
@@ -160,6 +182,7 @@ import com.google.zxing.qrcode.QRCodeReader
 import android.content.res.Configuration
 import android.content.res.Resources
 import android.preference.FakeSharedPreferences
+import android.preference.ListPreference
 import android.preference.PreferenceManager
 
 import org.json.JSONObject
@@ -294,8 +317,23 @@ private fun methodSignature(method: Method): String {
     return "$prefix${method.returnType.simpleName} ${method.name}($parameters)"
 }
 
+/**
+ * The public methods of a type, by signature.
+ *
+ * The Java-only Utilities/Constants has no class file in this sandbox (kotlinc reads the Java
+ * sources for resolution, it does not compile them), so a method whose signature mentions one of
+ * its types cannot be resolved here. Such a method is skipped here and asserted by name and
+ * arity instead; see expectMethodArity.
+ */
 private fun publicMethods(type: Class<*>): List<String> =
-        type.declaredMethods.filter { Modifier.isPublic(it.modifiers) }.map { methodSignature(it) }.sorted()
+        type.declaredMethods.filter { Modifier.isPublic(it.modifiers) }
+                .mapNotNull { method ->
+                    try {
+                        methodSignature(method)
+                    } catch (error: NoClassDefFoundError) {
+                        null
+                    }
+                }.sorted()
 
 private val INT_TYPE: Class<*> = Int::class.javaPrimitiveType!!
 private val LONG_TYPE: Class<*> = Long::class.javaPrimitiveType!!
@@ -322,6 +360,24 @@ private fun expectPublicFieldValue(type: Class<*>, name: String, expected: Any, 
 
 private fun expectMethod(type: Class<*>, signature: String) {
     expect(publicMethods(type).contains(signature), { "${type.simpleName} is missing [$signature]; has ${publicMethods(type)}" })
+}
+
+/** Asserts that a public method exists, without resolving its parameter types. */
+private fun expectMethodArity(type: Class<*>, name: String, parameterCount: Int) {
+    expectDeclaredMethod(type, name, parameterCount) { Modifier.isPublic(it) }
+}
+
+/** Asserts that a protected method exists, without resolving its parameter types. */
+private fun expectProtectedMethodArity(type: Class<*>, name: String, parameterCount: Int) {
+    expectDeclaredMethod(type, name, parameterCount) { Modifier.isProtected(it) }
+}
+
+private fun expectDeclaredMethod(type: Class<*>, name: String, parameterCount: Int,
+                                 visibility: (Int) -> Boolean) {
+    val found = type.declaredMethods.any {
+        it.name == name && it.parameterCount == parameterCount && visibility(it.modifiers)
+    }
+    expect(found, { "${type.simpleName} is missing a $name() with $parameterCount parameter(s)" })
 }
 
 // --- fake scheduler for the timer controller --------------------------------------------------
@@ -546,6 +602,52 @@ private class FailingRunnerTask(fallback: String, private val failure: IllegalSt
 
 private class NullRunnerTask(fallback: String?) : UiBasedBackgroundTask<String?>(fallback) {
     override fun doInBackground(): String? = null
+}
+
+/** A task that finishes at once and records that it ran and that it was canceled. */
+private class RecordingTask : UiBasedBackgroundTask<String>("failed") {
+    /** Whether the worker thread ran the task. */
+    @Volatile
+    var started: Boolean = false
+
+    /** Whether the task was canceled. */
+    @Volatile
+    var canceled: Boolean = false
+
+    override fun doInBackground(): String {
+        started = true
+        return "done"
+    }
+
+    override fun onCancellation() {
+        canceled = true
+    }
+}
+
+/** A task that runs until it is canceled, and records that it ran and that it was canceled. */
+private class BlockingRecordingTask : UiBasedBackgroundTask<String>("failed") {
+    /** Whether the worker thread ran the task. */
+    @Volatile
+    var started: Boolean = false
+
+    /** Whether the task was canceled. */
+    @Volatile
+    var canceled: Boolean = false
+
+    override fun doInBackground(): String {
+        started = true
+        try {
+            // The cancellation interrupts the worker.
+            Thread.sleep(5000)
+        } catch (interrupted: InterruptedException) {
+            // Unwind after the interrupt.
+        }
+        return "done"
+    }
+
+    override fun onCancellation() {
+        canceled = true
+    }
 }
 
 /** Recording preference over the fake superclass, not a real PreferenceManager/persistence test. */
@@ -898,6 +1000,16 @@ private open class SettingsContext : Context() {
         consulted.add(resId)
         return settingsDefaultValue(resId) ?: settingsKey(resId)
     }
+
+    /**
+     * The formatted overload keeps the arguments, so a check can see what a content description
+     * or a hint was built from (the platform substitutes them into the string resource).
+     */
+    override fun getString(resId: Int, vararg formatArgs: Any?): String {
+        consulted.add(resId)
+        val base = settingsDefaultValue(resId) ?: settingsKey(resId)
+        return if (formatArgs.isEmpty()) base else base + " " + formatArgs.joinToString(" ")
+    }
 }
 
 /**
@@ -960,6 +1072,12 @@ private class ScreenActivity : BaseActivity() {
 
 /** The preference key the fake context maps a resource id to. */
 private fun settingsKey(resId: Int): String = "key:" + resId
+
+/**
+ * The key a platform fragment uses for a preference: the fragment stub resolves the resource id
+ * to "res:<id>", so the checks address the preferences of a fragment the same way.
+ */
+private fun fragmentKey(resId: Int): String = "res:" + resId
 
 /**
  * The converted panic responder, driven by the checks: it answers with a controllable intent and
@@ -1046,6 +1164,21 @@ private class SettingsFixture(fixtureContext: SettingsContext = SettingsContext(
 
 /** An inflated about layout: scripted children per id, so lookups return the check's widgets. */
 private class AboutRoot : View() {
+    val children = HashMap<Int, View>()
+
+    @Suppress("UNCHECKED_CAST")
+    override fun <T : View> findViewById(id: Int): T? = children[id] as T?
+}
+
+/** The intro wizard, with the protected lifecycle method the platform calls for the check. */
+private class IntroWizard : IntroScreenActivity() {
+    fun createWizard() {
+        onCreate(null)
+    }
+}
+
+/** An inflated entry card: scripted children per id, so the card binding can be observed. */
+private class CardRoot : View() {
     val children = HashMap<Int, View>()
 
     @Suppress("UNCHECKED_CAST")
@@ -1818,12 +1951,12 @@ fun main() {
             expect(enterWidgets.warning.text == "text:${R.string.settings_label_short_password}",
                     { "the short-password warning text changed" })
 
-            enterWidgets.input.text = "abcde"
+            enterWidgets.input.setText("abcde")
             dialog.onTextChanged("", 0, 0, 0)
             expect(enterWidgets.warning.visibility == View.VISIBLE && !enterWidgets.ok.isEnabled,
                     { "a short password must warn and keep OK disabled" })
 
-            enterWidgets.input.text = "abcdef"
+            enterWidgets.input.setText("abcdef")
             dialog.onTextChanged("", 0, 0, 0)
             expect(enterWidgets.warning.visibility == View.GONE && enterWidgets.ok.isEnabled,
                     { "ENTER mode must enable OK at the minimum length" })
@@ -1859,18 +1992,18 @@ fun main() {
                     { "the autofill block is not applied to the right views" })
             expect(!updateWidgets.ok.isEnabled, { "OK must start disabled" })
 
-            updateWidgets.input.text = "abcdef"
-            updateWidgets.confirm.text = "abcdxf"
+            updateWidgets.input.setText("abcdef")
+            updateWidgets.confirm.setText("abcdxf")
             dialog.onTextChanged("", 0, 0, 0)
             expect(updateWidgets.warning.visibility == View.GONE && !updateWidgets.ok.isEnabled,
                     { "a mismatched confirmation must keep OK disabled" })
 
-            updateWidgets.confirm.text = "abcdef"
+            updateWidgets.confirm.setText("abcdef")
             dialog.onTextChanged("", 0, 0, 0)
             expect(updateWidgets.ok.isEnabled, { "matching inputs must enable OK" })
 
-            updateWidgets.input.text = "abc"
-            updateWidgets.confirm.text = "abc"
+            updateWidgets.input.setText("abc")
+            updateWidgets.confirm.setText("abc")
             dialog.onTextChanged("", 0, 0, 0)
             expect(updateWidgets.warning.visibility == View.VISIBLE && !updateWidgets.ok.isEnabled,
                     { "matching but short inputs must still warn" })
@@ -1879,8 +2012,8 @@ fun main() {
             expect(dialog.dismissals == 1 && entered == null,
                     { "cancel must dismiss without delivering a password" })
 
-            updateWidgets.input.text = "secret1"
-            updateWidgets.confirm.text = "secret1"
+            updateWidgets.input.setText("secret1")
+            updateWidgets.confirm.setText("secret1")
             dialog.onTextChanged("", 0, 0, 0)
             updateWidgets.ok.performClick()
             expect(entered == "secret1" && dialog.dismissals == 2,
@@ -1928,7 +2061,7 @@ fun main() {
         expect(list.adapter === tagsAdapter, { "the picker must show the given adapter" })
 
         val row = android.widget.CheckedTextView()
-        row.text = "Alpha"
+        row.setText("Alpha")
         row.isChecked = true
         list.onItemClickListener!!.onItemClick(null, row, 0, 0L)
         expect(!row.isChecked && tagsAdapter.getTagState("Alpha") == false,
@@ -1939,7 +2072,7 @@ fun main() {
         val newTagDialog = AlertDialog.Builder.created[1]
         expect(newTagDialog.shown && newTagDialog.titleId == R.string.button_new_tag, { "new-tag dialog changed" })
         val tagInput = (newTagDialog.contentView as android.widget.FrameLayout).getChildAt(0) as android.widget.EditText
-        tagInput.text = "fresh"
+        tagInput.setText("fresh")
         newTagDialog.positiveButtonListener!!.onClick(newTagDialog, DialogInterface.BUTTON_POSITIVE)
         expect(tagsAdapter.getTagState("fresh") == true, { "a created tag must start active" })
         expect(newTagCalls == 1, { "the new-tag callable did not run" })
@@ -1954,7 +2087,7 @@ fun main() {
         val bare = AlertDialog.Builder.created[2]
         bare.neutralButtonListener!!.onClick(bare, DialogInterface.BUTTON_NEUTRAL)
         val bareInput = (AlertDialog.Builder.created[3].contentView as android.widget.FrameLayout).getChildAt(0) as android.widget.EditText
-        bareInput.text = "more"
+        bareInput.setText("more")
         AlertDialog.Builder.created[3].positiveButtonListener!!
                 .onClick(AlertDialog.Builder.created[3], DialogInterface.BUTTON_POSITIVE)
         expect(tagsAdapter.getTagState("more") == true, { "the new-tag flow must survive missing callables" })
@@ -2517,8 +2650,8 @@ fun main() {
                 if (granted && permission == android.Manifest.permission.POST_NOTIFICATIONS) PackageManager.PERMISSION_GRANTED
                 else PackageManager.PERMISSION_DENIED
         }
-        class FakeFragment(private val host: android.app.Activity?) : android.app.Fragment() {
-            override fun getActivity(): android.app.Activity? = host
+        class FakeFragment(private val hostActivity: android.app.Activity?) : android.app.Fragment() {
+            override fun getActivity(): android.app.Activity? = hostActivity
         }
         val sdk = android.os.Build.VERSION.SDK_INT
         try {
@@ -2991,7 +3124,7 @@ fun main() {
 
     check("drag & drop callback forwards moves and wires the view holder callbacks") {
         val recyclerView = RecyclerView()
-        recyclerView.layoutManager = LinearLayoutManager()
+        recyclerView.setLayoutManager(LinearLayoutManager())
         val adapter = RecordingDragAdapter()
         val callback = SimpleItemTouchHelperCallback(adapter)
 
@@ -3010,7 +3143,7 @@ fun main() {
         expect(((listFlags shr 16) and 0xFF) == (ItemTouchHelper.UP or ItemTouchHelper.DOWN), { "list drag flags $listFlags" })
         expect((listFlags and 0xFF) == (ItemTouchHelper.UP or ItemTouchHelper.DOWN) &&
                 ((listFlags shr 8) and 0xFF) == 0, { "list must not enable swiping" })
-        recyclerView.layoutManager = GridLayoutManager()
+        recyclerView.setLayoutManager(GridLayoutManager())
         val gridFlags = callback.getMovementFlags(recyclerView, DragViewHolder(View(), 0, 0))
         expect(((gridFlags shr 16) and 0xFF) ==
                 (ItemTouchHelper.UP or ItemTouchHelper.DOWN or ItemTouchHelper.LEFT or ItemTouchHelper.RIGHT),
@@ -4527,8 +4660,8 @@ fun main() {
             row.performClick()
             val last = fixture.host.started.lastOrNull()
             expect(last != null && last.getAction() == Intent.ACTION_VIEW
-                            && last.intentData.toString() == uri,
-                    { "$uri produced ${last?.getAction()} ${last?.intentData}" })
+                            && last.data.toString() == uri,
+                    { "$uri produced ${last?.getAction()} ${last?.data}" })
         }
 
         // A missing activity handler falls back to the clipboard with the copied-to-clipboard toast.
@@ -4623,8 +4756,8 @@ fun main() {
 
         fixture.author1Content.getChildAt(0).performClick()
         val first = fixture.host.started.lastOrNull()
-        expect(first != null && first.intentData.toString() == "https://flocke.shadowice.org/donate.html",
-                { "the first donation link is wrong: ${first?.intentData}" })
+        expect(first != null && first.data.toString() == "https://flocke.shadowice.org/donate.html",
+                { "the first donation link is wrong: ${first?.data}" })
 
         // Any start failure falls back to the clipboard, not only a missing handler.
         fixture.host.startFailure = IllegalStateException("synthetic refusal")
@@ -4717,6 +4850,233 @@ fun main() {
         val currentToast = base.getField("currentToast")
         expect(Modifier.isStatic(currentToast.modifiers) && currentToast.type == Toast::class.java,
                 { "currentToast lost its static toast shape" })
+    }
+
+
+    // --- twenty-first batch: the converted activities, the manual entry dialog, the credential
+    // preference and the two card adapters ---------------------------------------------------
+    //
+    // The Java-only Utilities/Constants has no class file in this sandbox (kotlinc reads the Java
+    // sources for resolution, it does not compile them). A class whose members mention one of
+    // its types therefore cannot be reflected here: resolving a method or a field signature would
+    // need the missing class. Those classes are checked by their class shape below (name,
+    // modifiers, base classes and nested types); their members are pinned by the Python source
+    // guards and by the Java instrumentation tests, which run against the real Android runtime.
+
+    check("the converted UI classes keep their Java-visible API shapes") {
+        val loader = Thread.currentThread().contextClassLoader
+        fun load(name: String): Class<*> = Class.forName(name, false, loader)
+
+        // The credential preference is inflated from the preference XML by its name, so the class
+        // name, the two-argument constructor and the DEFAULT_VALUE constant must stay as they were.
+        val credentials = CredentialsPreference::class.java
+        expect(!Modifier.isFinal(credentials.modifiers), { "CredentialsPreference must stay extendable" })
+        val constructor = credentials.getDeclaredConstructor(
+            android.content.Context::class.java, android.util.AttributeSet::class.java)
+        expect(Modifier.isPublic(constructor.modifiers),
+                { "the CredentialsPreference constructor must stay public" })
+        expectMethod(credentials, "void setOldEncryptionKey(SecretKey)")
+        expectMethod(credentials, "void setEncryptionChangeCallback(EncryptionChangeCallback)")
+
+        // The manual entry dialog was a static-only class: it becomes the documented object with
+        // static forwarders, and the nested callback stays a nested interface.
+        val manual = ManualEntryDialog::class.java
+        expect(Modifier.isFinal(manual.modifiers), { "the ManualEntryDialog object is not final" })
+        expect(manual.getDeclaredField("INSTANCE").type == manual,
+                { "the ManualEntryDialog object is missing INSTANCE" })
+        expectMethod(manual, "static void show(MainActivity,Settings,EntriesCardAdapter)")
+        expectMethod(manual, "static void show(MainActivity,Settings,EntriesCardAdapter,Entry,UpdateCallback)")
+        expect(ManualEntryDialog.UpdateCallback::class.java.isInterface,
+                { "the manual entry callback is no longer an interface" })
+
+        // The entry card: the same base classes and the same constructor.
+        val holder = load("org.shadowice.flocke.andotp.View.EntryViewHolder")
+        expect(!Modifier.isFinal(holder.modifiers), { "EntryViewHolder must stay extendable" })
+        expect(RecyclerView.ViewHolder::class.java.isAssignableFrom(holder),
+                { "EntryViewHolder lost its RecyclerView.ViewHolder base" })
+        expect(ItemTouchHelperViewHolder::class.java.isAssignableFrom(holder),
+                { "EntryViewHolder lost the drag/drop callback" })
+        expect(EntryViewHolder.Callback::class.java.isInterface,
+                { "the card callback is no longer an interface" })
+
+        // The card adapter: the same base classes, and the read/write key field.
+        val adapter = load("org.shadowice.flocke.andotp.View.EntriesCardAdapter")
+        expect(!Modifier.isFinal(adapter.modifiers), { "EntriesCardAdapter must stay extendable" })
+        expect(RecyclerView.Adapter::class.java.isAssignableFrom(adapter),
+                { "EntriesCardAdapter lost its RecyclerView.Adapter base" })
+        expect(Filterable::class.java.isAssignableFrom(adapter),
+                { "EntriesCardAdapter lost the Filterable contract" })
+        val encryptionKey = adapter.getDeclaredField("encryptionKey")
+        expect(!Modifier.isStatic(encryptionKey.modifiers) && !Modifier.isFinal(encryptionKey.modifiers) &&
+                encryptionKey.type == SecretKey::class.java,
+                { "encryptionKey must stay a writable SecretKey field" })
+
+        // The main activity stays extendable and keeps its base classes.
+        val main = load("org.shadowice.flocke.andotp.Activities.MainActivity")
+        expect(!Modifier.isFinal(main.modifiers), { "MainActivity must stay extendable" })
+        expect(BaseActivity::class.java.isAssignableFrom(main),
+                { "MainActivity lost its BaseActivity base" })
+
+        // The settings screen and its fragment keep their names, their nesting and their bases.
+        val settings = load("org.shadowice.flocke.andotp.Activities.SettingsActivity")
+        expect(!Modifier.isFinal(settings.modifiers), { "SettingsActivity must stay extendable" })
+        expect(BackgroundTaskActivity::class.java.isAssignableFrom(settings),
+                { "SettingsActivity lost its BackgroundTaskActivity base" })
+        val settingsFragment = load("org.shadowice.flocke.andotp.Activities.SettingsActivity\$SettingsFragment")
+        expect(Modifier.isStatic(settingsFragment.modifiers) && Modifier.isPublic(settingsFragment.modifiers),
+                { "SettingsFragment must stay a public static nested class" })
+        expect(android.preference.PreferenceFragment::class.java.isAssignableFrom(settingsFragment),
+                { "SettingsFragment lost its PreferenceFragment base" })
+
+        // The intro wizard keeps its four slides under their original names.
+        val intro = load("org.shadowice.flocke.andotp.Activities.IntroScreenActivity")
+        expect(!Modifier.isFinal(intro.modifiers), { "IntroScreenActivity must stay extendable" })
+        expect(IntroActivity::class.java.isAssignableFrom(intro),
+                { "IntroScreenActivity lost its IntroActivity base" })
+        for (name in listOf("EncryptionFragment", "AuthenticationFragment", "AndroidSyncFragment",
+                "IntroFinishedFragment")) {
+            val nested = load("org.shadowice.flocke.andotp.Activities.IntroScreenActivity\$$name")
+            expect(Modifier.isStatic(nested.modifiers) && Modifier.isPublic(nested.modifiers),
+                    { "$name must stay a public static nested class" })
+        }
+
+        // The remaining activities keep their base classes and their public members.
+        val authenticate = AuthenticateActivity::class.java
+        expect(!Modifier.isFinal(authenticate.modifiers), { "AuthenticateActivity must stay extendable" })
+        expect(BackgroundTaskActivity::class.java.isAssignableFrom(authenticate),
+                { "AuthenticateActivity lost its BackgroundTaskActivity base" })
+        expectMethod(authenticate, "void onBackPressed()")
+        expectProtectedMethodArity(authenticate, "onTaskResult", 1)
+        expectProtectedMethodArity(authenticate, "onTaskFailure", 1)
+
+        val background = BackgroundTaskActivity::class.java
+        expect(!Modifier.isFinal(background.modifiers), { "BackgroundTaskActivity must stay extendable" })
+        expectMethod(background, "void onResume()")
+        expectProtectedMethodArity(background, "onTaskResult", 1)
+        expectProtectedMethodArity(background, "onTaskFailure", 1)
+        expectProtectedMethodArity(background, "onReturnToCanceledTask", 0)
+        expectProtectedMethodArity(background, "setupUiForTaskState", 1)
+        expectProtectedMethodArity(background, "cancelTaskOnScreenOff", 0)
+        expectProtectedMethodArity(background, "cancelBackgroundTask", 0)
+        expectProtectedMethodArity(background, "startBackgroundTask", 1)
+
+        val backup = load("org.shadowice.flocke.andotp.Activities.BackupActivity")
+        expect(!Modifier.isFinal(backup.modifiers), { "BackupActivity must stay extendable" })
+        expect(BackgroundTaskActivity::class.java.isAssignableFrom(backup),
+                { "BackupActivity lost its BackgroundTaskActivity base" })
+
+        // The retained task fragment keeps its name, its generic parameter and its members.
+        val taskFragment = load("org.shadowice.flocke.andotp.Activities.BackgroundTaskActivity\$TaskFragment")
+        expect(Modifier.isStatic(taskFragment.modifiers) && Modifier.isPublic(taskFragment.modifiers),
+                { "TaskFragment must stay a public static nested class" })
+        expectMethod(taskFragment, "void startTask(UiBasedBackgroundTask)")
+        expectMethod(taskFragment, "void setOutcomeCallback(OutcomeCallback)")
+        expectMethod(taskFragment, "boolean isCanceled()")
+        expectMethod(taskFragment, "void cancelTask()")
+    }
+
+    check("the entry card binds the token, the labels, the tags and the counter") {
+        val fixture = SettingsFixture()
+        // The thumbnail is switched off, so the check does not depend on the letter bitmap.
+        fixture.seed(R.string.settings_key_thumbnail_size, "0dp")
+        val context = fixture.context
+
+        val root = CardRoot()
+        val card = CardView(context)
+        val value = TextView()
+        val valuePrev = TextView()
+        val valueLayout = LinearLayout(context)
+        val coverLayout = LinearLayout(context)
+        val counterLayout = LinearLayout(context)
+        val thumbnailFrame = FrameLayout(context)
+        val thumbnail = ImageView(context)
+        val label = TextView()
+        val tags = TextView()
+        val counter = TextView()
+        val progress = MaterialProgressBar(context)
+        val menu = ImageButton(context)
+        val copy = ImageButton(context)
+        val cover = ImageView(context)
+        val icon = android.graphics.drawable.BitmapDrawable(null, null)
+        menu.setImageDrawable(icon)
+        copy.setImageDrawable(icon)
+        cover.setImageDrawable(icon)
+        root.children[R.id.card_view] = card
+        root.children[R.id.valueText] = value
+        root.children[R.id.valueTextPrev] = valuePrev
+        root.children[R.id.valueLayout] = valueLayout
+        root.children[R.id.coverLayout] = coverLayout
+        root.children[R.id.counterLayout] = counterLayout
+        root.children[R.id.thumbnailFrame] = thumbnailFrame
+        root.children[R.id.thumbnailImg] = thumbnail
+        root.children[R.id.textViewLabel] = label
+        root.children[R.id.textViewTags] = tags
+        root.children[R.id.counter] = counter
+        root.children[R.id.cardProgressBar] = progress
+        root.children[R.id.menuButton] = menu
+        root.children[R.id.copyButton] = copy
+        root.children[R.id.coverImg] = cover
+
+        val holder = withPoisonedTransaction { EntryViewHolder(context, root, false) }
+
+        // The entry has no issuer, so the card does not read the card layout (a Java-only enum).
+        val entry = Entry(Entry.OTPType.TOTP, ENTRY_SEED, 30, 6, "", "label",
+            TokenCalculator.HashAlgorithm.SHA1, arrayListOf("tag1", "tag2"))
+        entry.updateOTP(true)
+        withPoisonedTransaction { holder.updateValues(entry) }
+
+        // The unformatted token is kept in the view's tag, so the copy action has the raw value.
+        expect(value.tag == entry.getCurrentOTP(), { "the token was not stored in the view tag" })
+        expect(!value.text.isNullOrEmpty(), { "the token was not shown" })
+        // The label ends up in its own line, the tags in a comma separated list.
+        expect(label.text.toString() == "label", { "the label is wrong: ${label.text}" })
+        expect(tags.text.toString() == "tag1, tag2", { "the tags are wrong: ${tags.text}" })
+        // A time-based entry with the default period has no counter and no progress bar.
+        expect(counterLayout.visibility == View.GONE, { "the counter must stay hidden" })
+        expect(progress.visibility == View.GONE, { "the progress bar must stay hidden" })
+        // Without tap-to-reveal the token is shown and the cover is not.
+        expect(valueLayout.visibility == View.VISIBLE, { "the token layout must be visible" })
+        expect(coverLayout.visibility == View.GONE, { "the cover layout must be hidden" })
+        // The thumbnail is switched off in this fixture, so no letter bitmap is drawn.
+        expect(thumbnailFrame.visibility == View.GONE, { "the thumbnail frame must stay hidden" })
+        // The copy button describes what it copies.
+        expect(copy.contentDescription.toString().contains("label"),
+                { "the copy description is wrong: ${copy.contentDescription}" })
+
+        // A counter based entry shows the counter instead of the progress bar.
+        val hotp = Entry(Entry.OTPType.HOTP, ENTRY_SEED, 42L, 6, "", "label",
+            TokenCalculator.HashAlgorithm.SHA1, arrayListOf("tag1", "tag2"))
+        withPoisonedTransaction { holder.updateValues(hotp) }
+        expect(counterLayout.visibility == View.VISIBLE, { "the counter must be visible for a HOTP entry" })
+        expect(counter.text.toString() == "42", { "the counter is wrong: ${counter.text}" })
+    }
+
+    check("the retained task fragment starts, hands over and cancels the task") {
+        val fragment = BackgroundTaskActivity.TaskFragment<String>()
+        val task = RecordingTask()
+
+        fragment.startTask(task)
+        // The fragment hands the outcome to the registered callback.
+        var delivered: String? = null
+        fragment.setOutcomeCallback { outcome ->
+            if (outcome is TaskOutcome.Value) delivered = outcome.value
+        }
+        awaitQueuedDelivery()
+        drainMainThreadDeliveries()
+        expect(task.started, { "the task was not started" })
+        expect(delivered == "done", { "the outcome was not delivered: $delivered" })
+        expect(!fragment.isCanceled(), { "a finished task must not be canceled" })
+
+        // Cancelling a running task is what the activity does when the screen is locked.
+        val running = BlockingRecordingTask()
+        val second = BackgroundTaskActivity.TaskFragment<String>()
+        second.startTask(running)
+        val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5)
+        while (!running.started && System.nanoTime() < deadline) Thread.sleep(10)
+        expect(running.started, { "the task never started" })
+        second.cancelTask()
+        expect(running.canceled, { "the running task was not canceled" })
+        expect(second.isCanceled(), { "the canceled fragment does not report the cancellation" })
     }
 
     if (failures == 0) {

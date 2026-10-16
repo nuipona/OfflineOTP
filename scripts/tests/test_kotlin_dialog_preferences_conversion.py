@@ -18,11 +18,12 @@ class KotlinDialogPreferencesConversionTest(unittest.TestCase):
             self.assertIn(f"$KOTLIN_APP/{name}.kt", harness)
         xml = (ROOT / "app/src/main/res/xml/preferences.xml").read_text()
         self.assertIn("org.shadowice.flocke.andotp.Preferences.PasswordEncryptedPreference", xml)
-        # The Java callers keep their exact call sites.
-        backup = (JAVA / "Activities/BackupActivity.java").read_text()
+        # The callers keep their exact call sites. The backup activity and the manual entry
+        # dialog are Kotlin since the twenty-first batch, so the call sites moved with them.
+        backup = (KOTLIN / "Activities/BackupActivity.kt").read_text()
         self.assertIn("PasswordEntryDialog.Mode.ENTER", backup)
         self.assertIn("PasswordEntryDialog.Mode.UPDATE", backup)
-        manual = (JAVA / "Dialogs/ManualEntryDialog.java").read_text()
+        manual = (KOTLIN / "Dialogs/ManualEntryDialog.kt").read_text()
         self.assertIn("TagsDialog.show(callingActivity, tagsAdapter, tagsCallable, tagsCallable)", manual)
         for test in ("Dialogs/KotlinPasswordDialogsInteropTest.java",
                      "Preferences/KotlinPasswordEncryptedPreferenceInteropTest.java"):

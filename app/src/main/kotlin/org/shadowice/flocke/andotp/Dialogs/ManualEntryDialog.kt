@@ -1,0 +1,385 @@
+package org.shadowice.flocke.andotp.Dialogs
+
+import android.app.AlertDialog
+import android.content.DialogInterface
+import android.text.Editable
+import android.text.TextUtils
+import android.text.TextWatcher
+import android.view.View
+import android.view.ViewGroup
+import android.widget.AdapterView
+import android.widget.ArrayAdapter
+import android.widget.Button
+import android.widget.EditText
+import android.widget.LinearLayout
+import android.widget.Spinner
+import android.widget.TextView
+
+import androidx.appcompat.app.AppCompatDelegate
+import androidx.core.content.res.ResourcesCompat
+
+import com.github.aakira.expandablelayout.ExpandableLayoutListenerAdapter
+import com.github.aakira.expandablelayout.ExpandableLinearLayout
+
+import org.shadowice.flocke.andotp.Activities.MainActivity
+import org.shadowice.flocke.andotp.Database.Entry
+import org.shadowice.flocke.andotp.R
+import org.shadowice.flocke.andotp.Utilities.Settings
+import org.shadowice.flocke.andotp.Utilities.TokenCalculator
+import org.shadowice.flocke.andotp.Utilities.VaultSession
+import org.shadowice.flocke.andotp.View.EntriesCardAdapter
+import org.shadowice.flocke.andotp.View.TagsAdapter
+
+import java.util.HashMap
+import java.util.Locale
+import java.util.concurrent.Callable
+
+/**
+ * Dialog to add a new entry or edit an existing one.
+ *
+ * Converted from the Java class of the same name. The class was only used through its static
+ * `show` methods, so it becomes the documented Kotlin `object` delta with `@JvmStatic`
+ * forwarders; the nested [UpdateCallback] stays a nested type of this class.
+ *
+ * Documented delta: the layout children are resolved with `requireNotNull`.
+ */
+object ManualEntryDialog {
+
+    /** Opens the dialog to add a new entry. */
+    @JvmStatic
+    fun show(callingActivity: MainActivity, settings: Settings, adapter: EntriesCardAdapter) {
+        show(callingActivity, settings, adapter, null, null)
+    }
+
+    /** Opens the dialog for a new entry, or to edit [oldEntry] if it is not null. */
+    @JvmStatic
+    fun show(callingActivity: MainActivity, settings: Settings, adapter: EntriesCardAdapter,
+             oldEntry: Entry?, updateCallback: UpdateCallback?) {
+        AppCompatDelegate.setCompatVectorFromResourcesEnabled(true)
+        val isNewEntry = oldEntry == null
+
+        val container: ViewGroup = requireNotNull(callingActivity.findViewById(R.id.main_content))
+        val inputView = callingActivity.getLayoutInflater().inflate(R.layout.dialog_manual_entry, container, false)
+
+        if (settings.getBlockAccessibility())
+            inputView.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS)
+
+        val typeInput = requireNotNull(inputView.findViewById<Spinner>(R.id.manual_type))
+        val issuerInput = requireNotNull(inputView.findViewById<EditText>(R.id.manual_issuer))
+        val labelInput = requireNotNull(inputView.findViewById<EditText>(R.id.manual_label))
+        val secretInput = requireNotNull(inputView.findViewById<EditText>(R.id.manual_secret))
+        secretInput.isSaveEnabled = false
+        val secretView = requireNotNull(inputView.findViewById<TextView>(R.id.manual_secret_view))
+        val counterInput = requireNotNull(inputView.findViewById<EditText>(R.id.manual_counter))
+        val periodInput = requireNotNull(inputView.findViewById<EditText>(R.id.manual_period))
+        val digitsInput = requireNotNull(inputView.findViewById<EditText>(R.id.manual_digits))
+        val counterLayout = requireNotNull(inputView.findViewById<LinearLayout>(R.id.manual_layout_counter))
+        val periodLayout = requireNotNull(inputView.findViewById<LinearLayout>(R.id.manual_layout_period))
+        val algorithmInput = requireNotNull(inputView.findViewById<Spinner>(R.id.manual_algorithm))
+        val tagsInput = requireNotNull(inputView.findViewById<Button>(R.id.manual_tags))
+        val expandButton = requireNotNull(inputView.findViewById<Button>(R.id.dialog_expand_button))
+
+        val algorithmAdapter = ArrayAdapter<TokenCalculator.HashAlgorithm>(callingActivity,
+            android.R.layout.simple_expandable_list_item_1, TokenCalculator.HashAlgorithm.values().toMutableList())
+        val typeAdapter = ArrayAdapter<Entry.OTPType>(callingActivity,
+            android.R.layout.simple_expandable_list_item_1, Entry.OTPType.values().toMutableList())
+
+        typeInput.adapter = typeAdapter
+        algorithmInput.adapter = algorithmAdapter
+
+        periodInput.setText(String.format(Locale.US, "%d", TokenCalculator.TOTP_DEFAULT_PERIOD))
+        digitsInput.setText(String.format(Locale.US, "%d", TokenCalculator.TOTP_DEFAULT_DIGITS))
+        counterInput.setText(String.format(Locale.US, "%d", TokenCalculator.HOTP_INITIAL_COUNTER))
+
+        typeInput.onItemSelectedListener = AdapterView.OnItemSelectedListener { _, _, _, _ ->
+            val type = typeInput.getSelectedItem() as? Entry.OTPType
+
+            if (type == Entry.OTPType.STEAM) {
+                counterLayout.visibility = View.GONE
+                periodLayout.visibility = View.VISIBLE
+                expandButton.visibility = View.VISIBLE
+
+                digitsInput.setText(String.format(Locale.US, "%d", TokenCalculator.STEAM_DEFAULT_DIGITS))
+                periodInput.setText(String.format(Locale.US, "%d", TokenCalculator.TOTP_DEFAULT_PERIOD))
+                algorithmInput.setSelection(algorithmAdapter.getPosition(TokenCalculator.HashAlgorithm.SHA1))
+
+                digitsInput.isEnabled = false
+                periodInput.isEnabled = false
+                algorithmInput.isEnabled = false
+            } else if (type == Entry.OTPType.TOTP) {
+                counterLayout.visibility = View.GONE
+                periodLayout.visibility = View.VISIBLE
+                expandButton.visibility = View.VISIBLE
+
+                if (isNewEntry)
+                    digitsInput.setText(String.format(Locale.US, "%d", TokenCalculator.TOTP_DEFAULT_DIGITS))
+
+                algorithmInput.isEnabled = isNewEntry
+            } else if (type == Entry.OTPType.HOTP) {
+                counterLayout.visibility = View.VISIBLE
+                periodLayout.visibility = View.GONE
+                expandButton.visibility = View.VISIBLE
+
+                if (isNewEntry)
+                    digitsInput.setText(String.format(Locale.US, "%d", TokenCalculator.TOTP_DEFAULT_DIGITS))
+
+                algorithmInput.isEnabled = isNewEntry
+            } else if (type == Entry.OTPType.MOTP) {
+                counterLayout.visibility = View.GONE
+                periodLayout.visibility = View.VISIBLE
+
+                digitsInput.setText(String.format(Locale.US, "%d", TokenCalculator.TOTP_DEFAULT_DIGITS))
+                expandButton.visibility = View.GONE
+                algorithmInput.isEnabled = isNewEntry
+            }
+        }
+
+        val allTags = adapter.getTags()
+        val tagsHashMap = HashMap<String, Boolean?>()
+        for (tag in allTags) {
+            tagsHashMap[tag] = false
+        }
+        val tagsAdapter = TagsAdapter(callingActivity, tagsHashMap)
+
+        val tagsCallable = Callable<Any?> {
+            val selectedTags = tagsAdapter.getActiveTags()
+            val stringBuilder = StringBuilder()
+            for (j in selectedTags.indices) {
+                stringBuilder.append(selectedTags[j])
+                if (j < selectedTags.size - 1) {
+                    stringBuilder.append(", ")
+                }
+            }
+            tagsInput.setText(stringBuilder.toString())
+            null
+        }
+
+        tagsInput.setOnClickListener {
+            TagsDialog.show(callingActivity, tagsAdapter, tagsCallable, tagsCallable)
+        }
+
+        // Dirty fix for the compound drawable to avoid crashes on older Android versions
+        expandButton.setCompoundDrawablesWithIntrinsicBounds(null, null,
+            ResourcesCompat.getDrawable(callingActivity.resources, R.drawable.ic_arrow_down_accent, null), null)
+
+        val expandLayout = requireNotNull(inputView.findViewById<ExpandableLinearLayout>(R.id.dialog_expand_layout))
+
+        expandButton.setOnClickListener { expandLayout.toggle() }
+
+        expandLayout.setListener(object : ExpandableLayoutListenerAdapter() {
+            override fun onOpened() {
+                super.onOpened()
+                expandButton.setCompoundDrawablesRelativeWithIntrinsicBounds(0, 0, R.drawable.ic_arrow_up_accent, 0)
+            }
+
+            override fun onClosed() {
+                super.onClosed()
+                expandButton.setCompoundDrawablesRelativeWithIntrinsicBounds(0, 0, R.drawable.ic_arrow_down_accent, 0)
+            }
+        })
+
+        val builder = AlertDialog.Builder(callingActivity)
+        builder.setTitle(R.string.dialog_title_manual_entry)
+            .setView(inputView)
+            .setPositiveButton(R.string.button_save, null)
+            .setNegativeButton(android.R.string.cancel, DialogInterface.OnClickListener { _, _ -> })
+
+        val dialog = builder.create()
+        dialog.show()
+
+        val positiveButton = requireNotNull(dialog.getButton(AlertDialog.BUTTON_POSITIVE))
+
+        positiveButton.setOnClickListener {
+            if (VaultSession.getKey() == null) {
+                dialog.dismiss()
+                return@setOnClickListener
+            }
+            try {
+                // Strip whitespace from the secret
+                val secret = secretInput.text?.toString()?.replace("\\s+".toRegex(), "") ?: ""
+                val type = typeInput.getSelectedItem() as? Entry.OTPType
+
+                if (!Entry.validateSecret(secret, type)) {
+                    secretInput.setError(callingActivity.getString(R.string.error_invalid_secret))
+                    return@setOnClickListener
+                }
+
+                val algorithm = algorithmInput.getSelectedItem() as? TokenCalculator.HashAlgorithm
+                    ?: TokenCalculator.HashAlgorithm.SHA1
+                val digits = java.lang.Integer.parseInt(digitsInput.text?.toString() ?: "0")
+
+                val issuer = issuerInput.text?.toString() ?: ""
+                val label = labelInput.text?.toString() ?: ""
+
+                if (type == Entry.OTPType.TOTP || type == Entry.OTPType.STEAM) {
+                    val period = java.lang.Integer.parseInt(periodInput.text?.toString() ?: "0")
+
+                    val validated = Entry(type, secret, period, digits, issuer, label, algorithm, tagsAdapter.getActiveTags())
+                    validated.destroy()
+                    if (isNewEntry) {
+                        val e = Entry(type, secret, period, digits, issuer, label, algorithm, tagsAdapter.getActiveTags())
+                        e.updateOTP(false)
+                        e.setLastUsed(System.currentTimeMillis())
+
+                        adapter.addEntry(e)
+                    } else {
+                        oldEntry!!.setIssuer(issuer, true)
+                        oldEntry.setLabel(label)
+                        oldEntry.setDigits(digits)
+                        oldEntry.setPeriod(period)
+                        oldEntry.setTags(tagsAdapter.getActiveTags())
+
+                        oldEntry.updateOTP(true)
+
+                        updateCallback?.onUpdate()
+                    }
+
+                    callingActivity.refreshTags()
+                } else if (type == Entry.OTPType.HOTP) {
+                    val counter = java.lang.Long.parseLong(counterInput.text?.toString() ?: "0")
+
+                    val validated = Entry(type, secret, counter, digits, issuer, label, algorithm, tagsAdapter.getActiveTags())
+                    validated.destroy()
+                    if (isNewEntry) {
+                        val e = Entry(type, secret, counter, digits, issuer, label, algorithm, tagsAdapter.getActiveTags())
+                        e.updateOTP(false)
+                        e.setLastUsed(System.currentTimeMillis())
+
+                        adapter.addEntry(e)
+                    } else {
+                        oldEntry!!.setIssuer(issuer, true)
+                        oldEntry.setLabel(label)
+                        oldEntry.setDigits(digits)
+                        oldEntry.setCounter(counter)
+                        oldEntry.setTags(tagsAdapter.getActiveTags())
+
+                        oldEntry.updateOTP(true)
+
+                        updateCallback?.onUpdate()
+                    }
+                } else if (type == Entry.OTPType.MOTP) {
+                    val validated = Entry(type, secret, issuer, label, tagsAdapter.getActiveTags())
+                    validated.destroy()
+                    if (isNewEntry) {
+                        val newEntry = Entry(type, secret, issuer, label, tagsAdapter.getActiveTags())
+                        newEntry.updateOTP(false)
+                        newEntry.setLastUsed(System.currentTimeMillis())
+
+                        adapter.addEntry(newEntry)
+                    } else {
+                        oldEntry!!.setIssuer(issuer, true)
+                        oldEntry.setLabel(label)
+                        oldEntry.setTags(tagsAdapter.getActiveTags())
+
+                        oldEntry.updateOTP(false)
+
+                        updateCallback?.onUpdate()
+                    }
+
+                    callingActivity.refreshTags()
+                }
+
+                dialog.dismiss()
+            } catch (error: RuntimeException) {
+                secretInput.setError(callingActivity.getString(R.string.toast_invalid_qr_code))
+            }
+        }
+
+        positiveButton.isEnabled = false
+
+        val watcher = object : TextWatcher {
+            override fun beforeTextChanged(charSequence: CharSequence?, i: Int, i1: Int, i2: Int) {}
+
+            override fun onTextChanged(charSequence: CharSequence?, i: Int, i1: Int, i2: Int) {}
+
+            override fun afterTextChanged(editable: Editable?) {
+                if ((TextUtils.isEmpty(labelInput.text) && TextUtils.isEmpty(issuerInput.text)) ||
+                        (TextUtils.isEmpty(secretInput.text) && isNewEntry) ||
+                        !isNonZeroIntegerInput(digitsInput)) {
+                    positiveButton.isEnabled = false
+                } else {
+                    val type = typeInput.getSelectedItem() as? Entry.OTPType
+                    if (type == Entry.OTPType.HOTP) {
+                        positiveButton.isEnabled = isZeroOrPositiveLongInput(counterInput)
+                    } else if (type == Entry.OTPType.TOTP || type == Entry.OTPType.STEAM) {
+                        positiveButton.isEnabled = isNonZeroIntegerInput(periodInput)
+                    } else {
+                        positiveButton.isEnabled = true
+                    }
+                }
+            }
+
+            /** True for a non-empty, non-zero integer input. */
+            private fun isNonZeroIntegerInput(editText: EditText): Boolean {
+                try {
+                    val text = editText.text
+                    return !TextUtils.isEmpty(text) && (Integer.parseInt(text.toString()) != 0)
+                } catch (e: NumberFormatException) {
+                    return false
+                }
+            }
+
+            /** True for a non-empty, non-negative long input. */
+            private fun isZeroOrPositiveLongInput(editText: EditText): Boolean {
+                try {
+                    val text = editText.text
+                    return !TextUtils.isEmpty(text) && (java.lang.Long.parseLong(text.toString()) >= 0)
+                } catch (e: NumberFormatException) {
+                    return false
+                }
+            }
+        }
+
+        labelInput.addTextChangedListener(watcher)
+        issuerInput.addTextChangedListener(watcher)
+        secretInput.addTextChangedListener(watcher)
+        periodInput.addTextChangedListener(watcher)
+        digitsInput.addTextChangedListener(watcher)
+        counterInput.addTextChangedListener(watcher)
+
+        if (!isNewEntry) {
+            val oldType = oldEntry!!.getType()
+
+            typeInput.setSelection(typeAdapter.getPosition(oldType))
+            issuerInput.setText(oldEntry.getIssuer())
+            labelInput.setText(oldEntry.getLabel())
+            secretView.setText(oldEntry.getSecretEncoded())
+            digitsInput.setText(String.format(Locale.ENGLISH, "%d", oldEntry.getDigits()))
+            algorithmInput.setSelection(algorithmAdapter.getPosition(oldEntry.getAlgorithm()))
+
+            if (oldType == Entry.OTPType.TOTP || oldType == Entry.OTPType.STEAM) {
+                periodInput.setText(String.format(Locale.ENGLISH, "%d", oldEntry.getPeriod()))
+            } else if (oldType == Entry.OTPType.HOTP) {
+                counterInput.setText(String.format(Locale.ENGLISH, "%d", oldEntry.getCounter()))
+            }
+
+            for (tag in oldEntry.getTags()) {
+                tagsAdapter.setTagState(tag, true)
+            }
+            try {
+                tagsCallable.call()
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+
+            secretInput.visibility = View.GONE
+            secretView.visibility = View.VISIBLE
+
+            // Little hack: match the color and background of the TextView to that of a disabled EditText
+            secretInput.isEnabled = false
+            secretView.background = secretInput.background
+            secretView.textColor = secretInput.getTextColors()
+                .getColorForState(secretInput.drawableState, R.color.colorPrimary)
+
+            typeInput.isEnabled = false
+            algorithmInput.isEnabled = false
+            digitsInput.isEnabled = oldType != Entry.OTPType.STEAM
+            periodInput.isEnabled = oldType != Entry.OTPType.STEAM
+        }
+    }
+
+    /** Notifies the caller that an edited entry was saved. */
+    fun interface UpdateCallback {
+        fun onUpdate()
+    }
+}

@@ -12,3 +12,11 @@ abstract class Drawable {
     open fun setAlpha(alpha: Int) {}
     open fun setColorFilter(filter: android.graphics.ColorFilter?) {}
 }
+
+/** The drawable of a bitmap; the entry popup shows the QR code in one. */
+open class BitmapDrawable(resources: android.content.res.Resources?, private val bitmap: android.graphics.Bitmap?) :
+    Drawable() {
+    /** Whether the bitmap is filtered when it is scaled. */
+    var filterBitmap: Boolean = true
+
+}

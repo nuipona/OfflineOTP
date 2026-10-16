@@ -57,8 +57,9 @@ open class PasswordEntryDialog(
         passwordInput = requireNotNull(findViewById(R.id.passwordInput))
         passwordConfirm = requireNotNull(findViewById(R.id.passwordConfirm))
         tooShortWarning = requireNotNull(findViewById(R.id.tooShortWarning))
-        tooShortWarning.text =
+        tooShortWarning.setText(
             context.getString(R.string.settings_label_short_password, Constants.AUTH_MIN_PASSWORD_LENGTH)
+        )
         ConfirmedPasswordTransformationHelper.setup(passwordLayout, passwordInput, passwordConfirm)
 
         if (blockAccessibility) {

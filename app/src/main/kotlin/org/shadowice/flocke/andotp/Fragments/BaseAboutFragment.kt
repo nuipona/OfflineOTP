@@ -86,7 +86,7 @@ open class BaseAboutFragment : Fragment() {
         }
 
         val version = requireNotNull(v.findViewById<TextView>(R.id.about_text_version))
-        version.text = versionName
+        version.setText(versionName)
 
         val license = requireNotNull(v.findViewById<LinearLayout>(R.id.about_layout_license))
         val changelog = requireNotNull(v.findViewById<LinearLayout>(R.id.about_layout_changelog))
@@ -141,7 +141,7 @@ open class BaseAboutFragment : Fragment() {
     /** Opens the URI in a suitable app. */
     open fun openURI(uri: String) {
         val intent = Intent(Intent.ACTION_VIEW)
-        intent.setData(Uri.parse(uri))
+        intent.data = Uri.parse(uri)
 
         try {
             startActivity(intent)

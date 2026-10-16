@@ -71,6 +71,6 @@ Run the existing CI tasks documented in `build-and-security-tests.md`; do not su
 
 ## Subsequent UI work
 
-Large activities and adapters remain Java until their responsibilities have been decomposed and tested. Follow the [UI decomposition plan](ui-decomposition-plan.md); contract implementation alone is not approval for a bulk UI conversion.
+Large activities and adapters were kept in Java until their responsibilities had been decomposed and tested. Follow the [UI decomposition plan](ui-decomposition-plan.md); contract implementation alone is not approval for a bulk UI conversion. The twenty-first batch later converted the remaining user interface (the six large activities, the credential preference, the manual-entry dialog and the two card adapters) after the five implemented decomposition slices, without extracting the roles the plan still lists under "Still to extract".
 
 The subsequent [extracted-helper conversion](kotlin-extracted-helpers.md) starts with the isolated timer controller and delayed-action identity, keeping Java UI/Android bridges and their characterization tests. It is not acceptance of the remaining large UI classes.

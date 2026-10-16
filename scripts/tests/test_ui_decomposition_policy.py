@@ -21,12 +21,14 @@ class UiDecompositionSourceTest(unittest.TestCase):
         self.assertNotIn("DatabaseHelper", projection)
 
     def test_card_adapter_delegates_display_and_persistence_instead_of_owning_their_implementations(self):
-        source = (JAVA / "View/EntriesCardAdapter.java").read_text()
-        for dependency in ("EntryListPresentation presentation", "EntryPersistence persistence",
+        # The card adapter is Kotlin since the twenty-first batch, so the guard reads the moved
+        # source.
+        source = (KOTLIN / "View/EntriesCardAdapter.kt").read_text()
+        for dependency in ("presentation: EntryListPresentation", "persistence: EntryPersistence",
                            "presentation.search(", "presentation.publishSearch(", "persistence.save(", "persistence.load("):
             self.assertIn(dependency, source)
-        for forbidden in ("DatabaseHelper", "new EncryptedBackupTask", "private SortMode sortMode",
-                          "private ArrayList<Entry> displayedEntries"):
+        for forbidden in ("DatabaseHelper", "EncryptedBackupTask(", "private var sortMode",
+                          "private val displayedEntries"):
             self.assertNotIn(forbidden, source)
         self.assertIn("VaultSession.isCurrent(epoch)", source)
         self.assertIn("projection.close()", source)
@@ -36,12 +38,14 @@ class UiDecompositionSourceTest(unittest.TestCase):
         self.assertIn("context.getApplicationContext()", persistence)
 
     def test_main_activity_wires_timer_lifecycle_without_owning_scheduling(self):
-        source = (JAVA / "Activities/MainActivity.java").read_text()
-        self.assertIn("new ScreenTimerController", source)
-        self.assertIn("screenTimers.pause()", source)
-        self.assertIn("screenTimers.close()", source)
-        self.assertNotIn("new CountDownTimer", source)
-        self.assertNotIn("new Handler(", source)
+        # The main activity is Kotlin since the twenty-first batch, so the guard reads the moved
+        # source.
+        source = (KOTLIN / "Activities/MainActivity.kt").read_text()
+        self.assertIn("ScreenTimerController(HandlerTimerScheduler()", source)
+        self.assertIn("screenTimers?.pause()", source)
+        self.assertIn("screenTimers?.close()", source)
+        self.assertNotIn("CountDownTimer", source)
+        self.assertNotIn("Handler(", source)
         self.assertNotIn("handlerTask", source)
         # The bridge is converted too, so the architecture guard reads the moved source.
         scheduler = (KOTLIN / "Utilities/HandlerTimerScheduler.kt").read_text()
@@ -50,9 +54,11 @@ class UiDecompositionSourceTest(unittest.TestCase):
         self.assertIn("ScreenTimerController.Scheduler", scheduler)
 
     def test_restore_screen_delegates_merge_save_and_ownership_cleanup(self):
-        activity = (JAVA / "Activities/BackupActivity.java").read_text()
-        body = activity.split("private boolean restoreEntries(", 1)[1].split("/* Encrypted backup functions */", 1)[0]
-        self.assertIn("restoreOperation.restore(", body)
+        # The backup activity is Kotlin since the twenty-first batch, so the guard reads the moved
+        # source.
+        activity = (KOTLIN / "Activities/BackupActivity.kt").read_text()
+        body = activity.split("private fun restoreEntries(", 1)[1].split("/* Encrypted backup functions */", 1)[0]
+        self.assertIn("restoreOperation!!.restore(", body)
         self.assertNotIn("DatabaseHelper", body)
         self.assertNotIn("iterator", body)
         operation = (KOTLIN / "Utilities/VaultRestoreOperation.kt").read_text()
@@ -68,11 +74,13 @@ class UiDecompositionSourceTest(unittest.TestCase):
             self.assertNotIn(forbidden, dialogs)
         self.assertIn("input.isSaveEnabled = false", dialogs)
         self.assertIn('input.setText("")', dialogs)
-        adapter = (JAVA / "View/EntriesCardAdapter.java").read_text()
+        adapter = (KOTLIN / "View/EntriesCardAdapter.kt").read_text()
         self.assertIn("dialogs.dismissAll()", adapter)
         self.assertIn("target.resolve(entries, VaultSession.generation())", adapter)
-        self.assertIn("VaultSession.getKey() != encryptionKey", adapter)
-        self.assertNotIn("new EditText(", adapter)
+        # The Java `!=` on the key object is reference identity, so the Kotlin conversion keeps
+        # the identity comparison instead of switching to `equals()`.
+        self.assertIn("VaultSession.getKey() !== encryptionKey", adapter)
+        self.assertNotIn("EditText(", adapter)
 
     def test_converted_leaf_helpers_have_one_implementation_and_keep_java_api_shapes(self):
         for stem in ("Utilities/ScreenTimerController", "View/EntryActionTarget",

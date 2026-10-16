@@ -13,6 +13,11 @@ object TextUtils {
         if (a == null || b == null) return false
         return a.length == b.length && a.toString() == b.toString()
     }
+
+    /** The ellipsizing modes the card label uses. */
+    enum class TruncateAt {
+        START, MIDDLE, END, MARQUEE
+    }
 }
 
 /** Inert graphics stand-in; no glyphs are drawn in the sandbox. */

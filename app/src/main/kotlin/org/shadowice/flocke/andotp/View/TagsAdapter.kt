@@ -48,7 +48,7 @@ open class TagsAdapter(context: Context, tags: HashMap<String, Boolean?>) :
             convertView as CheckedTextView
         }
         val tag = tagsOrder[position]
-        checkedTextView.text = tag
+        checkedTextView.setText(tag)
         // Match Java Boolean unboxing: a caller-supplied null is not silently treated as false.
         checkedTextView.isChecked = tagsState[tag]!!
         return checkedTextView

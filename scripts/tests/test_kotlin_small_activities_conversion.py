@@ -84,9 +84,10 @@ class KotlinSmallActivitiesConversionTest(unittest.TestCase):
         manifest = (ROOT / "app/src/main/AndroidManifest.xml").read_text()
         self.assertIn('android:name=".Activities.SecureCaptureActivity"', manifest)
         self.assertIn('android:name=".Activities.PanicResponderActivity"', manifest)
-        # The Java activity still refers to the scanner activity by its class literal.
-        self.assertIn(".setCaptureActivity(SecureCaptureActivity.class)",
-                      (JAVA / "Activities/MainActivity.java").read_text())
+        # The scanner activity is still referred to by its class literal. MainActivity is Kotlin
+        # since the twenty-first batch, so the call site moved with it.
+        self.assertIn(".setCaptureActivity(SecureCaptureActivity::class.java)",
+                      (KOTLIN / "Activities/MainActivity.kt").read_text())
 
     def test_the_sandbox_checks_cover_the_converted_activities(self):
         checks = (SANDBOX / "Checks.kt").read_text()
