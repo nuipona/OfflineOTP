@@ -13,6 +13,9 @@ open class Context {
     val theme: Resources.Theme get() = Resources.Theme()
     val resources: Resources get() = Resources()
     fun getString(resId: Int): String = "stub"
+
+    /** Format overload; the result stays a recognisable placeholder, arguments are not applied. */
+    fun getString(resId: Int, vararg formatArgs: Any?): String = "text:$resId"
     /** Resolves to a recognisable placeholder so the checks can tell which resource was read. */
     fun getText(resId: Int): CharSequence = "text:$resId"
     /** `open` so a fake activity can grant or deny; the default denies, like an ungranted app. */
@@ -90,11 +93,15 @@ class Intent
 
 /** The nested listener mirrors the platform nesting; `fun interface` keeps SAM conversion working. */
 interface DialogInterface {
+    fun dismiss()
+
     fun interface OnClickListener {
         fun onClick(dialog: DialogInterface, which: Int)
     }
 
     companion object {
+        const val BUTTON_NEGATIVE = -2
         const val BUTTON_POSITIVE = -1
+        const val BUTTON_NEUTRAL = -3
     }
 }

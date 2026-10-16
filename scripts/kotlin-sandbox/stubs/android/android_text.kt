@@ -1,12 +1,34 @@
 // Sandbox-only stand-ins, see android_content.kt.
-package android.text.method
+package android.text
 
-/** Field/type-only stand-in for the platform interface. */
-interface TransformationMethod
+/** Minimal `Editable` surface: only the members the converted dialogs read. */
+interface Editable : CharSequence
 
-class PasswordTransformationMethod private constructor() : TransformationMethod {
+/** Mutable stand-in backing the recording text fields below. */
+class SimpleEditable(initial: String = "") : Editable {
+    private var value = initial
+    override val length: Int get() = value.length
+    override fun get(index: Int): Char = value[index]
+    override fun subSequence(startIndex: Int, endIndex: Int): CharSequence =
+        value.subSequence(startIndex, endIndex)
+    fun set(text: String) {
+        value = text
+    }
+    override fun toString(): String = value
+}
+
+interface TextWatcher {
+    fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
+    fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}
+    fun afterTextChanged(s: Editable?) {}
+}
+
+/** Constants-only stand-in for the platform input-type flags. */
+interface InputType {
     companion object {
-        @JvmStatic
-        fun getInstance(): PasswordTransformationMethod = PasswordTransformationMethod()
+        const val TYPE_CLASS_TEXT = 0x00000001
+        const val TYPE_TEXT_VARIATION_PASSWORD = 0x00000080
+        const val TYPE_CLASS_NUMBER = 0x00000002
+        const val TYPE_NUMBER_VARIATION_PASSWORD = 0x00000010
     }
 }

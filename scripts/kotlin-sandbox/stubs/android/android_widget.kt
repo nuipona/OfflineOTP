@@ -2,7 +2,11 @@
 package android.widget
 
 import android.content.Context
+import android.text.Editable
+import android.text.SimpleEditable
+import android.text.TextWatcher
 import android.text.method.TransformationMethod
+import android.view.KeyEvent
 import android.view.View
 
 /** Records the resource id of every toast shown, so checks can assert the user-facing message. */
@@ -22,13 +26,56 @@ class Toast private constructor(private val resId: Int) {
     }
 }
 
+open class TextView : View() {
+    open var text: CharSequence? = null
+    open var hint: CharSequence? = null
+
+    private val textWatchers = ArrayList<TextWatcher>()
+    private var editorActionListener: OnEditorActionListener? = null
+
+    fun setText(resource: Int) {}
+    fun setHint(resource: Int) {
+        hint = "res:$resource"
+    }
+
+    fun addTextChangedListener(watcher: TextWatcher) {
+        textWatchers.add(watcher)
+    }
+
+    /** Records the listener; the editor-action checks call the converted helper directly. */
+    fun setOnEditorActionListener(listener: OnEditorActionListener?) {
+        editorActionListener = listener
+    }
+
+    /** The platform interface is Java; a `fun interface` keeps lambda/SAM conversion working. */
+    fun interface OnEditorActionListener {
+        fun onEditorAction(v: TextView?, actionId: Int, event: KeyEvent?): Boolean
+    }
+}
+
 /**
- * Stand-in for the masked-input surface used by the password helper. The selection/transformation
- * members are `open` so the checks can drive a fake field; no text layout is modelled.
+ * Stand-in for the masked-input surface used by the password helpers. The selection/transformation
+ * members are `open` so the checks can drive a fake field; no text layout is modelled. The text
+ * buffer backs both `text` and `editableText` like a real editable field.
  */
-open class EditText : View() {
+open class EditText : TextView {
+    constructor() : super()
+    constructor(context: Context) : super()
+
+    private val buffer = SimpleEditable()
+
     open var transformationMethod: TransformationMethod? = null
     open val selectionEnd: Int = -1
+    open var inputType: Int = 0
+
+    override var text: CharSequence?
+        get() = buffer
+        set(value) {
+            buffer.set(value?.toString() ?: "")
+        }
+
+    open val editableText: Editable get() = buffer
+
     open fun setSelection(index: Int) {}
 }
 
@@ -53,9 +100,21 @@ open class ArrayAdapter<T>(val context: Context, resource: Int, objects: Mutable
     override fun getView(position: Int, convertView: View?, parent: android.view.ViewGroup): View = View()
 }
 
-class CheckedTextView : View() {
-    var text: CharSequence? = null
+class CheckedTextView : TextView() {
     var isChecked: Boolean = false
+}
+
+/** Base of the list widgets; the converted tag picker only needs the item-click listener slot. */
+open class AdapterView<T> : android.view.ViewGroup() {
+    fun interface OnItemClickListener {
+        fun onItemClick(parent: AdapterView<*>?, view: View, position: Int, id: Long)
+    }
+}
+
+class ListView(context: Context) : AdapterView<Any?>() {
+    var divider: android.graphics.drawable.Drawable? = null
+    var adapter: BaseAdapter? = null
+    var onItemClickListener: OnItemClickListener? = null
 }
 
 class GridView {
@@ -87,10 +146,9 @@ class NumberPicker(context: Context) : View() {
     fun clearFocus() { focusCleared = true }
 }
 
-open class TextView : View() { fun setText(resource: Int) {} }
 open class CompoundButton : TextView() {
     fun interface OnCheckedChangeListener { fun onCheckedChanged(buttonView: CompoundButton?, isChecked: Boolean) }
     fun setOnCheckedChangeListener(listener: OnCheckedChangeListener?) {}
 }
 class CheckBox : CompoundButton()
-class Button : TextView() { fun setOnClickListener(listener: View.OnClickListener?) {} }
+class Button : TextView()

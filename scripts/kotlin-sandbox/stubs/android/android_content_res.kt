@@ -7,6 +7,9 @@ class Resources {
     fun obtainTypedArray(id: Int): TypedArray = TypedArray()
     fun getValue(id: Int, value: android.util.TypedValue, resolveRefs: Boolean) {}
 
+    /** Resolves to the id itself so checks can tell which dimension was read. */
+    fun getDimensionPixelSize(id: Int): Int = id
+
     class Theme {
         fun obtainStyledAttributes(attrs: IntArray): TypedArray = TypedArray()
     }
@@ -30,5 +33,6 @@ open class TypedArray {
     open fun getInt(index: Int, defValue: Int): Int = defValue
     fun getColor(index: Int, defValue: Int): Int = defValue
     fun getResourceId(index: Int, defValue: Int): Int = defValue
+    open fun getString(index: Int): String? = null
     open fun recycle() {}
 }

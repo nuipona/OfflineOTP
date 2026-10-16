@@ -32,6 +32,9 @@ manifest.
 | `View/ItemTouchHelper/SimpleItemTouchHelperCallback.kt` | Movement flags, move forwarding, select/clear wiring and the swipe fade against fake holders (the `makeMovementFlags` composition lives in the stub; see caveats). |
 | `Utilities/UIHelper.kt` | Dialog confirm callback and keyboard show/hide wiring against a fake `InputMethodManager`. |
 | `Utilities/ConfirmedPasswordTransformationHelper.kt` | Show/hide toggle wiring between password and confirm fields against fake inputs. |
+| `Dialogs/PasswordEntryDialog.kt` | **Executed** against scripted password/layout/button stand-ins: ENTER versus UPDATE visibility, minimum length, matching confirmation, privacy flags, editor actions, nullable callback, delivery and dismissal; its Java constructor/enum/SAM/listener shapes are reflected. No real window, IME or Material layout is involved. |
+| `Dialogs/TagsDialog.kt` | **Executed** against recording dialog/list stand-ins: row toggles, adapter replacement after adding a tag, optional callables, selection/cancel/new-tag buttons and its static Java entry point. No real window or list layout is involved. |
+| `Preferences/PasswordEncryptedPreference.kt` | Compiled and shape-checked against real `Settings`/`EncryptionHelper`/`KeyStoreHelper` declarations. Construction and encryption cannot run because those Java resolution sources have no class files; the real keystore/layout path has a Java instrumentation test. |
 | `Tasks/BackupTaskResult.kt` | Factories, public-field defaults, `ResultType` constants and redacted diagnostics. |
 | `Tasks/UiBasedBackgroundTask.kt` | The real runner lifecycle on real executors: value/failure/cancelled delivery, one-shot execution, explicit and session-revocation cancellation, owned-result disposal and the legacy fallback adapter, against a queued fake main loop. |
 | `Tasks/AuthenticationTask.kt` | Type-checked against the real `Settings`/`EncryptionHelper` Java declarations; constructor and protected-member shapes asserted (its bodies call Java-only classes, so they are not executed here). |
@@ -105,8 +108,8 @@ Still **not** covered, and therefore still dependent on the Gradle/device gates:
   the Java resolution sources produce no class files, so `Settings`/`DatabaseHelper`/
   `EncryptionHelper` calls inside them cannot run on the desktop JVM here; only their compile-time
   agreement with those real declarations is checked.
-- Java *compilation*: there is no `javac` in this environment, so no Java class file is produced and
-  the Java callers' own compilation is never checked. `run.sh` does pass real Java sources
+- Java *compilation*: `run.sh` does not invoke `javac` or provide the Android dependency classpath, so
+  no Java class file is produced and the Java callers' own compilation is never checked. It does pass real Java sources
   (`Utilities/Constants.java`, `Settings.java`, `EncryptionHelper.java`, ... — the full list is in
   the script) to `kotlinc` for resolution, which is why the Kotlin code is checked
   against the actual declarations rather than a copy — including the package-private
@@ -121,7 +124,7 @@ what Java callers expect.
 Does **not** prove: anything about Android runtime behaviour (the stubs are approximations, not the
 platform), resource/manifest wiring, `Looper`/`Handler` timing on a real main thread, `KeyEvent`
 delivery, the platform's `org.json`/`commons-codec`/`android.net.Uri` behaviour beyond the replicated
-subsets described below, Java-side compilation of the callers (no `javac` here), lint, packaging,
+subsets described below, Java-side compilation of the callers (not part of this harness), lint, packaging,
 signing or reproducibility.
 
 The entry batch made three more stand-ins functional **replicas** rather than inert types, so the
@@ -206,8 +209,9 @@ curl -sS -o /tmp/kt.tgz https://registry.npmjs.org/kotlin-compiler/-/kotlin-comp
 tar xzf /tmp/kt.tgz -C /tmp && chmod +x /tmp/package/bin/kotlinc*
 ```
 
-Verified with Kotlin `2.4.21` and Temurin `25.0.2` on 2026-10-15 (60 checks). Pin your own compiler
-when recording results; the check is only as meaningful as the versions you run it with.
+Verified with Kotlin `2.3.20` (the app's pinned version) and `2.4.21` (the bootstrap version), plus
+Temurin `25.0.2`, on 2026-10-15 (63 checks). Pin your own compiler when recording results; the check
+is only as meaningful as the versions you run it with.
 
 ## Thumbnail conversion follow-up
 
@@ -270,6 +274,27 @@ with recorded number persistence. `KotlinHideableDialogInteropTest` covers real 
 settings writes and the already-hidden helper branch without showing a window; unsuppressed showing,
 window/lifecycle behavior and real preference disk I/O remain device/manual acceptance work. Neither
 instrumentation class has been compiled or run here; only the desktop checks are executed.
+
+## Password and tag dialog / encrypted preference follow-up
+
+- `Dialogs/PasswordEntryDialog.kt` is compiled and executed against scripted children returned by the
+  fake `AppCompatDialog`: checks cover both modes, warning/OK state, matching confirmation, requested
+  accessibility/autofill flags, IME done and enter-up handling, nullable callbacks and dismissal.
+  The stubs do not inflate `dialog_password_entry`, dispatch real `TextWatcher` events or provide an
+  IME/window; `KotlinPasswordDialogsInteropTest` supplies those real-widget and Java-call-site gates.
+- `Dialogs/TagsDialog.kt` is compiled and executed against recording `AlertDialog`, `ListView` and
+  editable-field stand-ins. The check drives row toggling and both dialog stages, including optional
+  `Callable`s. It does not model AlertDialog's automatic button dismissal or a real adapter/window.
+- `Preferences/PasswordEncryptedPreference.kt` is compiled against the real Java keystore/settings/
+  encryption declarations and reflected, but not constructed here because those resolution sources
+  produce no runtime classes. Its first-attachment null default, AndroidKeyStore round trip, mode
+  input types and matching rule are covered by `KotlinPasswordEncryptedPreferenceInteropTest` on a
+  device. That test records preference writes; it does not claim PreferenceManager disk acceptance.
+
+The Java instrumentation tests are checked in but have not been compiled or run in this environment.
+The fake text/layout/dialog additions are recorders only and do not validate Material styling,
+selection, focus, lifecycle, rotation, keyboard behavior, accessibility service behavior or window
+privacy.
 
 ## Document and backup I/O follow-up
 

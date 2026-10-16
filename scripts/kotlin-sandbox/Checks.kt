@@ -72,7 +72,10 @@ import org.shadowice.flocke.andotp.View.ThumbnailSelectionAdapter
 import org.shadowice.flocke.andotp.View.AutoFillable.AutoFillableTextInputEditText
 import org.shadowice.flocke.andotp.View.SimpleDoubleClickListener
 import org.shadowice.flocke.andotp.Preferences.NumberPickerPreference
+import org.shadowice.flocke.andotp.Preferences.PasswordEncryptedPreference
 import org.shadowice.flocke.andotp.Dialogs.HideableDialog
+import org.shadowice.flocke.andotp.Dialogs.PasswordEntryDialog
+import org.shadowice.flocke.andotp.Dialogs.TagsDialog
 import org.shadowice.flocke.andotp.R
 
 import android.app.AlertDialog
@@ -90,11 +93,15 @@ import android.os.ParcelFileDescriptor
 import android.provider.OpenableColumns
 import android.os.Handler
 import android.os.IBinder
+import android.text.TextWatcher
 import android.text.method.PasswordTransformationMethod
 import android.text.method.TransformationMethod
 import android.util.DisplayMetrics
+import android.view.KeyEvent
 import android.view.View
+import android.view.inputmethod.EditorInfo
 import android.view.inputmethod.InputMethodManager
+import androidx.appcompat.app.AppCompatDialog
 import androidx.recyclerview.widget.GridLayoutManager
 import androidx.recyclerview.widget.ItemTouchHelper
 import androidx.recyclerview.widget.LinearLayoutManager
@@ -402,6 +409,32 @@ private class FakePasswordInput : TextInputEditText() {
 
     override fun setSelection(index: Int) {
         selections.add(index)
+    }
+}
+
+/** Fresh recording widgets for one password dialog construction, served through the lookup hook. */
+private class FakePasswordDialogWidgets {
+    val layout = TextInputLayout()
+    val input = TextInputEditText()
+    val confirm = android.widget.EditText()
+    val warning = android.widget.TextView()
+    val ok = android.widget.Button()
+    val cancel = android.widget.Button()
+
+    init {
+        ok.id = R.id.buttonOk
+        cancel.id = R.id.buttonCancel
+        AppCompatDialog.viewProvider = { id ->
+            when (id) {
+                R.id.passwordInputLayout -> layout
+                R.id.passwordInput -> input
+                R.id.passwordConfirm -> confirm
+                R.id.tooShortWarning -> warning
+                R.id.buttonOk -> ok
+                R.id.buttonCancel -> cancel
+                else -> null
+            }
+        }
     }
 }
 
@@ -1181,6 +1214,206 @@ fun main() {
         expect(Modifier.isStatic(show.modifiers), { "legacy Java show spelling/static API" })
         expect(View.OnClickListener::class.java.isAssignableFrom(dialog), { "click listener" })
         expect(android.widget.CompoundButton.OnCheckedChangeListener::class.java.isAssignableFrom(dialog), { "checkbox listener" })
+    }
+
+    check("password entry dialog keeps its enable rules, editor actions and dismissal flow") {
+        val enterWidgets = FakePasswordDialogWidgets()
+        try {
+            var entered: String? = null
+            val dialog = PasswordEntryDialog(Context(), PasswordEntryDialog.Mode.ENTER, true, false,
+                    PasswordEntryDialog.PasswordEnteredCallback { entered = it })
+
+            expect(dialog.titleResource == R.string.dialog_title_enter_password, { "dialog title changed" })
+            expect(dialog.contentResource == R.layout.dialog_password_entry, { "dialog layout changed" })
+            expect(!enterWidgets.ok.isEnabled, { "OK must start disabled" })
+            expect(enterWidgets.confirm.visibility == View.GONE, { "ENTER mode must hide the confirmation field" })
+            expect(enterWidgets.input.transformationMethod is PasswordTransformationMethod &&
+                    enterWidgets.confirm.transformationMethod is PasswordTransformationMethod,
+                    { "both fields must start masked" })
+            expect(enterWidgets.layout.importantForAccessibilityMode == View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS &&
+                    enterWidgets.confirm.importantForAccessibilityMode == View.IMPORTANT_FOR_ACCESSIBILITY_NO,
+                    { "the accessibility block is not applied to the right views" })
+            expect(enterWidgets.layout.importantForAutofillMode == 0 && enterWidgets.confirm.importantForAutofillMode == 0,
+                    { "autofill must not be blocked when it was not requested" })
+            expect(enterWidgets.warning.text == "text:${R.string.settings_label_short_password}",
+                    { "the short-password warning text changed" })
+
+            enterWidgets.input.text = "abcde"
+            dialog.onTextChanged("", 0, 0, 0)
+            expect(enterWidgets.warning.visibility == View.VISIBLE && !enterWidgets.ok.isEnabled,
+                    { "a short password must warn and keep OK disabled" })
+
+            enterWidgets.input.text = "abcdef"
+            dialog.onTextChanged("", 0, 0, 0)
+            expect(enterWidgets.warning.visibility == View.GONE && enterWidgets.ok.isEnabled,
+                    { "ENTER mode must enable OK at the minimum length" })
+
+            expect(dialog.onEditorAction(enterWidgets.input, EditorInfo.IME_ACTION_DONE, null),
+                    { "the done action must be consumed" })
+            expect(entered == "abcdef", { "OK did not deliver the entered password" })
+            expect(dialog.dismissals == 1, { "OK must dismiss the dialog" })
+
+            // The enter-key release that follows a hardware enter is swallowed, without a second delivery.
+            expect(dialog.onEditorAction(enterWidgets.input, 0, KeyEvent(KeyEvent.ACTION_UP, KeyEvent.KEYCODE_ENTER)),
+                    { "the enter-key release must be consumed" })
+            expect(entered == "abcdef" && dialog.dismissals == 1, { "the enter-key release must be a no-op" })
+
+            // Any other action without its key event still fails, like the Java dereference did.
+            expectThrows(NullPointerException::class.java) {
+                dialog.onEditorAction(enterWidgets.input, EditorInfo.IME_ACTION_NEXT, null)
+            }
+        } finally {
+            AppCompatDialog.viewProvider = null
+        }
+
+        val updateWidgets = FakePasswordDialogWidgets()
+        try {
+            var entered: String? = null
+            val dialog = PasswordEntryDialog(Context(), PasswordEntryDialog.Mode.UPDATE, false, true,
+                    PasswordEntryDialog.PasswordEnteredCallback { entered = it })
+
+            expect(updateWidgets.confirm.visibility == View.VISIBLE,
+                    { "UPDATE mode must show the confirmation field" })
+            expect(updateWidgets.layout.importantForAutofillMode == View.IMPORTANT_FOR_AUTOFILL_NO_EXCLUDE_DESCENDANTS &&
+                    updateWidgets.confirm.importantForAutofillMode == View.IMPORTANT_FOR_AUTOFILL_NO,
+                    { "the autofill block is not applied to the right views" })
+            expect(!updateWidgets.ok.isEnabled, { "OK must start disabled" })
+
+            updateWidgets.input.text = "abcdef"
+            updateWidgets.confirm.text = "abcdxf"
+            dialog.onTextChanged("", 0, 0, 0)
+            expect(updateWidgets.warning.visibility == View.GONE && !updateWidgets.ok.isEnabled,
+                    { "a mismatched confirmation must keep OK disabled" })
+
+            updateWidgets.confirm.text = "abcdef"
+            dialog.onTextChanged("", 0, 0, 0)
+            expect(updateWidgets.ok.isEnabled, { "matching inputs must enable OK" })
+
+            updateWidgets.input.text = "abc"
+            updateWidgets.confirm.text = "abc"
+            dialog.onTextChanged("", 0, 0, 0)
+            expect(updateWidgets.warning.visibility == View.VISIBLE && !updateWidgets.ok.isEnabled,
+                    { "matching but short inputs must still warn" })
+
+            updateWidgets.cancel.performClick()
+            expect(dialog.dismissals == 1 && entered == null,
+                    { "cancel must dismiss without delivering a password" })
+
+            updateWidgets.input.text = "secret1"
+            updateWidgets.confirm.text = "secret1"
+            dialog.onTextChanged("", 0, 0, 0)
+            updateWidgets.ok.performClick()
+            expect(entered == "secret1" && dialog.dismissals == 2,
+                    { "OK must deliver the password and dismiss" })
+
+            // The Java code tolerated a missing callback and still dismissed.
+            val widgets = FakePasswordDialogWidgets()
+            val silent = PasswordEntryDialog(Context(), PasswordEntryDialog.Mode.ENTER, false, false, null)
+            widgets.ok.performClick()
+            expect(silent.dismissals == 1, { "a missing callback must still dismiss" })
+        } finally {
+            AppCompatDialog.viewProvider = null
+        }
+    }
+
+    check("tag dialog wires the picker and the new-tag flow to the adapter") {
+        val context = Context()
+        val states = HashMap<String, Boolean?>()
+        states["Alpha"] = true
+        states["beta"] = false
+        val tagsAdapter = TagsAdapter(context, states)
+        var newTagCalls = 0
+        var selectedCalls = 0
+        val newTagCallable = object : java.util.concurrent.Callable<Any?> {
+            override fun call(): Any? {
+                newTagCalls++
+                return null
+            }
+        }
+        val selectedTagsCallable = object : java.util.concurrent.Callable<Any?> {
+            override fun call(): Any? {
+                selectedCalls++
+                return null
+            }
+        }
+
+        AlertDialog.Builder.created.clear()
+        TagsDialog.show(context, tagsAdapter, newTagCallable, selectedTagsCallable)
+
+        expect(AlertDialog.Builder.created.size == 1, { "the picker must create exactly one dialog" })
+        val selector = AlertDialog.Builder.created[0]
+        expect(selector.shown, { "the picker was not shown" })
+        expect(selector.titleId == R.string.label_tags, { "picker title changed" })
+        val list = (selector.contentView as android.widget.FrameLayout).getChildAt(0) as android.widget.ListView
+        expect(list.adapter === tagsAdapter, { "the picker must show the given adapter" })
+
+        val row = android.widget.CheckedTextView()
+        row.text = "Alpha"
+        row.isChecked = true
+        list.onItemClickListener!!.onItemClick(null, row, 0, 0L)
+        expect(!row.isChecked && tagsAdapter.getTagState("Alpha") == false,
+                { "tapping a row must toggle the tag state" })
+
+        selector.neutralButtonListener!!.onClick(selector, DialogInterface.BUTTON_NEUTRAL)
+        expect(AlertDialog.Builder.created.size == 2, { "the new-tag button must open the second dialog" })
+        val newTagDialog = AlertDialog.Builder.created[1]
+        expect(newTagDialog.shown && newTagDialog.titleId == R.string.button_new_tag, { "new-tag dialog changed" })
+        val tagInput = (newTagDialog.contentView as android.widget.FrameLayout).getChildAt(0) as android.widget.EditText
+        tagInput.text = "fresh"
+        newTagDialog.positiveButtonListener!!.onClick(newTagDialog, DialogInterface.BUTTON_POSITIVE)
+        expect(tagsAdapter.getTagState("fresh") == true, { "a created tag must start active" })
+        expect(newTagCalls == 1, { "the new-tag callable did not run" })
+
+        selector.positiveButtonListener!!.onClick(selector, DialogInterface.BUTTON_POSITIVE)
+        expect(selectedCalls == 1, { "the selection callable did not run" })
+        selector.negativeButtonListener!!.onClick(selector, DialogInterface.BUTTON_NEGATIVE)
+        expect(selector.dismissals == 1, { "cancel must dismiss the picker" })
+
+        // The Java null checks kept both callables optional.
+        TagsDialog.show(context, tagsAdapter, null, null)
+        val bare = AlertDialog.Builder.created[2]
+        bare.neutralButtonListener!!.onClick(bare, DialogInterface.BUTTON_NEUTRAL)
+        val bareInput = (AlertDialog.Builder.created[3].contentView as android.widget.FrameLayout).getChildAt(0) as android.widget.EditText
+        bareInput.text = "more"
+        AlertDialog.Builder.created[3].positiveButtonListener!!
+                .onClick(AlertDialog.Builder.created[3], DialogInterface.BUTTON_POSITIVE)
+        expect(tagsAdapter.getTagState("more") == true, { "the new-tag flow must survive missing callables" })
+        bare.positiveButtonListener!!.onClick(bare, DialogInterface.BUTTON_POSITIVE)
+    }
+
+    check("the password dialogs, tag picker and encrypted preference keep their Java entry points") {
+        val entryDialog = PasswordEntryDialog::class.java
+        expect(Modifier.isPublic(entryDialog.modifiers), { "PasswordEntryDialog is not public" })
+        expect(!Modifier.isFinal(entryDialog.modifiers), { "PasswordEntryDialog must stay extendable" })
+        entryDialog.getConstructor(Context::class.java, PasswordEntryDialog.Mode::class.java,
+                BOOLEAN_TYPE, BOOLEAN_TYPE, PasswordEntryDialog.PasswordEnteredCallback::class.java)
+        expect(PasswordEntryDialog.Mode.values().map { it.name } == listOf("ENTER", "UPDATE"),
+                { "Mode constants changed" })
+        val callback = PasswordEntryDialog.PasswordEnteredCallback::class.java
+        expect(callback.isInterface, { "PasswordEnteredCallback is not an interface" })
+        expectMethod(callback, "void onPasswordEntered(String)")
+        expect(View.OnClickListener::class.java.isAssignableFrom(entryDialog), { "click listener" })
+        expect(TextWatcher::class.java.isAssignableFrom(entryDialog), { "text watcher" })
+        expect(android.widget.TextView.OnEditorActionListener::class.java.isAssignableFrom(entryDialog),
+                { "editor action listener" })
+
+        val tags = TagsDialog::class.java
+        expect(Modifier.isPublic(tags.modifiers) && Modifier.isFinal(tags.modifiers),
+                { "the static-only Java class becomes a final object" })
+        expect(tags.getField("INSTANCE") != null, { "TagsDialog lost its INSTANCE singleton" })
+        expectMethod(tags, "static void show(Context,TagsAdapter,Callable,Callable)")
+
+        val preference = PasswordEncryptedPreference::class.java
+        expect(Modifier.isPublic(preference.modifiers), { "PasswordEncryptedPreference is not public" })
+        expect(!Modifier.isFinal(preference.modifiers), { "PasswordEncryptedPreference must stay extendable" })
+        preference.getConstructor(Context::class.java, android.util.AttributeSet::class.java)
+        expect(PasswordEncryptedPreference.Mode.values().map { it.name } == listOf("PASSWORD", "PIN"),
+                { "Mode constants changed" })
+        expectMethod(preference, "void setMode(Mode)")
+        expect(!Modifier.isFinal(preference.getDeclaredMethod("setMode", PasswordEncryptedPreference.Mode::class.java).modifiers),
+                { "setMode must stay overridable like the Java method" })
+        expect(View.OnClickListener::class.java.isAssignableFrom(preference), { "click listener" })
+        expect(TextWatcher::class.java.isAssignableFrom(preference), { "text watcher" })
     }
 
     check("the converted vault repository keeps its Java-visible surface and fails closed") {

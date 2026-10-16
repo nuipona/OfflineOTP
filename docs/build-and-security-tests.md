@@ -116,6 +116,14 @@ These exercise production helpers without Android mocks or Robolectric. The help
 
 `EncryptedRestoreSecurityTest` calls the real restore task on temporary file URIs and verifies independently generated current/legacy encrypted fixtures, Unicode preservation, wrong-password/tamper failure with no plaintext payload, truncated framing, and hostile KDF counts. The timeout is a supplementary regression signal; validation is the actual resource defense.
 
+`KotlinPasswordDialogsInteropTest` drives the converted password dialog through real inflated widgets
+from Java (both modes, privacy flags, watchers, IME action, callback and dismissal) and reflects the
+static tag-dialog boundary without opening an unowned window. `KotlinPasswordEncryptedPreferenceInteropTest`
+records preference writes while exercising first attachment with no XML default, a real AndroidKeyStore
+encrypt/decrypt round trip, restored layout text, PASSWORD/PIN input classes and matching-field state.
+These still require the API 28/36 instrumentation matrix; the desktop sandbox uses recording widgets
+and cannot validate real window, IME, Material or keystore behavior.
+
 The new guards impose a **16 MiB document limit** and a **1,000,000-iteration backup-read ceiling**. The current writer's 140,000–160,000 range is unchanged; valid historical counts below that range remain readable. Backups above either bound now fail closed. These are explicit compatibility/security policy limits; review them rather than silently increasing them after a failing test. Decoded QR images now have dimension/pixel bounds checked before pixel-buffer allocation; account/URI/JSON limits are documented in the hardening notes.
 
 Fixtures are synthetic, contain no user accounts, and were generated with Python `cryptography==44.0.3`, not the app's crypto implementation. Fixed salt/nonces are intentionally confined to fixtures. Optional regeneration:
