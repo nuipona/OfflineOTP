@@ -35,6 +35,8 @@ import org.shadowice.flocke.andotp.Utilities.StorageAccessHelper
 import org.shadowice.flocke.andotp.Utilities.NotificationHelper
 import org.shadowice.flocke.andotp.Utilities.ScanQRCodeFromFile
 import org.shadowice.flocke.andotp.Utilities.DatabaseHelper
+import org.shadowice.flocke.andotp.Utilities.EncryptionHelper
+import org.shadowice.flocke.andotp.Utilities.KeyStoreHelper
 import org.shadowice.flocke.andotp.Utilities.VaultReadError
 import org.shadowice.flocke.andotp.Utilities.VaultReadResult
 import org.shadowice.flocke.andotp.Utilities.VaultCommitDecision
@@ -134,6 +136,8 @@ import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
 import javax.crypto.Cipher
+import javax.crypto.SecretKeyFactory
+import javax.crypto.spec.PBEKeySpec
 import javax.crypto.Mac
 import javax.crypto.spec.SecretKeySpec
 
@@ -625,6 +629,47 @@ private class ZeroStream(private val size: Long) : InputStream() {
         produced += count
         return count
     }
+}
+
+// --- crypto/keystore helper fixtures (fifteenth batch) ------------------------------------------
+
+/** The GCM nonce length and the backup iteration bounds that Constants.java holds package-private. */
+private const val ENCRYPTION_IV_BYTES = 12
+private const val BACKUP_ITERATIONS_MIN = 140000
+private const val BACKUP_ITERATIONS_MAX = 160000
+private const val AUTH_ITERATIONS_MIN = 30000
+
+private fun hex(bytes: ByteArray): String = bytes.joinToString("") { String.format("%02x", it.toInt() and 0xFF) }
+
+/** Independent PBKDF2-HMAC-SHA1 derivation used to cross-check the converted credential factory. */
+private fun ownPbkdf2(password: String, salt: ByteArray, iterations: Int, lengthBytes: Int): ByteArray {
+    val spec = PBEKeySpec(password.toCharArray(), salt, iterations, lengthBytes * 8)
+    try {
+        return SecretKeyFactory.getInstance("PBKDF2WithHmacSHA1").generateSecret(spec).encoded
+    } finally {
+        spec.clearPassword()
+    }
+}
+
+/**
+ * The Java callers compile against the static forwarder, so assert exactly that one. Candidates are
+ * filtered by name and arity before their parameter types are read, so overloads that mention a
+ * Java-only type without a class file cannot break the lookup for the ones that do load.
+ */
+private fun staticMethod(type: Class<*>, name: String, parameters: List<Class<*>>): Method {
+    for (candidate in type.declaredMethods.filter {
+        it.name == name && Modifier.isStatic(it.modifiers) && it.parameterCount == parameters.size
+    }) {
+        val types = try { candidate.parameterTypes.toList() } catch (_: Throwable) { null } ?: continue
+        if (types == parameters) return candidate
+    }
+    throw AssertionError("${type.simpleName}.$name(${parameters.joinToString(",") { it.simpleName }}) is missing")
+}
+
+private fun expectThrowsClause(type: Class<*>, name: String, parameters: List<Class<*>>, vararg declared: Class<out Throwable>) {
+    val method = staticMethod(type, name, parameters)
+    expect(method.exceptionTypes.toSet() == declared.toSet(),
+            { "${type.simpleName}.$name throws ${method.exceptionTypes.toList()}, expected ${declared.toList()}" })
 }
 
 fun main() {
@@ -3006,6 +3051,169 @@ fun main() {
             expect(Modifier.isPublic(found.modifiers) && Modifier.isFinal(found.modifiers),
                     { "FinishIntroTask.Result.$name must stay a public final field" })
             expect(found.type == fieldType, { "FinishIntroTask.Result.$name type changed" })
+        }
+    }
+
+    check("credential derivation matches an independent PBKDF2 and the RFC 6070 vector") {
+        // RFC 6070, PBKDF2-HMAC-SHA1, P = "passwordPASSWORDpassword",
+        // S = "saltSALTsaltSALTsaltSALTsaltSALTsalt", c = 4096, dkLen = 200 bits.
+        // The factory derives 256 bits, so the vector is the 25-byte prefix of its output.
+        val password = "passwordPASSWORDpassword"
+        val salt = ascii("saltSALTsaltSALTsaltSALTsaltSALTsalt")
+        val derived = EncryptionHelper.generatePBKDF2Credentials(password, salt, 4096)
+        val combined = derived.key + derived.password
+        expect(hex(combined.copyOfRange(0, 25)) == "3d2eec4fe41c849b80c8d83662c0e44a8b291a964cf2f07038",
+                { "RFC 6070 prefix mismatch: ${hex(combined)}" })
+
+        val own = ownPbkdf2(password, salt, 4096, 32)
+        expect(hex(combined) == hex(own), { "the independent PBKDF2 derivation differs" })
+        expect(derived.password.size == 16 && derived.key.size == 16, { "the halves must stay 16 bytes" })
+        expect(hex(derived.key) == hex(own.copyOfRange(0, 16)), { "the key must be the lower half" })
+        expect(hex(derived.password) == hex(own.copyOfRange(16, 32)), { "the password must be the upper half" })
+
+        // Fresh arrays per call: wiping one result must not corrupt the next.
+        val again = EncryptionHelper.generatePBKDF2Credentials(password, salt, 4096)
+        expect(again.key !== derived.key && again.password !== derived.password, { "results share arrays" })
+        Arrays.fill(derived.key, 0.toByte())
+        Arrays.fill(derived.password, 0.toByte())
+        expect(hex(again.key + again.password) == hex(own), { "wiping one result changed another" })
+
+        // The backup key is the same PBKDF2 output without the split.
+        val backupKey = EncryptionHelper.generateSymmetricKeyPBKDF2(password, 4096, salt)
+        expect(backupKey.algorithm == "AES", { "backup key algorithm ${backupKey.algorithm}" })
+        expect(backupKey.encoded.contentEquals(own), { "backup key derivation differs from PBKDF2" })
+    }
+
+    check("credential derivation rejects the Java-invalid parameters before the provider") {
+        val salt = ByteArray(8) { 1 }
+        val tooLong = "x".repeat(InputPolicy.MAX_TEXT_CHARS + 1)
+        for ((label, invalid) in listOf<Pair<String, () -> Unit>>(
+                "null password" to { EncryptionHelper.generatePBKDF2Credentials(null, salt, 1000) },
+                "null salt" to { EncryptionHelper.generatePBKDF2Credentials("password", null, 1000) },
+                "short salt" to { EncryptionHelper.generatePBKDF2Credentials("password", ByteArray(7) { 1 }, 1000) },
+                "zero iterations" to { EncryptionHelper.generatePBKDF2Credentials("password", salt, 0) },
+                "too many iterations" to { EncryptionHelper.generatePBKDF2Credentials("password", salt, 20_000_001) },
+                "over-long password" to { EncryptionHelper.generatePBKDF2Credentials(tooLong, salt, 1000) },
+                "backup: null password" to { EncryptionHelper.generateSymmetricKeyPBKDF2(null, 1000, salt) },
+                "backup: null salt" to { EncryptionHelper.generateSymmetricKeyPBKDF2("password", 1000, null) },
+                "backup: short salt" to { EncryptionHelper.generateSymmetricKeyPBKDF2("password", 1000, ByteArray(7)) },
+                "backup: zero iterations" to { EncryptionHelper.generateSymmetricKeyPBKDF2("password", 0, salt) })) {
+            expectThrows(IllegalArgumentException::class.java, invalid)
+        }
+        // The boundaries themselves stay accepted: an 8-byte salt, MAX_TEXT_CHARS password, one iteration.
+        expect(EncryptionHelper.generatePBKDF2Credentials("y".repeat(InputPolicy.MAX_TEXT_CHARS), salt, 1).key.size == 16,
+                { "the maximum accepted password was rejected" })
+        expect(EncryptionHelper.generateSymmetricKeyPBKDF2("password", 1, salt).algorithm == "AES",
+                { "the minimum accepted backup parameters were rejected" })
+    }
+
+    check("legacy SHA-256 key derivation and raw byte wrapping are unchanged") {
+        expect(hex(EncryptionHelper.generateSymmetricKeyFromPassword("").encoded) ==
+                "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855", { "SHA-256 empty-password key" })
+        expect(hex(EncryptionHelper.generateSymmetricKeyFromPassword("password").encoded) ==
+                "5e884898da28047151d0e56f8dc6292773603d0d6aabbdd62a11ef721d1542d8", { "SHA-256 password key" })
+        expect(EncryptionHelper.generateSymmetricKeyFromPassword("password").algorithm == "AES", { "legacy key algorithm" })
+        expect(EncryptionHelper.generateSymmetricKey(ByteArray(16) { 7 }).encoded.contentEquals(ByteArray(16) { 7 }),
+                { "generateSymmetricKey must wrap the given bytes" })
+    }
+
+    check("the framed AES/GCM reader rejects null and every short frame before provider work") {
+        // The desktop JDK's SunJCE rejects the unchanged Android nonce type (it requires
+        // GCMParameterSpec while the app's IvParameterSpec path is what ships), so the cipher
+        // itself cannot run here. What this executes is the security-relevant part that precedes
+        // the provider: null and every frame shorter than nonce + 128-bit tag fail closed with the
+        // Java IllegalArgumentException. The vectors, tamper and tag cases on real AES/GCM stay with
+        // ApplicationTest/EncryptionSecurityTest on a device.
+        val key = SecretKeySpec(ByteArray(16) { 3 }, "AES")
+        expectThrows(IllegalArgumentException::class.java) { EncryptionHelper.decrypt(key, null) }
+        for (length in 0 until ENCRYPTION_IV_BYTES + 16) {
+            expectThrows(IllegalArgumentException::class.java) { EncryptionHelper.decrypt(key, ByteArray(length)) }
+        }
+        // A frame that is long enough reaches the provider instead, so it is not this guard's job.
+        expect(ENCRYPTION_IV_BYTES + 16 == 28, { "the frame guard bound changed" })
+    }
+
+    check("asymmetric helpers encrypt and decrypt with a real RSA key pair") {
+        val generator = KeyPairGenerator.getInstance("RSA")
+        generator.initialize(2048)
+        val pair = generator.generateKeyPair()
+        val plain = ascii("synthetic-backup-password")
+        val cipherText = EncryptionHelper.encrypt(pair.public, plain)
+        expect(cipherText.size == 256, { "PKCS#1 v1.5 ciphertext length ${cipherText.size}" })
+        expect(!cipherText.contentEquals(plain), { "RSA ciphertext exposes the plaintext" })
+        expect(EncryptionHelper.decrypt(pair.private, cipherText).contentEquals(plain), { "RSA round trip changed the secret" })
+        expectThrows(GeneralSecurityException::class.java) { EncryptionHelper.decrypt(generator.generateKeyPair().private, cipherText) }
+        expectThrows(GeneralSecurityException::class.java) { EncryptionHelper.decrypt(pair.private, ByteArray(8)) }
+    }
+
+    check("random helpers keep their lengths and the documented iteration bounds") {
+        expect(EncryptionHelper.generateRandom(0).isEmpty(), { "zero-length random returned bytes" })
+        expect(EncryptionHelper.generateRandom(ENCRYPTION_IV_BYTES).size == ENCRYPTION_IV_BYTES, { "nonce length" })
+        expect(EncryptionHelper.generateRandom(64).size == 64, { "random length" })
+        val first = EncryptionHelper.generateRandom(32)
+        val second = EncryptionHelper.generateRandom(32)
+        expect(!first.contentEquals(second), { "two 32-byte draws were identical" })
+
+        // Constants.PBKDF2_MIN/MAX_BACKUP_ITERATIONS and PBKDF2_MIN_AUTH_ITERATIONS are
+        // package-private Java constants; the Python guard pins these literals against them.
+        val seen = HashSet<Int>()
+        repeat(300) {
+            val iterations = EncryptionHelper.generateRandomIterations()
+            expect(iterations in BACKUP_ITERATIONS_MIN..BACKUP_ITERATIONS_MAX, { "backup iterations out of range: $iterations" })
+            seen.add(iterations)
+        }
+        expect(seen.size > 1, { "generateRandomIterations returned a constant" })
+
+        val benchmarked = EncryptionHelper.benchmarkIterations("synthetic-password", ByteArray(16) { 5 })
+        expect(benchmarked in AUTH_ITERATIONS_MIN..2000000, { "benchmarked iterations out of range: $benchmarked" })
+    }
+
+    check("converted crypto and keystore helpers keep their Java-visible API shapes") {
+        // EncryptionHelper's own Class cannot be enumerated here: resolving its declared methods
+        // eagerly loads the Java-only Constants.EncryptionType, which has no class file in the
+        // sandbox. Its static surface, throws clauses and the callback interface are therefore
+        // pinned by the Python source guard; everything that can be reflected is asserted below.
+        val helper = EncryptionHelper::class.java
+        expect(Modifier.isFinal(helper.modifiers), { "EncryptionHelper must be the final object class" })
+        expect(Modifier.isPrivate(helper.declaredConstructors.single().modifiers), { "the object constructor must stay private" })
+
+        val credentials = EncryptionHelper.PBKDF2Credentials::class.java
+        expect(!Modifier.isFinal(credentials.modifiers), { "PBKDF2Credentials must stay extendable like the Java class" })
+        expect(Modifier.isPublic(credentials.declaredConstructors.single().modifiers),
+                { "PBKDF2Credentials must keep its public no-arg constructor" })
+        for (name in listOf("password", "key")) {
+            val found = field(credentials, name) ?: throw AssertionError("PBKDF2Credentials.$name is missing")
+            expect(found.type == ByteArray::class.java, { "PBKDF2Credentials.$name type ${found.type}" })
+            expect(Modifier.isPublic(found.modifiers) && !Modifier.isStatic(found.modifiers) && !Modifier.isFinal(found.modifiers),
+                    { "PBKDF2Credentials.$name must stay a public mutable instance field" })
+        }
+
+        expect(EncryptionHelper.EncryptionChangeResult::class.java.isEnum, { "EncryptionChangeResult must stay an enum" })
+        expect(EncryptionHelper.EncryptionChangeResult.values().map { it.name } ==
+                listOf("SUCCESS", "CHANGE_FAILURE", "BACKUP_FAILURE", "MISSING_NEW_KEY", "DECRYPTION_FAILED", "TASK_CREATION_FAILED"),
+                { "EncryptionChangeResult constants changed" })
+
+        // KeyStoreHelper's signatures only mention types that load here, so its whole surface is
+        // reflectable: five static members with their unchanged parameter and throws clauses.
+        val keyStore = KeyStoreHelper::class.java
+        expect(Modifier.isFinal(keyStore.modifiers), { "KeyStoreHelper must be the final object class" })
+        expect(Modifier.isPrivate(keyStore.declaredConstructors.single().modifiers), { "the object constructor must stay private" })
+        expect(publicMethods(keyStore).containsAll(listOf(
+                "static void wipeKeys(Context)",
+                "static KeyPair loadAsymmetricKeyPair(Context,String)",
+                "static KeyPair loadOrGenerateAsymmetricKeyPair(Context,String)",
+                "static SecretKey loadEncryptionKeyFromKeyStore(Context,boolean)",
+                "static SecretKey createEncryptionKey(Context)")),
+                { "KeyStoreHelper's static surface changed: ${publicMethods(keyStore)}" })
+        expectThrowsClause(keyStore, "loadAsymmetricKeyPair", listOf(Context::class.java, String::class.java),
+                GeneralSecurityException::class.java, IOException::class.java)
+        expectThrowsClause(keyStore, "loadOrGenerateAsymmetricKeyPair", listOf(Context::class.java, String::class.java),
+                GeneralSecurityException::class.java, IOException::class.java)
+        for ((name, parameters) in listOf("wipeKeys" to listOf(Context::class.java),
+                "loadEncryptionKeyFromKeyStore" to listOf(Context::class.java, BOOLEAN_TYPE),
+                "createEncryptionKey" to listOf(Context::class.java))) {
+            val method = staticMethod(keyStore, name, parameters)
+            expect(method.exceptionTypes.isEmpty(), { "KeyStoreHelper.$name gained checked exceptions" })
         }
     }
 

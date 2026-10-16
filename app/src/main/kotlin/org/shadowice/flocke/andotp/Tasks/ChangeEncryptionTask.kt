@@ -25,7 +25,7 @@ open class ChangeEncryptionTask(context: Context, private val oldEncryptionKey: 
         newKeyMaterial?.fill(0.toByte())
     }
 
-    override fun onSuccessfulEncryptionChange(newEncryptionType: Constants.EncryptionType, newEncryptionKey: SecretKey?) {
+    override fun onSuccessfulEncryptionChange(newEncryptionType: Constants.EncryptionType, newEncryptionKey: SecretKey) {
         this.newEncryptionKey = newEncryptionKey
     }
 
