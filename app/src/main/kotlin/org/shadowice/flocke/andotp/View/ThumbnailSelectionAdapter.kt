@@ -26,8 +26,8 @@ package org.shadowice.flocke.andotp.View
 import android.content.Context
 import android.view.View
 import android.view.ViewGroup
+import android.widget.AbsListView
 import android.widget.BaseAdapter
-import android.widget.GridView
 import android.widget.ImageView
 import org.shadowice.flocke.andotp.Utilities.EntryThumbnail
 import org.shadowice.flocke.andotp.Utilities.EntryThumbnail.EntryThumbnails
@@ -70,7 +70,7 @@ open class ThumbnailSelectionAdapter internal constructor(
         val thumbnailSize = settings.getThumbnailSize()
         val imageView = if (convertView == null) {
             ImageView(context).apply {
-                layoutParams = GridView.LayoutParams(thumbnailSize, thumbnailSize)
+                layoutParams = AbsListView.LayoutParams(thumbnailSize, thumbnailSize)
             }
         } else {
             convertView as ImageView

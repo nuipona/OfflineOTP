@@ -65,20 +65,29 @@ open class TextView : View() {
     var textSize: Float = 0f
     /** The ellipsizing mode; the card view holder configures it per label display mode. */
     var ellipsize: TextUtils.TruncateAt? = null
-    /** Whether the text scrolls horizontally (the marquee label mode). */
-    var isHorizontallyScrolling: Boolean = false
+    /** Whether the text scrolls horizontally (the marquee label mode). Set through the platform setter. */
+    private var horizontallyScrolling: Boolean = false
+    fun setHorizontallyScrolling(scrolling: Boolean) {
+        horizontallyScrolling = scrolling
+    }
     /** Whether the view is selected (the marquee label mode). */
     var isSelected: Boolean = false
     /** The maximum number of lines. */
     var maxLines: Int = 0
-    /** The text colour. */
-    var textColor: Int = 0
+    /** The text colour. Set through the platform setter setTextColor(int). */
+    private var textColorValue: Int = 0
+    fun setTextColor(color: Int) {
+        textColorValue = color
+    }
 
     /** Whether the text is a single line. */
     var isSingleLine: Boolean = false
 
-    /** The raw input type of the field. */
-    var rawInputType: Int = 0
+    /** The raw input type of the field. The platform only has a setter, setRawInputType(int). */
+    private var rawInputTypeValue: Int = 0
+    fun setRawInputType(type: Int) {
+        rawInputTypeValue = type
+    }
 
     /** The error text that was set. */
     var error: CharSequence? = null
@@ -100,7 +109,7 @@ open class TextView : View() {
     }
 
     /** The platform colours the text through a colour state list. */
-    fun getTextColors(): ColorStateList = ColorStateList(textColor)
+    fun getTextColors(): ColorStateList = ColorStateList(textColorValue)
 
     /** The platform resolves a colour for the given view state. */
     class ColorStateList(private val defaultColor: Int) {
@@ -231,8 +240,12 @@ class ListView(context: Context) : AdapterView<Any?>() {
     fun isItemChecked(position: Int): Boolean = checkedPositions.contains(position)
 }
 
-open class GridView(context: Context) : AdapterView<Any?>() {
+/** The shared base of the list and grid views. Its LayoutParams is the nested class the grid uses. */
+open class AbsListView(context: Context) : AdapterView<Any?>() {
     class LayoutParams(width: Int, height: Int) : android.view.ViewGroup.LayoutParams(width, height)
+}
+
+open class GridView(context: Context) : AbsListView(context) {
 
     /** The adapter that fills the grid. */
     var adapter: BaseAdapter? = null

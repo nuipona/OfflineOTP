@@ -184,7 +184,7 @@ open class SettingsActivity : BackgroundTaskActivity<ChangeEncryptionTask.Result
 
             val message = if (settings!!.getAndroidBackupServiceEnabled())
                 R.string.settings_toast_android_sync_enabled else R.string.settings_toast_android_sync_disabled
-            Snackbar.make(settingsFragment.getView(), message, BaseTransientBottomBar.LENGTH_SHORT).show()
+            Snackbar.make(snackbarAnchor(), message, BaseTransientBottomBar.LENGTH_SHORT).show()
         }
 
         settingsFragment.updateAutoBackup()

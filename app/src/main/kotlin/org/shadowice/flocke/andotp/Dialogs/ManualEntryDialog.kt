@@ -373,8 +373,8 @@ object ManualEntryDialog {
             // Little hack: match the color and background of the TextView to that of a disabled EditText
             secretInput.isEnabled = false
             secretView.background = secretInput.background
-            secretView.textColor = secretInput.getTextColors()
-                .getColorForState(secretInput.drawableState, R.color.colorPrimary)
+            secretView.setTextColor(secretInput.getTextColors()
+                .getColorForState(secretInput.drawableState, R.color.colorPrimary))
 
             typeInput.isEnabled = false
             algorithmInput.isEnabled = false

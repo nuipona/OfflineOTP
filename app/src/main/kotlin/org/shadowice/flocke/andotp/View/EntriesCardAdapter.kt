@@ -553,7 +553,7 @@ open class EntriesCardAdapter(context: Context, private val tagsFilterAdapter: T
                 return
             }
             val drawable = BitmapDrawable(context.resources, bitmap)
-            drawable.filterBitmap = false
+            drawable.setFilterBitmap(false)
 
             val image = ImageView(context)
             image.setAdjustViewBounds(true)
@@ -583,7 +583,7 @@ open class EntriesCardAdapter(context: Context, private val tagsFilterAdapter: T
             item.setVisible(true)
         }
 
-        popup.setOnMenuItemClickListener(MenuItem.OnMenuItemClickListener { item ->
+        popup.setOnMenuItemClickListener(PopupMenu.OnMenuItemClickListener { item ->
             val id = item.getItemId()
 
             if (id == R.id.menu_popup_edit) {
