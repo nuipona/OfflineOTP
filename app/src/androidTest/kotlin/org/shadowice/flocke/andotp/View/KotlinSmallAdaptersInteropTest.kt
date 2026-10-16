@@ -177,7 +177,7 @@ class KotlinSmallAdaptersInteropTest {
             AutoFillableTextInputEditText(context, null)
             AutoFillableTextInputEditText(context, null, androidx.appcompat.R.attr.editTextStyle)
             val layout = LayoutInflater.from(context).inflate(R.layout.content_authenticate, null, false)
-            val field = layout.findViewById<AutoFillableTextInputEditText>(R.id.passwordEdit)
+            val field = requireNotNull(layout.findViewById<AutoFillableTextInputEditText>(R.id.passwordEdit))
             assertNotNull(field)
             val callbacks = AtomicInteger()
             field.setAutoFillTextListener { text ->

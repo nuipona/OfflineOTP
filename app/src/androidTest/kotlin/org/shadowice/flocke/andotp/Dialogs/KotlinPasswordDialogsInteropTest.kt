@@ -54,11 +54,11 @@ class KotlinPasswordDialogsInteropTest {
                 PasswordEntryDialog.PasswordEnteredCallback { delivered.set(it) }
             )
             try {
-                val password = dialog.findViewById<TextInputEditText>(R.id.passwordInput)
-                val confirm = dialog.findViewById<EditText>(R.id.passwordConfirm)
-                val warning = dialog.findViewById<TextView>(R.id.tooShortWarning)
-                val ok = dialog.findViewById<Button>(R.id.buttonOk)
-                val cancel = dialog.findViewById<Button>(R.id.buttonCancel)
+                val password = requireNotNull(dialog.findViewById<TextInputEditText>(R.id.passwordInput))
+                val confirm = requireNotNull(dialog.findViewById<EditText>(R.id.passwordConfirm))
+                val warning = requireNotNull(dialog.findViewById<TextView>(R.id.tooShortWarning))
+                val ok = requireNotNull(dialog.findViewById<Button>(R.id.buttonOk))
+                val cancel = requireNotNull(dialog.findViewById<Button>(R.id.buttonCancel))
                 assertNotNull(password)
                 assertNotNull(confirm)
                 assertNotNull(warning)
@@ -105,10 +105,10 @@ class KotlinPasswordDialogsInteropTest {
                 PasswordEntryDialog.PasswordEnteredCallback { delivered.set(it) }
             )
             try {
-                val layout = dialog.findViewById<TextInputLayout>(R.id.passwordInputLayout)
-                val password = dialog.findViewById<TextInputEditText>(R.id.passwordInput)
-                val confirm = dialog.findViewById<EditText>(R.id.passwordConfirm)
-                val ok = dialog.findViewById<Button>(R.id.buttonOk)
+                val layout = requireNotNull(dialog.findViewById<TextInputLayout>(R.id.passwordInputLayout))
+                val password = requireNotNull(dialog.findViewById<TextInputEditText>(R.id.passwordInput))
+                val confirm = requireNotNull(dialog.findViewById<EditText>(R.id.passwordConfirm))
+                val ok = requireNotNull(dialog.findViewById<Button>(R.id.buttonOk))
                 assertNotNull(layout)
                 assertNotNull(password)
                 assertNotNull(confirm)

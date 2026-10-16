@@ -10,6 +10,7 @@ import sys
 from pathlib import Path
 
 MESSAGE_CHARS = 3500
+HEAD_CHARS = 2400  # the summary of distinct errors; the tail gets the rest
 NOISE = (
     "deprecat",            # Gradle 10 deprecation warnings; they hide the real failure
     "Run with --stacktrace",
@@ -63,7 +64,7 @@ def main(argv: list[str]) -> int:
     summary = []
     if distinct:
         summary.append(f"Distinct compiler errors: {len(distinct)} ({sum(distinct.values())} occurrences)")
-        summary.extend(f"  {count}x {key}" for key, count in list(distinct.items())[:20])
+        summary.extend(f"  {count}x {key[:150]}" for key, count in list(distinct.items())[:30])
     # Failing unit tests: Gradle prints "Class > method() FAILED" followed by the exception line.
     raw_lines = raw.splitlines()
     failed = []
@@ -81,10 +82,14 @@ def main(argv: list[str]) -> int:
         lines = lines[starts[0]:]
     # The summary is kept whole at the front; the tail is trimmed to the room that is left.
     head = "\n".join(summary)
+    if len(head) > HEAD_CHARS:
+        head = head[:HEAD_CHARS].rsplit("\n", 1)[0] + "\n  ...more not listed"
     tail = "\n".join(lines)
     room = MESSAGE_CHARS - len(head) - 1
-    if len(tail) > room:
-        tail = "...\n" + tail[-max(room - 4, 0):]
+    if room <= 4:
+        tail = ""
+    elif len(tail) > room:
+        tail = "...\n" + tail[-(room - 4):]
     message = "\n".join(part for part in (head, tail) if part)
     print(f"::error title=Failure context ({path.name})::{escape(message)}")
     return 0

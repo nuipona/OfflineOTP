@@ -47,7 +47,7 @@ class KotlinSmallActivitiesInteropTest {
     }
 
     private fun storePanicResponse(vararg responses: String) {
-        val values: Set<String> = HashSet(Arrays.asList(*responses))
+        val values = HashSet(Arrays.asList(*responses))
         assertTrue(
             PreferenceManager.getDefaultSharedPreferences(context).edit()
                 .putStringSet(context.getString(R.string.settings_key_panic), values)

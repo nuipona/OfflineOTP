@@ -106,23 +106,23 @@ class KotlinAboutScreensInteropTest {
         val activity = startAboutScreen()
         try {
             InstrumentationRegistry.getInstrumentation().runOnMainSync {
-                val version = activity.findViewById<TextView>(R.id.about_text_version)
+                val version = requireNotNull(activity.findViewById<TextView>(R.id.about_text_version))
                 assertNotNull("the version text is missing", version)
                 val info: PackageInfo = activity.packageManager.getPackageInfo(activity.packageName, 0)
                 val expected = info.versionName ?: ""
                 assertEquals(expected, version.text?.toString())
 
                 for (id in BaseAboutFragment.imageResources) {
-                    val image = activity.findViewById<ImageView>(id)
+                    val image = requireNotNull(activity.findViewById<ImageView>(id))
                     assertNotNull("image row $id is missing", image)
                     val drawable: Drawable? = image.drawable
                     assertNotNull("image row $id is untinted", drawable)
                 }
-                val license = activity.findViewById<LinearLayout>(R.id.about_layout_license)
+                val license = requireNotNull(activity.findViewById<LinearLayout>(R.id.about_layout_license))
                 assertNotNull(license)
                 assertTrue(license.hasOnClickListeners())
 
-                val pager = activity.findViewById<ViewPager>(R.id.viewPager)
+                val pager = requireNotNull(activity.findViewById<ViewPager>(R.id.viewPager))
                 assertNotNull(pager)
                 val adapter = requireNotNull(pager.adapter)
                 assertEquals(2, adapter.count)

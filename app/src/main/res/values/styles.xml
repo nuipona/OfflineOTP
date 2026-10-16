@@ -1,4 +1,4 @@
-<resources>
+<resources xmlns:tools="http://schemas.android.com/tools">
     <!-- Definitions -->
     <attr name="windowBackground" format="reference" />
     <attr name="cardStyle" format="reference" />
@@ -16,14 +16,14 @@
 
     <style name="Theme.Intro.Solid" parent="Theme.Intro">
         <!-- Android 15+ (targetSdk 35): keep the existing layouts clear of the system bars until edge-to-edge is supported -->
-        <item name="android:windowOptOutEdgeToEdgeEnforcement">true</item>
+        <item name="android:windowOptOutEdgeToEdgeEnforcement" tools:targetApi="35">true</item>
         <item name="android:windowIsTranslucent">false</item>
     </style>
 
     <!-- Light application theme -->
     <style name="AppBaseTheme" parent="Theme.AppCompat.Light.DarkActionBar">
         <!-- Android 15+ (targetSdk 35): keep the existing layouts clear of the system bars until edge-to-edge is supported -->
-        <item name="android:windowOptOutEdgeToEdgeEnforcement">true</item>
+        <item name="android:windowOptOutEdgeToEdgeEnforcement" tools:targetApi="35">true</item>
         <item name="colorPrimary">@color/colorPrimary</item>
         <item name="colorPrimaryDark">@color/colorPrimaryDark</item>
         <item name="colorAccent">@color/colorAccent</item>
@@ -64,7 +64,7 @@
     <!-- Dark application theme. -->
     <style name="AppBaseTheme.Dark" parent="Theme.AppCompat">
         <!-- Android 15+ (targetSdk 35): keep the existing layouts clear of the system bars until edge-to-edge is supported -->
-        <item name="android:windowOptOutEdgeToEdgeEnforcement">true</item>
+        <item name="android:windowOptOutEdgeToEdgeEnforcement" tools:targetApi="35">true</item>
         <item name="colorPrimary">@color/colorPrimary</item>
         <item name="colorPrimaryDark">@color/colorPrimaryDark</item>
         <item name="colorAccent">@color/colorAccent</item>
@@ -101,7 +101,7 @@
     <!-- Black application theme. -->
     <style name="AppBaseTheme.Black" parent="Theme.AppCompat">
         <!-- Android 15+ (targetSdk 35): keep the existing layouts clear of the system bars until edge-to-edge is supported -->
-        <item name="android:windowOptOutEdgeToEdgeEnforcement">true</item>
+        <item name="android:windowOptOutEdgeToEdgeEnforcement" tools:targetApi="35">true</item>
         <item name="colorPrimary">@color/colorPrimary</item>
         <item name="colorPrimaryDark">@color/colorPrimaryDark</item>
         <item name="colorAccent">@color/colorAccent</item>

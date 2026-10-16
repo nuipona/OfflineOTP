@@ -24,6 +24,7 @@
 package org.shadowice.flocke.andotp.Utilities
 
 import android.Manifest
+import android.annotation.SuppressLint
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.content.Context
@@ -43,6 +44,8 @@ import java.util.Locale
  * Android 13 permission gate and the single reused notification id are unchanged.
  */
 object NotificationHelper {
+    // Only read after the Android 13 (TIRAMISU) check in requestNotificationPermission().
+    @SuppressLint("InlinedApi")
     private const val POST_NOTIFICATIONS_PERMISSION = Manifest.permission.POST_NOTIFICATIONS
     private const val POST_NOTIFICATIONS_REQUEST_CODE = 1
 
