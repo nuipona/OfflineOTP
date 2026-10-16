@@ -33,6 +33,8 @@ allprojects {
             filter {
                 includeGroup 'com.github.aakira'
                 includeGroup 'com.github.open-keychain.open-keychain'
+                // material-intro is published to JitPack under its own group, not com.github.*.
+                includeGroup 'com.heinrichreimersoftware'
             }
         }
     }
