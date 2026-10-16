@@ -25,9 +25,9 @@ class KotlinDialogPreferencesConversionTest(unittest.TestCase):
         self.assertIn("PasswordEntryDialog.Mode.UPDATE", backup)
         manual = (KOTLIN / "Dialogs/ManualEntryDialog.kt").read_text()
         self.assertIn("TagsDialog.show(callingActivity, tagsAdapter, tagsCallable, tagsCallable)", manual)
-        for test in ("Dialogs/KotlinPasswordDialogsInteropTest.java",
-                     "Preferences/KotlinPasswordEncryptedPreferenceInteropTest.java"):
-            self.assertTrue((ROOT / "app/src/androidTest/java/org/shadowice/flocke/andotp" / test).is_file())
+        for test in ("Dialogs/KotlinPasswordDialogsInteropTest.kt",
+                     "Preferences/KotlinPasswordEncryptedPreferenceInteropTest.kt"):
+            self.assertTrue((ROOT / "app/src/androidTest/kotlin/org/shadowice/flocke/andotp" / test).is_file())
 
     def test_password_dialog_keeps_the_confirm_rule_editor_actions_and_callback(self):
         source = (KOTLIN / "Dialogs/PasswordEntryDialog.kt").read_text()

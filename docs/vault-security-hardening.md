@@ -64,7 +64,7 @@ Automatic exports create new UUID-named documents, even if the old date/time nam
 
 ## Regression coverage and remaining verification
 
-The Python suite checks the signature-bound manifest policy, backup-disable policy, source exclusion rules, build-input provenance, fixtures and independent-build comparison logic. Kotlin host tests cover input/header limits and process-session handoffs; ordinary Android security tests are Kotlin too. The 15 Java `Kotlin*InteropTest` suites remain to verify Java-callable APIs. Android tests additionally cover:
+The Python suite checks the signature-bound manifest policy, backup-disable policy, source exclusion rules, build-input provenance, fixtures and independent-build comparison logic. Kotlin host tests cover input/header limits and process-session handoffs; ordinary Android security tests are Kotlin too. All 15 `Kotlin*InteropTest` suites are now Kotlin and verify the same Java-callable APIs. Android tests additionally cover:
 
 - A **different UID and certificate**, verified before an independent caller attempts panic and backup IPC; denial, unchanged vault/settings and absence of queued backup work are asserted even with backup/panic configured.
 - Wrong-key save/migration rejection, missing-versus-empty handling, missing-key non-regeneration, all-or-nothing JSON, journal recovery and failed metadata commits.

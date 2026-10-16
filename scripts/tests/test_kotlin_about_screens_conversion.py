@@ -13,7 +13,7 @@ KOTLIN = ROOT / "app/src/main/kotlin/org/shadowice/flocke/andotp"
 FLAVOR_FDROID = ROOT / "app/src/fdroid/kotlin/org/shadowice/flocke/andotp"
 FLAVOR_PLAY = ROOT / "app/src/play/kotlin/org/shadowice/flocke/andotp"
 JAVA = ROOT / "app/src/main/java/org/shadowice/flocke/andotp"
-ANDROID_TEST = ROOT / "app/src/androidTest/java/org/shadowice/flocke/andotp"
+ANDROID_TEST = ROOT / "app/src/androidTest/kotlin/org/shadowice/flocke/andotp"
 SANDBOX = ROOT / "scripts/kotlin-sandbox"
 
 
@@ -183,14 +183,14 @@ class KotlinAboutScreensConversionTest(unittest.TestCase):
         main = (KOTLIN / "Activities/MainActivity.kt").read_text()
         self.assertIn("AboutActivity::class.java", main)
 
-    def test_the_device_gate_keeps_the_java_interop_test(self):
-        interop = ANDROID_TEST / "Fragments/KotlinAboutScreensInteropTest.java"
-        self.assertTrue(interop.is_file(), "the Java interop test is missing")
+    def test_the_device_gate_keeps_the_kotlin_interop_test(self):
+        interop = ANDROID_TEST / "Fragments/KotlinAboutScreensInteropTest.kt"
+        self.assertTrue(interop.is_file(), "the Kotlin device test is missing")
         source = interop.read_text()
-        self.assertIn("extends BaseAboutFragment", source)
+        self.assertIn("class RecordingFragment : BaseAboutFragment()", source)
         self.assertIn("openURI(", source)
         self.assertIn("copyToClipboard(", source)
-        self.assertIn("AboutActivity.class", source)
+        self.assertIn("AboutActivity::class.java", source)
 
 
 if __name__ == "__main__":
