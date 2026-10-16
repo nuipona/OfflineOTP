@@ -2,7 +2,8 @@
 
 buildscript {
     configurations.classpath {
-        resolutionStrategy.failOnDynamicVersions()
+        // Gradle rejects failOnDynamicVersions() together with dependency locking, so the
+        // build plugins rely on pinned versions plus locking; changing versions still fail.
         resolutionStrategy.failOnChangingVersions()
         resolutionStrategy.activateDependencyLocking()
     }
@@ -39,7 +40,8 @@ allprojects {
 // Reject floating/changing dependencies instead of accepting a different graph silently.
 allprojects {
     configurations.configureEach {
-        resolutionStrategy.failOnDynamicVersions()
+        // failOnDynamicVersions() is incompatible with dependency locking (Gradle rejects the
+        // combination at configuration time). All dependency versions are pinned, so nothing floats.
         resolutionStrategy.failOnChangingVersions()
     }
     dependencyLocking {
