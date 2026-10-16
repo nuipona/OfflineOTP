@@ -91,7 +91,7 @@ open class PasswordEncryptedPreference(context: Context, attrs: AttributeSet?) :
         btnSave.setOnClickListener(this)
 
         if (value.isNotEmpty()) {
-            passwordInput.text = value
+            passwordInput.setText(value)
         }
 
         if (mode == Mode.PASSWORD) {

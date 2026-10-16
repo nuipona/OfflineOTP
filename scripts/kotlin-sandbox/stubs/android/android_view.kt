@@ -1,6 +1,7 @@
 // Sandbox-only stand-ins, see android_content.kt.
 package android.view
 
+import android.content.Context
 import android.os.IBinder
 
 /**
@@ -29,8 +30,20 @@ open class View {
     var importantForAccessibilityMode: Int = 0
     var importantForAutofillMode: Int = 0
     val windowToken: IBinder? get() = null
+    /** The background drawable; the converted code reads it back to copy it onto another view. */
+    var background: android.graphics.drawable.Drawable? = null
+    /** The tag the card view holder stores the unformatted token in. */
+    var tag: Any? = null
+    /** Whether the view saves its state; the credential fields disable it. */
+    var isSaveEnabled: Boolean = true
+
+    /** The context the view is inflated in. */
+    open val context: Context = Context()
+    /** The drawable state the text colour lookup is resolved against. */
+    var drawableState: IntArray = intArrayOf()
 
     private var clickListener: OnClickListener? = null
+    private var longClickListener: OnLongClickListener? = null
 
     open fun refreshDrawableState() {}
 
@@ -41,11 +54,27 @@ open class View {
         clickListener = listener
     }
 
+    /** Records the long-click listener; the card counter uses it. */
+    open fun setOnLongClickListener(listener: OnLongClickListener?) {
+        longClickListener = listener
+    }
+
     open fun performClick(): Boolean {
         val listener = clickListener ?: return false
         listener.onClick(this)
         return true
     }
+
+    /** Dispatches to the recorded long-click listener. */
+    open fun performLongClick(): Boolean {
+        val listener = longClickListener ?: return false
+        return listener.onLongClick(this)
+    }
+
+    open fun requestFocus(): Boolean = true
+    open fun requestLayout() {}
+    open fun setBackgroundColor(color: Int) {}
+    open fun setPadding(left: Int, top: Int, right: Int, bottom: Int) {}
 
     fun setPaddingRelative(start: Int, top: Int, end: Int, bottom: Int) {}
     fun setImportantForAccessibility(mode: Int) {
@@ -54,6 +83,11 @@ open class View {
 
     fun setImportantForAutofill(mode: Int) {
         importantForAutofillMode = mode
+    }
+
+    /** The platform interface is Java; a `fun interface` keeps lambda/SAM conversion working. */
+    fun interface OnLongClickListener {
+        fun onLongClick(v: View): Boolean
     }
 
     /**
@@ -80,6 +114,7 @@ class KeyEvent(private val eventAction: Int, private val eventKeyCode: Int) {
     companion object {
         const val ACTION_DOWN = 0
         const val ACTION_UP = 1
+        const val KEYCODE_BACK = 4
         const val KEYCODE_ENTER = 66
         const val KEYCODE_NUMPAD_ENTER = 160
     }
@@ -87,7 +122,7 @@ class KeyEvent(private val eventAction: Int, private val eventKeyCode: Int) {
 
 /** Inert layout stand-ins: no Android measurement or inflation happens here. */
 open class ViewGroup : View() {
-    open class LayoutParams(val width: Int, val height: Int) {
+    open class LayoutParams(var width: Int, var height: Int) {
         companion object {
             const val MATCH_PARENT = -1
             const val WRAP_CONTENT = -2
@@ -99,6 +134,12 @@ open class ViewGroup : View() {
     /** Records the child; no measurement, layout or drawing is implemented. */
     open fun addView(view: View) {
         children.add(view)
+    }
+
+    /** Records the child with its layout parameters. */
+    open fun addView(view: View, params: LayoutParams) {
+        children.add(view)
+        view.layoutParams = params
     }
 
     open fun getChildAt(index: Int): View = children[index]

@@ -29,7 +29,7 @@ open class HideableDialog(context: Context, titleId: Int, msgId: Int, private va
         buttonOk.setOnClickListener(this)
     }
 
-    override fun onCheckedChanged(buttonView: CompoundButton?, isChecked: Boolean) {
+    override fun onCheckedChanged(buttonView: CompoundButton, isChecked: Boolean) {
         if (hideSettingId > 0) settings.setBoolean(hideSettingId, isChecked)
     }
 

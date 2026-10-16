@@ -167,3 +167,111 @@ open class DialogPreference(val context: Context, attrs: android.util.AttributeS
     protected open fun onGetDefaultValue(a: android.content.res.TypedArray, index: Int): Any? = null
     protected open fun onSetInitialValue(restorePersistedValue: Boolean, defaultValue: Any?) {}
 }
+
+/**
+ * The framework preference base class. The stand-in records the state the converted settings
+ * screen sets; no preference screen, persistence or click dispatch is modelled.
+ */
+open class Preference {
+    /** The context the preference belongs to. */
+    var context: android.content.Context? = null
+
+    /** The summary that was set. */
+    var summary: CharSequence? = null
+
+    /** Whether the preference is enabled. */
+    var isEnabled: Boolean = true
+
+    /** The value that was set. */
+    var value: String? = null
+
+    /**
+     * The change listener that was set, recorded rather than dispatched. The platform exposes
+     * `setOnPreferenceChangeListener(...)`; it is modelled as a function here (and not as a
+     * property) so the converted code calls it exactly as it would call the platform's method.
+     */
+    var changeListener: OnPreferenceChangeListener? = null
+        private set
+
+    /**
+     * The click listener that was set, recorded rather than dispatched. See [changeListener] for
+     * why the setter is a function and not a property.
+     */
+    var clickListener: OnPreferenceClickListener? = null
+        private set
+
+    fun setSummary(summaryResId: Int) {
+        this.summary = "res:$summaryResId"
+    }
+
+    /** Mirrors `Preference.setOnPreferenceChangeListener`. */
+    fun setOnPreferenceChangeListener(listener: OnPreferenceChangeListener?) {
+        changeListener = listener
+    }
+
+    /** Mirrors `Preference.setOnPreferenceClickListener`. */
+    fun setOnPreferenceClickListener(listener: OnPreferenceClickListener?) {
+        clickListener = listener
+    }
+
+
+    /** The change callback of a preference. */
+    fun interface OnPreferenceChangeListener {
+        fun onPreferenceChange(preference: Preference, newValue: Any?): Boolean
+    }
+
+    /** The click callback of a preference. */
+    fun interface OnPreferenceClickListener {
+        fun onPreferenceClick(preference: Preference): Boolean
+    }
+}
+
+/** A group of preferences. */
+open class PreferenceCategory : Preference() {
+    /** The preferences that were removed. */
+    val removed: MutableList<Preference> = ArrayList()
+
+    fun removePreference(preference: Preference) {
+        removed.add(preference)
+    }
+}
+
+/** A preference that stores one of a list of values. */
+open class ListPreference : Preference()
+
+/**
+ * A preference with a check box. The platform exposes `isChecked()`/`setChecked(boolean)` as Java
+ * methods, which Kotlin sees as the `isChecked` property, so the stand-in models them as one
+ * property.
+ */
+open class CheckBoxPreference : Preference() {
+    /** Whether the check box is checked. */
+    var isChecked: Boolean = false
+}
+
+/**
+ * A preference that stores a text. The platform exposes `getText()`/`setText(String)` as Java
+ * methods, which Kotlin sees as the `text` property, so the stand-in models them as one property.
+ */
+open class EditTextPreference : Preference() {
+    /** The text that was set. */
+    var text: String? = null
+}
+
+/**
+ * The preference screen. The stand-in records the inflated resources and the looked-up
+ * preferences; no preference screen is built.
+ */
+open class PreferenceFragment : android.app.Fragment() {
+    /** The resources that were inflated. */
+    val inflatedResources: MutableList<Int> = ArrayList()
+
+    /** The preferences that were found, by key. */
+    val preferences: MutableMap<String, Preference> = LinkedHashMap()
+
+    fun addPreferencesFromResource(resId: Int) {
+        inflatedResources.add(resId)
+    }
+
+    fun findPreference(key: String): Preference? = preferences[key]
+}

@@ -96,7 +96,7 @@ class EntryActionDialogs(private val context: Context, private val settings: Set
         val input = input()
         input.rawInputType = InputType.TYPE_NUMBER_VARIATION_PASSWORD or InputType.TYPE_CLASS_NUMBER
         input.setText(current)
-        input.transformationMethod = PasswordTransformationMethod()
+        input.transformationMethod = PasswordTransformationMethod.getInstance()
         input.requestFocus()
         UIHelper.showKeyboard(context, input, true)
         val dialog = AlertDialog.Builder(context).setTitle(R.string.dialog_title_pin)

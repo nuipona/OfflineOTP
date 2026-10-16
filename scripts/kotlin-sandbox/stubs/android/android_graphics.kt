@@ -3,6 +3,7 @@ package android.graphics
 
 abstract class ColorFilter
 
+
 class Canvas(bitmap: Bitmap? = null) {
     fun setBitmap(bitmap: Bitmap?) {}
     fun drawColor(color: Int) {}
@@ -94,12 +95,22 @@ open class Paint {
 
 class Typeface private constructor() {
     companion object {
+        /** The style constants of the platform. */
+        const val NORMAL = 0
         const val BOLD = 1
+        const val ITALIC = 2
+
         @JvmStatic
         val DEFAULT: Typeface = Typeface()
 
         @JvmStatic
         fun create(family: String?, style: Int): Typeface = Typeface()
+
+        @JvmStatic
+        fun create(family: String?): Typeface = Typeface()
+
+        @JvmStatic
+        fun defaultFromStyle(style: Int): Typeface = Typeface()
     }
 }
 
@@ -115,4 +126,5 @@ class Rect {
 object Color {
     const val WHITE: Int = -1
     const val BLACK: Int = -16777216
+    const val TRANSPARENT: Int = 0
 }

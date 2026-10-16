@@ -7,4 +7,21 @@ package android.os
  * It is a field/type-only placeholder: the converted base activities only pass it through to
  * `super.onCreate()`. No parceling, no saved state and no configuration change is modelled.
  */
-open class Bundle
+open class Bundle {
+    /** The values that were put into the bundle. */
+    val values: MutableMap<String, Any?> = LinkedHashMap()
+
+    fun putString(key: String, value: String?) {
+        values[key] = value
+    }
+
+    fun getString(key: String): String? = values[key] as? String
+
+    fun getString(key: String, defaultValue: String): String = values[key] as? String ?: defaultValue
+
+    fun putBoolean(key: String, value: Boolean) {
+        values[key] = value
+    }
+
+    fun getBoolean(key: String, defaultValue: Boolean): Boolean = values[key] as? Boolean ?: defaultValue
+}

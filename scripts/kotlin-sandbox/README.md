@@ -66,9 +66,14 @@ manifest.
 | `Utilities/ScanQRCodeFromFile.kt` | **Executed** against scripted stand-ins: a `BitmapFactory` hook that reports bounds and returns pixel-holding bitmaps, a zxing `QRCodeReader` that replays results/failures, and recorded toasts. Covers load failures, bounds rejected before the full decode, rejected decoded bitmaps (recycled), pixels handed to the luminance source, the `TRY_HARDER` retry and the last-failure-wins messages. No image is decoded and zxing itself is not run. |
 | `Utilities/NotificationHelper.kt` | The Android 13 permission gate is executed with fake fragments/activities and a runtime `SDK_INT`; the channel/notification members take the Java-only `Constants.NotificationChannel` (no class file here) and are compiled only, against recording `NotificationManager`/`NotificationCompat` stand-ins. |
 | `Database/EntryList.kt` | Compiled and shape-checked only: its sorting/filtering API takes `Constants` enums and its entries are `Entry` objects, and the `Constants` enums have no class file in this sandbox, so its behaviour stays covered by the Python source guards and `ApplicationTest`. |
+| `View/EntryViewHolder.kt` | **Executed** against a scripted card layout: the token is bound and kept unformatted in the view tag for the copy action, the label and the comma separated tags are written, a counter based entry shows its counter instead of the progress bar, and without tap-to-reveal the token layout is shown while the cover is not. The entry has no issuer, so the card does not read the card layout (a Java-only `Constants` enum), and the thumbnail is switched off in the fixture, so no letter bitmap is drawn. The real window, the real theme and the real layout inflation are not exercised. |
+| `View/EntriesCardAdapter.kt`, `View/EntryListPresentation.kt` | Compiled and shape-checked only: the adapter's sorting/filtering API takes `Constants` enums and its entries are `Entry` objects, and the `Constants` enums have no class file in this sandbox, so the tag reconciliation stays covered by the Python source guards and by the device test. The class shape, the `Filterable` contract and the read/write `encryptionKey` field are reflected. |
+| `Dialogs/ManualEntryDialog.kt` | Compiled and shape-checked only: the static-only Java class became the documented Kotlin `object` with `@JvmStatic` forwarders, and the nested `UpdateCallback` stays a nested interface. The dialog itself needs a real window, a real layout and the main activity, so it is not executed here. |
+| `Preferences/CredentialsPreference.kt` | Compiled and shape-checked only: the class name (the preference XML instantiates it by name), the `(Context, AttributeSet)` constructor and the public static `DEFAULT_VALUE` constant are reflected, and the two public setters are asserted. The class initializer reads the Java-only `Constants.AuthMethod`, so the constant's value cannot be read here; it is asserted on the device. |
+| `Activities/MainActivity.kt`, `Activities/BackupActivity.kt`, `Activities/SettingsActivity.kt`, `Activities/IntroScreenActivity.kt`, `Activities/AuthenticateActivity.kt`, `Activities/BackgroundTaskActivity.kt` | Compiled and shape-checked only: the class shapes, the base classes, the nested types (`SettingsActivity.SettingsFragment`, the four intro slides, `BackgroundTaskActivity.TaskFragment`) and the members whose signatures avoid the Java-only `Constants` enums are reflected. The activities themselves need the real window, the real theme, the real `Preferences` framework and the vault session, so they are not executed here. |
 
 The task subclasses are compiled **against the real Java declarations** they call: `run.sh` passes
-`FileHelper.java` and `Preferences/CredentialsPreference.java` to `kotlinc` for resolution (the same
+`FileHelper.java` to `kotlinc` for resolution (the same
 mechanism already used for `Constants.java`). `Entry.java`, `DatabaseHelper.java`,
 `StorageAccessHelper.java`, `BackupHelper.java`, `EncryptionHelper.java`, `KeyStoreHelper.java` and
 `Settings.java` are no longer among them: all seven are Kotlin now (and the converted repository,
@@ -106,11 +111,12 @@ Still **not** covered, and therefore still dependent on the Gradle/device gates:
 
 - `View/EntryActionDialogs.kt`, `View/EntryActionTarget.kt`, `View/EntryListPresentation.kt`:
   Android views/dialogs, or APIs that take the `Entry`/`EntryList` model types.
-- Every **still-Java** owner: the large activities (`MainActivity`, `BackupActivity`,
-  `SettingsActivity`, `IntroScreenActivity`, `AuthenticateActivity`, `BackgroundTaskActivity`),
-  `Dialogs/ManualEntryDialog`, `Preferences/CredentialsPreference` and the entry-card adapter/view
-  holder. (The converted receivers, worker, backup agent, activity bases and about screens are
-  covered in the table above.) `NumberPickerPreference` is covered below. The two small adapters below are the exceptions.
+- The **user interface** of the twenty-first batch: the six activities, `Dialogs/ManualEntryDialog`,
+  `Preferences/CredentialsPreference` and the entry-card adapter/view holder are compiled and
+  shape-checked here, but their behaviour needs the real window, the real `Preferences` framework,
+  the vault session and the Java-only `Constants` enums, so it belongs to the device test
+  (`KotlinConvertedUiInteropTest`) and to the Android gates. The entry card's binding is the
+  exception: it is executed above.
 - `Utilities/DatabaseHelper.kt` beyond the executed part above: the vault file transaction needs
   `FileHelper` (`AtomicFile`), `SharedPreferences` and the AES-GCM provider, so recovery, promotion,
   backup/restore and wipe are covered by the instrumentation tests
@@ -135,8 +141,7 @@ Still **not** covered, and therefore still dependent on the Gradle/device gates:
   on a device.
 - Java *compilation*: `run.sh` does not invoke `javac` or provide the Android dependency classpath, so
   no Java class file is produced and the Java callers' own compilation is never checked. It does pass real Java sources
-  (`Utilities/Constants.java`, `Utilities/FileHelper.java`, `Preferences/CredentialsPreference.java`
-  — the full list is in the script)
+  (`Utilities/Constants.java`, `Utilities/FileHelper.java` — the full list is in the script)
   to `kotlinc` for resolution, which is why the Kotlin code is checked against the actual declarations
   rather than a copy — including the package-private `ALGORITHM_ASYMMETRIC`/`PBKDF2_*` constants,
   which Kotlin in the same package can read (and whose values the compiler inlines, so the executed
@@ -481,3 +486,30 @@ configuration change, the real screen-off broadcast and the activity lifecycle w
   missing here; the device test starts the panic responder for real and checks the scanner
   activity's shape.
 
+## Converted user interface follow-up
+
+- The twenty-first batch converted the last ten user interface classes: the six activities, the
+  manual entry dialog, the credential preference and the two card adapters. Only
+  `Utilities/Constants.java` and `Utilities/FileHelper.java` stay Java, for the documented
+  reasons (the package-private crypto parameters, and the file helper's Java-only API).
+- The Java sources are only **resolved** by `kotlinc`, never compiled, so the Java-only
+  `Utilities/Constants` has no class file at runtime here. A class whose members mention one of
+  its types therefore cannot be reflected either: enumerating the declared methods or fields of
+  `MainActivity`, `BackupActivity`, `SettingsActivity`, `IntroScreenActivity`, `EntryViewHolder` or
+  `EntriesCardAdapter` would need the missing class. The checks assert the class shape, the base
+  classes, the nested types and the members whose signatures avoid those enums; the remaining
+  members are pinned by `test_kotlin_converted_ui_conversion.py` and by
+  `KotlinConvertedUiInteropTest` on a device.
+- `Checks.kt` reflects the converted classes with `Class.forName(name, false, loader)`, which
+  links the class without running its initializer, and it skips a method whose signature cannot be
+  resolved instead of failing the whole run.
+- The entry card is the one converted user interface class that is **executed** here: the checks
+  inflate a scripted card layout, bind an entry and read the token, the label, the tags and the
+  counter back. The retained task fragment is executed as well: it starts a task, hands the
+  outcome over and cancels a running one.
+- Two platform methods that the Java classes had widened to public stay public in Kotlin
+  (`BackupActivity.onDestroy()` and `SettingsActivity.SettingsFragment.onCreate()`), and the
+  conversion is documented in the class comments and in the source guards.
+- The locale semantics of the Java code are kept: Java's bare `toUpperCase()`/`toLowerCase()` use
+  the default locale, so the converted calls pass `Locale.getDefault()` explicitly, while the
+  credential preference keeps its deliberate `Locale.ENGLISH`.

@@ -34,6 +34,9 @@ open class Resources {
     /** Empty by default: no XML array is read by this harness. */
     open fun getStringArray(id: Int): Array<String> = emptyArray()
 
+    /** Resolves to the id itself, so the checks can tell which colour was read. */
+    open fun getColor(id: Int): Int = id
+
     /** Inert density metrics; the settings checks supply their own. */
     open val displayMetrics: android.util.DisplayMetrics get() = android.util.DisplayMetrics()
 

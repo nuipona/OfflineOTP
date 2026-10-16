@@ -9,6 +9,10 @@ object R {
     }
     object layout {
         const val simple_list_item_multiple_choice = 17367056
+        const val simple_expandable_list_item_1 = 17367057
+        const val simple_spinner_item = 17367058
+        const val simple_spinner_dropdown_item = 17367059
+        const val simple_list_item_single_choice = 17367060
     }
     object string {
         /** The real public framework value of android.R.string.ok. */

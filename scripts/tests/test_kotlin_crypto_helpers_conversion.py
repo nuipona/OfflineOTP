@@ -34,8 +34,9 @@ class KotlinCryptoHelpersConversionTest(unittest.TestCase):
         # The resolution sources left are the ones the compiled sources still read.
         for resolved in ("Constants", "FileHelper"):
             self.assertIn(f"$ROOT/app/src/main/java/org/shadowice/flocke/andotp/Utilities/{resolved}.java", harness)
-        self.assertIn("$ROOT/app/src/main/java/org/shadowice/flocke/andotp/Preferences/CredentialsPreference.java",
-                      harness)
+        # The credential preference is Kotlin since the twenty-first batch: compiled, not resolved.
+        self.assertIn("$KOTLIN_APP/Preferences/CredentialsPreference.kt", harness)
+        self.assertNotIn("Preferences/CredentialsPreference.java", harness)
         checks = (SANDBOX / "Checks.kt").read_text()
         for executed in ("EncryptionHelper.generatePBKDF2Credentials(password, salt, 4096)",
                          "EncryptionHelper.generateSymmetricKeyFromPassword(",
@@ -218,14 +219,14 @@ class KotlinCryptoHelpersConversionTest(unittest.TestCase):
                      "KeyStoreHelper.loadAsymmetricKeyPair(context, Constants.KEYSTORE_ALIAS_PASSWORD)",
                      "KeyStoreHelper.loadEncryptionKeyFromKeyStore(context, true)"):
             self.assertIn(call, settings)
-        activity = (JAVA / "Activities/SettingsActivity.java").read_text()
+        activity = self.read("Activities/SettingsActivity.kt")
         self.assertIn("EncryptionHelper.EncryptionChangeCallback", activity)
         self.assertIn("KeyStoreHelper.createEncryptionKey(this)", activity)
-        self.assertIn("KeyStoreHelper.wipeKeys(getActivity())", activity)
+        self.assertIn("KeyStoreHelper.wipeKeys(getActivity()!!)", activity)
         panic = self.read("Activities/PanicResponderActivity.kt")
         self.assertIn("KeyStoreHelper.wipeKeys(this)", panic)
-        reset = (JAVA / "Activities/SettingsActivity.java").read_text()
-        self.assertIn("KeyStoreHelper.wipeKeys(getActivity())", reset)
+        reset = self.read("Activities/SettingsActivity.kt")
+        self.assertIn("KeyStoreHelper.wipeKeys(getActivity()!!)", reset)
         self.assertIn("KeyStoreHelper.loadEncryptionKeyFromKeyStore(context, false)",
                       (KOTLIN / "Tasks/EncryptedBackupWorker.kt").read_text())
         preference = self.read("Preferences/PasswordEncryptedPreference.kt")

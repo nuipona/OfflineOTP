@@ -102,13 +102,13 @@ class KotlinBackupComponentsConversionTest(unittest.TestCase):
         # preceded by a Kotlin null check.
         self.assertIn("override fun onRestore(data: BackupDataInput?, version: Int, state: ParcelFileDescriptor?) {", source)
 
-    def test_the_java_callers_and_the_manifest_still_use_the_converted_components(self):
-        # The panic responder and the settings screen cancel the queued work by its name. The panic
-        # responder is Kotlin since the nineteenth batch.
+    def test_the_callers_and_the_manifest_still_use_the_converted_components(self):
+        # The panic responder and the settings screen cancel the queued work by its name. Both are
+        # Kotlin since the nineteenth and the twenty-first batch.
         self.assertIn("EncryptedBackupBroadcastReceiver.UNIQUE_WORK_NAME",
                       (KOTLIN / "Activities/PanicResponderActivity.kt").read_text())
         self.assertIn("EncryptedBackupBroadcastReceiver.UNIQUE_WORK_NAME",
-                      (JAVA / "Activities/SettingsActivity.java").read_text())
+                      (KOTLIN / "Activities/SettingsActivity.kt").read_text())
         self.assertIn("EncryptedBackupBroadcastReceiver.UNIQUE_WORK_NAME",
                       (ANDROID_TEST / "Utilities/IpcAuthorizationSecurityTest.java").read_text())
         manifest = (ROOT / "app/src/main/AndroidManifest.xml").read_text()

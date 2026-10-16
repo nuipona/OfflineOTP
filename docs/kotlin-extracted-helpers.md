@@ -374,10 +374,51 @@ Twentieth batch (the about screens):
   `NullPointerException` of `getActivity()!!` where Java would have passed the null into
   `Settings`/`Toast` first.
 
-No entry-card list adapter/view holder, `CredentialsPreference` or large
-manual-entry dialog is converted, and none of the large concrete activities is; the about screens
-are (twentieth batch), and the task runner and its
-subclasses are, and so are the entry
+Twenty-first batch (the remaining user interface):
+
+- `Activities/MainActivity.kt`, `Activities/BackupActivity.kt`, `Activities/SettingsActivity.kt`,
+  `Activities/IntroScreenActivity.kt`, `Activities/AuthenticateActivity.kt` and
+  `Activities/BackgroundTaskActivity.kt` replace their Java implementations, together with
+  `Dialogs/ManualEntryDialog.kt`, `Preferences/CredentialsPreference.kt`,
+  `View/EntryViewHolder.kt` and `View/EntriesCardAdapter.kt`. After this batch only
+  `Utilities/Constants.java` and `Utilities/FileHelper.java` are still Java, for the documented
+  package-private reasons.
+- The class names, the package, the nesting and the Java-visible members are unchanged: the
+  credential preference is still inflated from `res/xml/preferences.xml` by its name, with its
+  `(Context, AttributeSet)` constructor and its public static `DEFAULT_VALUE` constant; the manual
+  entry dialog is still reached through its static `show` methods and its nested
+  `UpdateCallback`; the four intro slides keep their names (`EncryptionFragment`,
+  `AuthenticationFragment`, `AndroidSyncFragment`, `IntroFinishedFragment`); the retained
+  `BackgroundTaskActivity.TaskFragment` keeps its generic parameter and its members; and
+  `MainActivity.animatorDuration` stays a public static `long` field, so the entry card still
+  reads it by that name.
+- Deltas (documented, not silent): the static-only `ManualEntryDialog` becomes a Kotlin `object`
+  with `@JvmStatic` forwarders (the same delta the other static-only helpers use); the Java
+  `getEncryptionKey()`/`setEncryptionKey()` pair of the card adapter becomes the read/write
+  `encryptionKey` property; the package-private `onTaskResult` hook of the background task
+  activity is `protected` (Kotlin has no package-private visibility); and the two platform methods
+  that the Java classes had widened to public stay public (`BackupActivity.onDestroy()` and
+  `SettingsActivity.SettingsFragment.onCreate()`).
+- The locale semantics of the Java code are kept: Java's bare `toUpperCase()`/`toLowerCase()` use
+  the default locale, so the converted calls pass `Locale.getDefault()` explicitly, while the
+  credential preference keeps its deliberate `Locale.ENGLISH`.
+- The sandbox compiles all ten and **executes** the entry card (the token is bound and kept
+  unformatted in the view tag for the copy action, the label and the comma separated tags are
+  written, a counter based entry shows its counter instead of the progress bar) and the retained
+  task fragment (it starts a task, hands the outcome over and cancels a running one). The other
+  eight classes are shape-checked: the Java-only `Utilities/Constants` has no class file in the
+  sandbox (the Java sources are resolved, not compiled), so a class whose members mention one of
+  its types cannot be reflected there. Their members are pinned by
+  `test_kotlin_converted_ui_conversion.py` and by the new Java instrumentation test
+  (`KotlinConvertedUiInteropTest`), which covers the real platform side: the credential
+  preference's default, the manual entry dialog's static entry points, the settings fragment's
+  members, the intro wizard's slides, the retained task fragment's members and the card adapter's
+  key property.
+
+Every converted source is Kotlin: the entry-card list adapter and view holder,
+`CredentialsPreference`, the large manual-entry dialog and the large concrete activities are the
+twenty-first batch, after the about screens (twentieth batch), the task runner and its
+subclasses, the entry
 model, the vault repository, the document/backup, notification, QR-image and three small UI pieces
 above, plus the crypto and KeyStore helpers, the settings facade, the Android components, the two
 activity base classes and the two small standalone activities — the
@@ -1208,15 +1249,18 @@ two `String` constants and a nested class whose constructor Java never called.
 The drag & drop trio, `UIHelper`, `ConfirmedPasswordTransformationHelper` and `BackupTaskResult`
 are no longer in this list: they are converted (see the fourth batch above). The task subclasses
 and their runner are converted too (fifth and sixth batches), and the receivers, the worker and the
-legacy backup agent with them (seventeenth batch); the activities, the fragments, the credential
-preference and the large manual-entry dialog remain Java.
+legacy backup agent with them (seventeenth batch), the activity base classes (eighteenth), the two
+small standalone activities (nineteenth), the about screens (twentieth) and the remaining user
+interface — the six large activities, the credential preference, the manual entry dialog and the
+two card adapters (twenty-first).
 
 The thumbnail pair has also left this list (eighth batch). The small visibility widenings are
 explicitly recorded above; these leaf renderers still need Android acceptance despite their sandbox
 compile. The activity base classes are converted too (eighteenth batch) and so are the two small
-standalone activities (nineteenth batch) and the about screens (twentieth batch — the about
-activity and the fragments); the large concrete activities, the credential preference and the
-large manual-entry dialog remain Java. Latest local check after the
-twentieth batch: 126 Python guards and 90 sandbox checks passed. The both-flavor Gradle
+standalone activities (nineteenth batch), the about screens (twentieth batch — the about
+activity and the fragments) and the remaining user interface (twenty-first batch — the six large
+activities, the credential preference, the manual entry dialog and the two card adapters). Latest
+local check after the
+twenty-first batch: 143 Python guards and 93 sandbox checks passed. The both-flavor Gradle
 host/lint/instrumentation-APK build was attempted but stopped at the Gradle 8.13 distribution download
 (`SSLHandshakeException` from `services.gradle.org`); no Android acceptance result is claimed.

@@ -50,9 +50,13 @@ class KotlinSandboxHarnessTest(unittest.TestCase):
         # the real declarations (including the package-private crypto constant) instead of a copy.
         self.assertIn("$ROOT/app/src/main/java/org/shadowice/flocke/andotp/Utilities/Constants.java", script)
         self.assertIn('"${JAVA_SOURCES[@]}"', script)
-        # The task subclasses resolve the real Java file/credential helpers, not stubs of them.
-        for resolved in ("Utilities/FileHelper.java", "Preferences/CredentialsPreference.java"):
-            self.assertIn(f"$ROOT/app/src/main/java/org/shadowice/flocke/andotp/{resolved}", script)
+        # The task subclasses resolve the real Java file helper, not a stub of it.
+        self.assertIn("$ROOT/app/src/main/java/org/shadowice/flocke/andotp/Utilities/FileHelper.java", script)
+        # The credential preference is Kotlin since the twenty-first batch: compiled, never resolved.
+        self.assertIn("$KOTLIN_APP/Preferences/CredentialsPreference.kt", script)
+        self.assertNotIn("Preferences/CredentialsPreference.java", script)
+        self.assertFalse(
+            (ROOT / "app/src/main/java/org/shadowice/flocke/andotp/Preferences/CredentialsPreference.java").exists())
         # The settings facade is Kotlin since the sixteenth batch: compiled, never resolved.
         self.assertIn("$KOTLIN_APP/Utilities/Settings.kt", script)
         self.assertNotIn("Utilities/Settings.java", script)

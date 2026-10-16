@@ -24,15 +24,20 @@ class ContractMigrationSourceTest(unittest.TestCase):
         self.assertIn('"TaskOutcome.Value(redacted)"', task)
 
     def test_production_task_consumers_do_not_use_legacy_fallback_adapter(self):
-        for name in ("Activities/BackgroundTaskActivity.java", "Activities/IntroScreenActivity.java",
-                     "Preferences/CredentialsPreference.java"):
-            source = (JAVA / name).read_text()
+        # The three consumers are Kotlin since the twenty-first batch, so the guard reads the
+        # moved sources.
+        for name in ("Activities/BackgroundTaskActivity.kt", "Activities/IntroScreenActivity.kt",
+                     "Preferences/CredentialsPreference.kt"):
+            source = (KOTLIN / name).read_text()
+            self.assertNotIn("setCallback(", source, name)
         persistence = (KOTLIN / "Utilities/EntryPersistence.kt").read_text()
         self.assertIn("setOutcomeCallback", persistence)
         self.assertNotIn("task.setCallback(", persistence)
         self.assertNotIn("taskFragment.setCallback(", persistence)
-        activity = (JAVA / "Activities/BackgroundTaskActivity.java").read_text()
-        self.assertIn("source != activeTask", activity)
+        activity = (KOTLIN / "Activities/BackgroundTaskActivity.kt").read_text()
+        # The Java `!=` on the task object is reference identity, so the Kotlin conversion keeps
+        # the identity comparison instead of switching to `equals()`.
+        self.assertIn("source !== activeTask", activity)
         self.assertIn("source.disposeOutcome(outcome)", activity)
 
     def test_production_vault_callers_do_not_project_read_failures_to_empty_lists(self):

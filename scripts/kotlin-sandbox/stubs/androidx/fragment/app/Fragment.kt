@@ -27,6 +27,23 @@ open class Fragment {
     /** Resolves through the host, so the checks observe which string a call site requested. */
     fun getString(resId: Int): String = host?.getString(resId) ?: "res:$resId"
 
+    /** The platform's formatted string lookup. */
+    fun getString(resId: Int, vararg formatArgs: Any?): String =
+        host?.getString(resId) ?: "res:$resId"
+
+    open fun onDestroyView() {}
+
+    /** The view of the fragment, if it created one. */
+    var currentView: View? = null
+
+    open fun getView(): View? = currentView
+
+    /** The context the fragment is attached to, or null while it is detached. */
+    fun getContext(): android.content.Context? = host
+
+    /** The resources of the attached host. */
+    fun getResources(): android.content.res.Resources = host?.resources ?: android.content.res.Resources()
+
     /** Forwards to the host; the checks record or refuse the start there. */
     open fun startActivity(intent: Intent) {
         host!!.startActivity(intent)

@@ -14,6 +14,14 @@ open class Handler(private val looper: Looper?) {
     fun postDelayed(runnable: Runnable, delayMillis: Long): Boolean = true
     fun removeCallbacks(runnable: Runnable) {}
 
+    /** How often all pending callbacks were removed. */
+    var removals = 0
+        private set
+
+    fun removeCallbacksAndMessages(token: Any?) {
+        removals++
+    }
+
     open fun post(runnable: Runnable): Boolean {
         posted.offer(runnable)
         return true
@@ -113,3 +121,6 @@ class ParcelFileDescriptor private constructor(private val stream: java.io.FileO
         }
     }
 }
+
+/** The marker interface the platform's parcelable extras use. */
+interface Parcelable

@@ -42,22 +42,24 @@ class KotlinActivityBasesConversionTest(unittest.TestCase):
         self.assertIn("config.setLocale(locale)", locale)
         self.assertIn("resources.updateConfiguration(config, resources.displayMetrics)", locale)
 
-    def test_the_java_activities_keep_reading_the_settings_field(self):
-        # The field name did not change, so the Java call sites are untouched.
-        for name in ("Activities/MainActivity.java", "Activities/AuthenticateActivity.java",
-                     "Activities/BackupActivity.java", "Activities/SettingsActivity.java",
-                     "Activities/IntroScreenActivity.java"):
-            source = (JAVA / name).read_text()
-            self.assertIn("settings.", source, name)
+    def test_the_converted_activities_keep_reading_the_settings_field(self):
+        # The field name did not change, so the call sites still read the same field. The
+        # activities are Kotlin since the twenty-first batch, so they read the nullable field
+        # through `settings!!`/`settings?.` instead of the Java null-forgiving field access.
+        for name in ("Activities/MainActivity.kt", "Activities/AuthenticateActivity.kt",
+                     "Activities/BackupActivity.kt", "Activities/SettingsActivity.kt",
+                     "Activities/IntroScreenActivity.kt"):
+            source = (KOTLIN / name).read_text()
+            self.assertRegex(source, r"settings(!!|\?)?\.", name)
         # The overridden hooks stay protected and overridable.
-        for name, hook in (("Activities/MainActivity.java", "protected void onVaultLocked()"),
-                           ("Activities/BackupActivity.java", "protected boolean requiresVaultSession()"),
-                           ("Activities/SettingsActivity.java", "protected boolean requiresVaultSession()"),
-                           ("Activities/AuthenticateActivity.java", "protected void onVaultLocked()"),
-                           ("Activities/BackupActivity.java", "protected boolean shouldDestroyOnScreenOff()"),
-                           ("Activities/MainActivity.java", "protected boolean shouldDestroyOnScreenOff()"),
-                           ("Activities/AuthenticateActivity.java", "protected boolean shouldDestroyOnScreenOff()")):
-            self.assertIn(hook, (JAVA / name).read_text(), f"{name}: {hook}")
+        for name, hook in (("Activities/MainActivity.kt", "override fun onVaultLocked()"),
+                           ("Activities/BackupActivity.kt", "override fun requiresVaultSession()"),
+                           ("Activities/SettingsActivity.kt", "override fun requiresVaultSession()"),
+                           ("Activities/AuthenticateActivity.kt", "override fun onVaultLocked()"),
+                           ("Activities/BackupActivity.kt", "override fun shouldDestroyOnScreenOff()"),
+                           ("Activities/MainActivity.kt", "override fun shouldDestroyOnScreenOff()"),
+                           ("Activities/AuthenticateActivity.kt", "override fun shouldDestroyOnScreenOff()")):
+            self.assertIn(hook, (KOTLIN / name).read_text(), f"{name}: {hook}")
 
     def test_the_base_activity_keeps_the_screen_off_and_the_lock_wiring(self):
         source = (KOTLIN / "Activities/BaseActivity.kt").read_text()
@@ -77,8 +79,10 @@ class KotlinActivityBasesConversionTest(unittest.TestCase):
         # The callback stays a single-method interface, so the Java call sites keep their lambda.
         self.assertIn("fun interface BroadcastReceivedCallback {", source)
         self.assertIn("fun onReceivedScreenOff()", source)
-        self.assertIn("setBroadcastCallback(() -> { if (settings.getRelockOnScreenOff()) onVaultLocked(); });",
-                      (JAVA / "Activities/MainActivity.java").read_text())
+        self.assertIn("setBroadcastCallback {",
+                      (KOTLIN / "Activities/MainActivity.kt").read_text())
+        self.assertIn("if (settings!!.getRelockOnScreenOff()) onVaultLocked()",
+                      (KOTLIN / "Activities/MainActivity.kt").read_text())
 
     def test_the_base_activity_keeps_the_obscured_touch_rejection(self):
         source = (KOTLIN / "Activities/BaseActivity.kt").read_text()

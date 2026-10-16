@@ -6,7 +6,6 @@ import org.shadowice.flocke.andotp.Utilities.Constants
 
 import java.util.ArrayList
 import java.util.HashMap
-import java.util.List
 
 /**
  * Display-only projection over a borrowed EntryList. No Context, views, session authority or I/O.
@@ -88,7 +87,7 @@ class EntryListPresentation(private val source: EntryList) {
     }
 
     /** Computes a borrowed projection; callers still enforce session/generation at publication. */
-    fun search(constraint: CharSequence, includes: List<Constants.SearchIncludes>): SearchResult {
+    fun search(constraint: CharSequence?, includes: List<Constants.SearchIncludes>): SearchResult {
         val version: Long
         val mode: Constants.SortMode
         synchronized(this) {

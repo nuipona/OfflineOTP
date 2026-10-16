@@ -109,14 +109,14 @@ class KotlinAboutScreensConversionTest(unittest.TestCase):
         # The public helpers keep their names, their fallback and their overridability.
         self.assertIn("open fun openURI(uri: String)", source)
         self.assertIn("val intent = Intent(Intent.ACTION_VIEW)", source)
-        self.assertIn("intent.setData(Uri.parse(uri))", source)
+        self.assertIn("intent.data = Uri.parse(uri)", source)
         self.assertIn("} catch (e: ActivityNotFoundException) {\n            copyToClipboard(uri)", source)
         self.assertIn("open fun copyToClipboard(uri: String)", source)
         self.assertIn("ClipData.newPlainText(\"andOTP\", uri)", source)
         self.assertIn("getString(R.string.about_toast_copied_to_clipboard)", source)
         # The version binding and the theme tint of the image rows.
         self.assertIn("imgView.getDrawable()!!.setColorFilter(filter)", source)
-        self.assertIn("version.text = versionName", source)
+        self.assertIn("version.setText(versionName)", source)
         self.assertIn("getPackageInfo(getActivity()!!.getPackageName(), 0)", source)
         self.assertIn("catch (e: PackageManager.NameNotFoundException)", source)
 
@@ -178,9 +178,10 @@ class KotlinAboutScreensConversionTest(unittest.TestCase):
         self.assertIn("FragmentPagerAdapter(fm, FragmentPagerAdapter.BEHAVIOR_RESUME_ONLY_CURRENT_FRAGMENT)",
                       activity)
         self.assertIn("private fun loadLibs(): Libs", activity)
-        # The Java call site in MainActivity keeps compiling against the same class name.
-        main = (JAVA / "Activities/MainActivity.java").read_text()
-        self.assertIn("AboutActivity.class", main)
+        # The call site in MainActivity keeps compiling against the same class name. MainActivity
+        # is Kotlin since the twenty-first batch, so the call site moved with it.
+        main = (KOTLIN / "Activities/MainActivity.kt").read_text()
+        self.assertIn("AboutActivity::class.java", main)
 
     def test_the_device_gate_keeps_the_java_interop_test(self):
         interop = ANDROID_TEST / "Fragments/KotlinAboutScreensInteropTest.java"
