@@ -2,18 +2,21 @@
 package android.content.pm
 
 /**
- * Constant-only stand-in for the permission-check results, plus the package metadata lookup the
- * about screen performs. [packageInfo] is settable so the checks can serve a version name and a
- * [NameNotFoundException] instead of a real package query.
+ * Constant-only stand-in for permission-check results and package metadata. Only members used by
+ * the compiled app/tests are declared; this is not PackageManager behavior.
  */
 object PackageManager {
     const val PERMISSION_GRANTED = 0
     const val PERMISSION_DENIED = -1
+    const val SIGNATURE_NO_MATCH = -3
 
-    /** The metadata [getPackageInfo] serves; the platform resolves it from the installed packages. */
+    fun getApplicationInfo(packageName: String, flags: Int): ApplicationInfo = ApplicationInfo()
+    fun checkSignatures(firstPackage: String, secondPackage: String): Int = SIGNATURE_NO_MATCH
+    fun getPermissionInfo(permissionName: String, flags: Int): PermissionInfo = PermissionInfo()
+    fun checkPermission(permissionName: String, packageName: String): Int = PERMISSION_DENIED
+
+    /** The metadata [getPackageInfo] serves; the platform resolves it from installed packages. */
     var packageInfo: PackageInfo = PackageInfo()
-
-    /** A package name that reports [NameNotFoundException] instead of [packageInfo]. */
     var missingPackage: String? = null
 
     fun getPackageInfo(packageName: String, flags: Int): PackageInfo {
@@ -24,8 +27,20 @@ object PackageManager {
     class NameNotFoundException(name: String) : Exception(name)
 }
 
+class ApplicationInfo {
+    @JvmField var uid: Int = 0
+}
+
+class PermissionInfo {
+    @JvmField var protectionLevel: Int = PROTECTION_SIGNATURE
+
+    companion object {
+        const val PROTECTION_SIGNATURE = 2
+        const val PROTECTION_MASK_BASE = 0xF
+    }
+}
+
 /** The version metadata of one package; the platform also fills the requested flags' fields. */
 class PackageInfo {
-    @JvmField
-    var versionName: String? = null
+    @JvmField var versionName: String? = null
 }

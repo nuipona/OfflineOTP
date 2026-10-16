@@ -20,6 +20,7 @@ ROOT = Path(__file__).resolve().parents[2]
 KOTLIN = ROOT / "app/src/main/kotlin/org/shadowice/flocke/andotp"
 JAVA = ROOT / "app/src/main/java/org/shadowice/flocke/andotp"
 ANDROID_TEST = ROOT / "app/src/androidTest/java/org/shadowice/flocke/andotp"
+ANDROID_KOTLIN_TEST = ROOT / "app/src/androidTest/kotlin/org/shadowice/flocke/andotp"
 SANDBOX = ROOT / "scripts/kotlin-sandbox"
 RES = ROOT / "app/src/main/res"
 
@@ -284,15 +285,17 @@ class KotlinSettingsConversionTest(unittest.TestCase):
         self.assertIn("Settings settings = new Settings(context()) {", interop)
         self.assertIn("public boolean getTagToggle(String tag)", interop)
         self.assertIn("new Settings(context).getThumbnailSize()", interop)
-        for suite in ("Tasks/CredentialLifecycleSecurityTest.java", "Utilities/IpcAuthorizationSecurityTest.java",
-                      "ApplicationTest.java"):
-            text = (ANDROID_TEST / suite).read_text()
+        for suite in ("Tasks/CredentialLifecycleSecurityTest.kt", "Utilities/IpcAuthorizationSecurityTest.kt",
+                      "ApplicationTest.kt"):
+            text = (ANDROID_KOTLIN_TEST / suite).read_text()
+            normalized = re.sub(r"\s+", " ", text)
             self.assertIn("Settings", text, f"{suite} lost its Settings call site")
-            self.assertIn("commitVaultSettings(id, Constants.EncryptionType.", text,
+            self.assertIn("commitVaultSettings( id, Constants.EncryptionType.", normalized,
                           f"{suite} no longer stages the transaction through the facade")
-        credential = (ANDROID_TEST / "Tasks" / "CredentialLifecycleSecurityTest.java").read_text()
-        self.assertIn("settings.commitVaultSettings(id, Constants.EncryptionType.PASSWORD, "
-                      "Constants.AuthMethod.PASSWORD, null, true)", credential)
+        credential = (ANDROID_KOTLIN_TEST / "Tasks" / "CredentialLifecycleSecurityTest.kt").read_text()
+        normalized_credential = re.sub(r"\s+", " ", credential)
+        self.assertIn("settings.commitVaultSettings( id, Constants.EncryptionType.PASSWORD, "
+                      "Constants.AuthMethod.PASSWORD, null, true )", normalized_credential)
         self.assertIn("settings.getAuthCredentials()", credential)
         # The converted preference now calls the accessors as methods, because a Kotlin class does not
         # synthesize Java-bean properties for them.

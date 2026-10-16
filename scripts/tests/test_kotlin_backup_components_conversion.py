@@ -14,6 +14,7 @@ KOTLIN = ROOT / "app/src/main/kotlin/org/shadowice/flocke/andotp"
 JAVA = ROOT / "app/src/main/java/org/shadowice/flocke/andotp"
 SANDBOX = ROOT / "scripts/kotlin-sandbox"
 ANDROID_TEST = ROOT / "app/src/androidTest/java/org/shadowice/flocke/andotp"
+ANDROID_KOTLIN_TEST = ROOT / "app/src/androidTest/kotlin/org/shadowice/flocke/andotp"
 
 
 class KotlinBackupComponentsConversionTest(unittest.TestCase):
@@ -110,7 +111,7 @@ class KotlinBackupComponentsConversionTest(unittest.TestCase):
         self.assertIn("EncryptedBackupBroadcastReceiver.UNIQUE_WORK_NAME",
                       (KOTLIN / "Activities/SettingsActivity.kt").read_text())
         self.assertIn("EncryptedBackupBroadcastReceiver.UNIQUE_WORK_NAME",
-                      (ANDROID_TEST / "Utilities/IpcAuthorizationSecurityTest.java").read_text())
+                      (ANDROID_KOTLIN_TEST / "Utilities/IpcAuthorizationSecurityTest.kt").read_text())
         manifest = (ROOT / "app/src/main/AndroidManifest.xml").read_text()
         self.assertIn('android:name=".Receivers.EncryptedBackupBroadcastReceiver"', manifest)
         self.assertIn('android:permission="${applicationId}.permission.CONTROL_VAULT"', manifest)

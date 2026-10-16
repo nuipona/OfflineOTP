@@ -57,6 +57,7 @@ open class Context {
     open fun getLayoutInflater(): android.view.LayoutInflater = android.view.LayoutInflater.from(this)
     /** The task classes keep only the application context; the checks substitute their own. */
     open fun getApplicationContext(): Context = this
+    fun getAssets(): android.content.res.AssetManager = android.content.res.AssetManager()
     fun getFilesDir(): java.io.File = java.io.File(".")
     /** `open` so the storage checks can substitute a recording resolver for the inert default. */
     open fun getContentResolver(): ContentResolver = ContentResolver()
@@ -64,9 +65,11 @@ open class Context {
     open fun getCacheDir(): java.io.File = java.io.File(".")
     /** `open` so the about checks can report a package that is not installed. */
     open fun getPackageManager(): android.content.pm.PackageManager = android.content.pm.PackageManager
+    open fun getApplicationInfo(): android.content.pm.ApplicationInfo = android.content.pm.ApplicationInfo()
     open fun getPackageName(): String = "org.shadowice.flocke.andotp"
     /** `open` so the about checks can record or refuse the activity start. */
     open fun startActivity(intent: Intent) {}
+    open fun sendBroadcast(intent: Intent) {}
 
     companion object {
         const val CLIPBOARD_SERVICE = "clipboard"
@@ -165,6 +168,9 @@ open class Intent(action: String? = null) {
 
     /** The data URI as a string, the way the platform hands it to the URI parser. */
     open fun getDataString(): String? = data?.toString()
+
+    /** Records the explicit package/class target; the platform resolves the component. */
+    open fun setClassName(packageName: String, className: String): Intent = this
 
     /** The flags the intent carries. */
     var intentFlags: Int = 0

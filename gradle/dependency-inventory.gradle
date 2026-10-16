@@ -38,17 +38,26 @@ tasks.register('writeDependencyInventory') {
                 record(name, app.configurations.getByName(name))
             }
         }
-        // Kotlin's compiler/build-tools/plugin artifacts are build inputs too, not
-        // just the stdlib on variant classpaths. Include all resolvable such configs.
-        def kotlinTooling = app.configurations.findAll { configuration ->
-            configuration.canBeResolved && (configuration.name.startsWith('kotlinCompiler')
-                    || configuration.name.startsWith('kotlinBuildTools'))
-        }.sort { it.name }
-        if (!kotlinTooling.any { it.name == 'kotlinCompilerClasspath' }) {
-            throw new GradleException('Missing Kotlin compiler configuration; review inventory coverage')
+        def securityClient = project(':security-test-client')
+        ['debugCompileClasspath', 'debugRuntimeClasspath'].each { name ->
+            // The independently signed caller is a build input too, even though it is never shipped.
+            record("security-test-client:${name}", securityClient.configurations.getByName(name))
         }
-        kotlinTooling.each { configuration ->
-            record("kotlin-tooling:${configuration.name}", configuration)
+
+        // Kotlin's compiler/build-tools/plugin artifacts are build inputs too, not
+        // just the stdlib on variant classpaths. Include all resolvable such configs
+        // for both Kotlin-enabled Android modules.
+        [app, securityClient].each { kotlinProject ->
+            def kotlinTooling = kotlinProject.configurations.findAll { configuration ->
+                configuration.canBeResolved && (configuration.name.startsWith('kotlinCompiler')
+                        || configuration.name.startsWith('kotlinBuildTools'))
+            }.sort { it.name }
+            if (!kotlinTooling.any { it.name == 'kotlinCompilerClasspath' }) {
+                throw new GradleException("Missing Kotlin compiler configuration for ${kotlinProject.name}; review inventory coverage")
+            }
+            kotlinTooling.each { configuration ->
+                record("kotlin-tooling:${kotlinProject.name}:${configuration.name}", configuration)
+            }
         }
         def destination = report.get().asFile
         destination.parentFile.mkdirs()

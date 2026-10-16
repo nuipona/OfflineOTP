@@ -448,14 +448,32 @@ Twenty-second batch (the last two Java sources of the app):
 - `compile-only.sh` could not compile the stubs: its extraction took only the quoted `$SANDBOX` fragments of the
   stub globs, not the globs themselves. It now parses each array entry as a shell word, and the closing `)` of
   `STUBS` in `run.sh` sits on its own line. `compile-only.sh` compiles the app sources and stubs cleanly again.
-- **Still Java, deliberately or by scope**: 34 Java files remain in the repository, none of them production code.
-  The 15 `Kotlin*InteropTest` classes stay Java on purpose, because they exercise the Java call sites of the
-  converted classes, which is what they are for. The 7 unit tests under `app/src/test`, the 11 other
-  instrumentation tests under `app/src/androidTest`, and the independently signed `security-test-client` app are
-  not converted in this batch. They can be neither compiled nor run in this environment, so converting them is a
-  separate change to verify on device and in the Gradle unit-test task.
-- Not executed here: Gradle, lint, both flavors, the instrumentation suite and the reproducible-build comparison.
-  The sandbox run is non-authoritative, and the Java callers of `Constants`/`FileHelper` are not compiled by it.
+- At the end of the twenty-second batch, 34 Java files remained in the repository, none production sources.
+  The 15 `Kotlin*InteropTest` classes were intentionally retained in Java because they compile and call the
+  converted APIs from Java. The 7 host tests, 11 non-interop instrumentation tests and independently signed
+  security-test-client were deferred to a separate test-source conversion.
+- Not executed in that batch: Gradle, lint, both flavors, instrumentation or the reproducible-build comparison.
+  The sandbox run was non-authoritative and did not compile Java callers of `Constants`/`FileHelper`.
+
+Twenty-third batch (Kotlin test sources and independently signed caller):
+
+- Moved the 7 host tests from `app/src/test/java` to `app/src/test/kotlin` and converted the 11 ordinary
+  instrumentation/security suites from `app/src/androidTest/java` to `app/src/androidTest/kotlin`. Test
+  assertions and fixtures are retained; Java-only package-protected direct task calls now use tiny test
+  subclasses that expose the same protected hook to Kotlin.
+- Converted the independently signed `security-test-client`'s `AttackActivity` to Kotlin. Its separate
+  application ID, generated independent signing key, UID, target-only check and attempted IPC are unchanged.
+  The module now uses the already pinned Kotlin Android plugin/stdlib and JVM 1.8 target; dependency inventory
+  includes its runtime/compile classpaths and Kotlin tooling configurations.
+- `EntryPersistence.save` now accepts a nullable entry list and returns `INVALID_INPUT` before backup scheduling
+  when it is null. This preserves the intended fail-closed save test at the Kotlin boundary, rather than allowing
+  Kotlin's generated parameter check to throw before the repository can return a typed rejection.
+- The 15 `Kotlin*InteropTest.java` suites remain Java by design: these are the intentional Java caller/ABI
+  checks for the converted Android classes. No ordinary app production source or independent test-client source
+  remains Java.
+- The host and Android Gradle tasks, both flavors, lint, APKs and API 28/36 device runs are still required;
+  none is claimed locally because this environment has no Android SDK/JDK and cannot fetch Gradle from its
+  configured distribution host.
 
 Every converted source is Kotlin: the entry-card list adapter and view holder,
 `CredentialsPreference`, the large manual-entry dialog and the large concrete activities are the
@@ -465,8 +483,10 @@ model, the vault repository, the document/backup, notification, QR-image and thr
 above, plus the crypto and KeyStore helpers, the settings facade, the Android components, the two
 activity base classes and the two small standalone activities — the
 two Java files that remained under `Utilities/` (`Constants.java` and `FileHelper.java`) were converted in the
-twenty-second batch, below, so no main-source Java is left. No coroutine, Compose, new
-dependency, SDK/bytecode target, storage format or crypto change is included.
+twenty-second batch, below, so no app main-source Java is left. The twenty-third batch then moves the
+ordinary host/device tests and the isolated security caller to Kotlin, leaving only the 15 deliberate Java
+interop suites. No coroutine, Compose, production-app dependency, SDK/bytecode target, storage format or crypto
+change is included; the test client now uses the already pinned Kotlin toolchain.
 
 **Source conversion is implemented; Gradle and device acceptance is still pending.** What *has* been
 executed here is a partial sandbox compile/run check (`scripts/kotlin-sandbox/`), described under
@@ -970,11 +990,13 @@ that matter:
 
 ## Tests and acceptance
 
-Existing Java/Kotlin characterization tests remain in place and unchanged: the RFC vector tests in
-`ApplicationTest`, `BoundedInputReaderTest`, `EncryptedBackupHeaderTest`, `InputPolicyTest`,
-`ScreenTimerControllerTest`, `EntryActionTargetTest`, `VaultSessionTest`, `TaskContractsTest`,
-`SessionContractsTest`, `OtpUriParserTest`, the Kotlin interop tests and the security suites; the backup/restore result now also has a host test of its own (`BackupTaskResultTest`). New
-reflection/source guards were added where a conversion could silently change a Java-visible shape:
+The characterization assertions remain in place after the twenty-third test-source batch: the 7 host tests
+(`BoundedInputReaderTest`, `EncryptedBackupHeaderTest`, `InputPolicyTest`, `ScreenTimerControllerTest`,
+`VaultSessionTest`, `EntryActionTargetTest`, `EntryListPresentationTest`) now live in Kotlin beside
+`TaskContractsTest`, `SessionContractsTest`, `OtpUriParserTest` and `BackupTaskResultTest`. The 11 ordinary
+Android suites also moved to Kotlin. The 15 `Kotlin*InteropTest.java` suites remain Java intentionally, so
+converted production APIs continue to be compiled and called from Java. New reflection/source guards were
+added where a conversion could silently change a Java-visible shape:
 `scripts/tests/test_ui_decomposition_policy.py` now requires the converted stems, the
 `@JvmStatic`/`@JvmField`/`const`/`@Throws`/`@Synchronized` shapes and the editor-action short-circuit,
 and the existing architecture guard reads the moved `HandlerTimerScheduler.kt`. With the task batch
@@ -988,8 +1010,8 @@ test verifies the `R` stand-in still matches what `run.sh` compiles. With the en
 document field names and their order, the closed error set, the one-use/redacted value, and the
 semantics a mechanical conversion could drop (the HOTP/TOTP branch in `ownedSecret`, the value-based
 `hashCode`, the `MISSING_SECRET` check, `InputPolicy.tokenParameters`, thumbnail resolution,
-`updateOTP`'s `Boolean`, the mOTP PIN placeholder). A new instrumentation test,
-`app/src/androidTest/.../Database/EntryJsonTest.java`, characterizes the boundary on a device:
+`updateOTP`'s `Boolean`, the mOTP PIN placeholder). The instrumentation test,
+`app/src/androidTest/kotlin/.../Database/EntryJsonTest.kt`, characterizes the boundary on a device:
 stored-format equality for a round-tripped document, the malformed-field matrix, the seed ownership
 rules, the `Entry` adapter's round trip and failure messages, the URI parameter set, the token
 calculators and the manual-entry secret validator. With the vault-repository batch the converted-stem
@@ -999,10 +1021,9 @@ shape with its fourteen `@JvmStatic` members, the lock/constant fields, both `@J
 fields, the nullable write-path entry list, the read precedence and catch order, the plaintext wipe,
 the poison flag and recovery ordering, the session-locking wipe and the three entry-destroy paths;
 the contract-migration guard now reads the Kotlin repository for the staged-commit, poison, UUID
-prefix and write-bound invariants. The existing instrumentation suites that drive the repository
-(`VaultFailureSecurityTest`, `VaultRestoreOperationTest`, `CredentialLifecycleSecurityTest`,
-`IpcAuthorizationSecurityTest`, `ApplicationTest`) are unchanged and still need a device run. With
-the document/backup batch the stem list gains `Utilities/StorageAccessHelper` and
+prefix and write-bound invariants. The repository/security instrumentation suites (`VaultFailureSecurityTest`, `VaultRestoreOperationTest`,
+`CredentialLifecycleSecurityTest`, `IpcAuthorizationSecurityTest`, `ApplicationTest`) retain their assertions
+in Kotlin and still need a device run. With the document/backup batch the stem list gains `Utilities/StorageAccessHelper` and
 `Utilities/BackupHelper`, and `scripts/tests/test_kotlin_document_io_conversion.py` pins their
 static surfaces, nullability, the refusal order before the provider, the four permission checks
 around the chunked write, the cache-confinement expression, the bound-before-strip display-name
@@ -1297,7 +1318,9 @@ explicitly recorded above; these leaf renderers still need Android acceptance de
 compile. The activity base classes are converted too (eighteenth batch) and so are the two small
 standalone activities (nineteenth batch), the about screens (twentieth batch — the about
 activity and the fragments) and the remaining user interface (twenty-first batch — the six large
-activities, the credential preference, the manual entry dialog and the two card adapters). Latest local check after the twenty-second batch: 152 Python guards (143 before, plus the nine new
-source guards) and 93 sandbox checks passed, and `compile-only.sh` compiles. The both-flavor Gradle
-host/lint/instrumentation-APK build was attempted but stopped at the Gradle 8.13 distribution download
+activities, the credential preference, the manual entry dialog and the two card adapters). Latest local checks
+include 158 Python source tests and 93 sandbox checks. The 7 migrated host tests and 11 migrated Android tests
+also passed a non-authoritative Kotlin 2.4.21 compile-only smoke check against the sandbox's Android stubs and
+local JUnit stand-ins; this is not the project's Kotlin 2.3.20/Gradle compilation or a test run. The both-flavor
+Gradle host/lint/instrumentation-APK build remains blocked at the Gradle 8.13 distribution download
 (`SSLHandshakeException` from `services.gradle.org`); no Android acceptance result is claimed.

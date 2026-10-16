@@ -103,6 +103,12 @@ class ParcelFileDescriptor private constructor(private val stream: java.io.FileO
         }
     }
 
+    /** Compilation-only input counterpart; shell output is not simulated by the sandbox. */
+    class AutoCloseInputStream(private val pfd: ParcelFileDescriptor) : java.io.InputStream() {
+        override fun read(): Int = -1
+        override fun close() = pfd.close()
+    }
+
     companion object {
         const val MODE_WRITE_ONLY = 0x20000000
         const val MODE_CREATE = 0x08000000

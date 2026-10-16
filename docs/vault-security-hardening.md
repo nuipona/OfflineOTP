@@ -64,7 +64,7 @@ Automatic exports create new UUID-named documents, even if the old date/time nam
 
 ## Regression coverage and remaining verification
 
-The Python suite checks the signature-bound manifest policy, backup-disable policy, source exclusion rules, build-input provenance, fixtures and independent-build comparison logic. Java host tests cover input/header limits and process-session handoffs. Android tests additionally cover:
+The Python suite checks the signature-bound manifest policy, backup-disable policy, source exclusion rules, build-input provenance, fixtures and independent-build comparison logic. Kotlin host tests cover input/header limits and process-session handoffs; ordinary Android security tests are Kotlin too. The 15 Java `Kotlin*InteropTest` suites remain to verify Java-callable APIs. Android tests additionally cover:
 
 - A **different UID and certificate**, verified before an independent caller attempts panic and backup IPC; denial, unchanged vault/settings and absence of queued backup work are asserted even with backup/panic configured.
 - Wrong-key save/migration rejection, missing-versus-empty handling, missing-key non-regeneration, all-or-nothing JSON, journal recovery and failed metadata commits.
@@ -73,6 +73,6 @@ The Python suite checks the signature-bound manifest policy, backup-disable poli
 
 The caller is the test-only `security-test-client` module. It generates an independent local test signing key under its excluded build directory and is installed before connected tests. **Do not distribute it or run destructive tests on real account installations.** See [build/test instructions](build-and-security-tests.md).
 
-Local validation cannot compile/run Java or Android in the current sandbox: no complete pinned JDK/SDK/dependency resolution is available. Syntax parsing is not type/API validation. Both-flavor builds, lint, Java unit tests, packaged manifest/resource inspection, API 28/36 emulator runs, and actual reproducibility comparisons still need a suitable environment/CI. OEM restore behavior, provider failure injection and UI/process-death/rotation flows need further device testing.
+Local validation still cannot run the Gradle/JUnit/Android gates in this sandbox: no complete pinned JDK/SDK or dependency resolution is available. The Kotlin sandbox and a compile-only smoke check with hand-written Android/JUnit stand-ins are not validation against the Gradle plugin, real Android APIs or a device; the Java interoperability suites have not been compiled here. Both-flavor builds, lint, JVM unit tests, packaged manifest/resource inspection, API 28/36 emulator runs, and actual reproducibility comparisons still need a suitable environment/CI. OEM restore behavior, provider failure injection and UI/process-death/rotation flows need further device testing.
 
 This work does not defend against a rooted device, compromised signing key, malicious user-selected OpenPGP/storage provider, privileged accessibility tooling, clipboard/token sharing chosen by the user, or arbitrary same-signer code. The production app must continue to have no `INTERNET` permission; external providers can have their own network access. Reviewed dependency locks/checksums and an archived/digest-pinned release toolchain remain separate supply-chain follow-up work.
