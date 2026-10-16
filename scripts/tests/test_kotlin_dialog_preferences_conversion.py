@@ -102,7 +102,8 @@ class KotlinDialogPreferencesConversionTest(unittest.TestCase):
                       source)
         self.assertIn("passwordInput.inputType = InputType.TYPE_CLASS_NUMBER or InputType.TYPE_NUMBER_VARIATION_PASSWORD",
                       source)
-        self.assertIn("settings.blockAccessibility", source)
-        self.assertIn("settings.blockAutofill", source)
+        # `Settings` is a Kotlin class since the sixteenth batch, so its getters are called as methods.
+        self.assertIn("settings.getBlockAccessibility()", source)
+        self.assertIn("settings.getBlockAutofill()", source)
         self.assertIn("builder.setPositiveButton(null as CharSequence?, null)", source)
         self.assertNotIn("!!", source)

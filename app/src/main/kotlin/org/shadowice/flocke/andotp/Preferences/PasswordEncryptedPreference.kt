@@ -73,12 +73,12 @@ open class PasswordEncryptedPreference(context: Context, attrs: AttributeSet?) :
         passwordInput = requireNotNull(view.findViewById(R.id.passwordEdit))
         passwordConfirm = requireNotNull(view.findViewById(R.id.passwordConfirm))
 
-        if (settings.blockAccessibility) {
+        if (settings.getBlockAccessibility()) {
             passwordLayout.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS)
             passwordConfirm.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO)
         }
 
-        if (settings.blockAutofill) {
+        if (settings.getBlockAutofill()) {
             passwordLayout.setImportantForAutofill(View.IMPORTANT_FOR_AUTOFILL_NO_EXCLUDE_DESCENDANTS)
             passwordConfirm.setImportantForAutofill(View.IMPORTANT_FOR_AUTOFILL_NO)
         }
