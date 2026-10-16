@@ -50,6 +50,7 @@ manifest.
 | `Tasks/EncryptedBackupWorker.kt` | Compiled against the converted task layer, the `androidx.work` stand-ins and the real `Constants` declaration. The **early exits are executed**: stopped or disabled work fails without a notification. The vault read, the backup and the failure notifications are not: they need the Java-only notification channel, the AndroidKeyStore and a real vault file. The constructor and the `ListenableWorker.Result` return type are reflected. |
 | `Utilities/BackupAgent.kt` | The refused platform restore is **executed**: the restore throws the documented `IOException`, and the refusal is not preceded by a null check on the platform's (unannotated) arguments. The other callbacks are inert, like the platform's. |
 | `Activities/ThemedActivity.kt`, `Activities/BaseActivity.kt` | The **screen-off handling and the obscured-touch rejection are executed** against the new `AppCompatActivity` stand-in: the receiver is registered with `ACTION_SCREEN_OFF`, another action is ignored, the screen-off broadcast notifies the callback, locks the vault and finishes the activity, the lock reaches the activity through the recorded UI-thread delivery, the receiver is unregistered on destroy, and a touch from an obscured (or partially obscured, from Android 10 on) window is refused. The theme, the window color, the locale update, the real broadcast dispatch and the activity lifecycle are not exercised: the stand-in has no window, decor, configuration change or looper. |
+| `Activities/PanicResponderActivity.kt`, `Activities/SecureCaptureActivity.kt` | The **panic decision and the window handling are executed**: a foreign action wipes nothing and the panic action without a configured response only removes the task, the "settings" response disables the automatic backups, cancels the pending encrypted backup and locks the vault, and the "accounts" response reaches the wipe of the database. The scanner activity applies the theme and the language, requests the hardware acceleration before the content view is built, blocks the screenshots with `FLAG_SECURE` unless the setting allows them, hides the system bars with the fullscreen flag below Android 11 and with the insets controller (and the requested behaviour) from Android 11 on. The wipe of the database and the keys needs the Java-only `FileHelper`, which has no class file here, so only the steps before it are visible; the real activity start, the real theme, the camera and the real configuration change are not exercised. |
 | `Utilities/VaultSession.kt` | Compiled with the runner and driven live (generation advances, change listeners, mutation lock); the static facade shapes are asserted. |
 | `Database/EntryJsonResult.kt` | The closed parse-error set and the owned one-use seed: `copySecret()` returns copies, `close()` wipes and is idempotent, redacted `toString()`, no generated `data class` members. |
 | `Database/EntryJson.kt` | The stored document format, executed against the functional `org.json`/`Base32`/`Hex` stand-ins: legacy field defaults, the malformed-field matrix with its closed errors, the serialized field order, and the Base32/mOTP-hex secret rules. |
@@ -233,7 +234,9 @@ tar xzf /tmp/kt.tgz -C /tmp && chmod +x /tmp/package/bin/kotlinc*
 
 Verified with Kotlin `2.3.20` (the app's pinned version) and `2.4.21` (the bootstrap version), plus
 Temurin `25.0.2`, on 2026-10-15 (63 checks). The fifteenth batch added seven checks (70 total) and
-was verified with Kotlin `2.4.21`/Temurin `25.0.2` on 2026-10-16. Pin your own compiler when
+was verified with Kotlin `2.4.21`/Temurin `25.0.2` on 2026-10-16. The seventeenth batch added four
+(81), the eighteenth two (83) and the nineteenth two (85) checks; the last run reports **85
+passing checks** with Kotlin `2.4.21`/Temurin `25.0.2` on 2026-10-15. Pin your own compiler when
 recording results; the check is only as meaningful as the versions you run it with.
 
 ## Crypto and KeyStore helper follow-up
@@ -454,4 +457,23 @@ reaches a terminal state. It has not been compiled or run here.
 
 The converted base activities still need the Android gates: the real theme and window, the real
 configuration change, the real screen-off broadcast and the activity lifecycle with rotation.
+
+## Small activities follow-up
+
+- `Activities/PanicResponderActivity.kt` and `Activities/SecureCaptureActivity.kt` are compiled
+  against the new `android.app.Activity` stand-in (which records the launch intent and the removed
+  tasks), the new `com.journeyapps.barcodescanner.CaptureActivity` stand-in (which hands out an
+  inert scanner view) and the extended `android.view.Window` stand-in (which records the flag
+  calls and the insets controller).
+- The panic responder builds its own `Settings`, so the checks run it with the vault transaction
+  poisoned, like the base activity checks: the pending-file recovery needs the Java-only
+  `FileHelper`.
+- The wipe of the database and of the keys cannot run here. The check asserts that the wipe was
+  reached (the vault session was locked with the `RESET` reason) and that the failure is the
+  missing `FileHelper` class, so a reordering of the panic steps would fail the check.
+- `WindowInsetsController` and `WindowInsets.Type` are stand-ins with the platform's mask and
+  behaviour values; they record what was hidden and which behaviour was requested.
+- The real activity start, the real theme, the real configuration change and the camera are still
+  missing here; the device test starts the panic responder for real and checks the scanner
+  activity's shape.
 

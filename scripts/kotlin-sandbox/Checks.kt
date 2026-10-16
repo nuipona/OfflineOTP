@@ -81,6 +81,8 @@ import org.shadowice.flocke.andotp.Dialogs.HideableDialog
 import org.shadowice.flocke.andotp.Dialogs.PasswordEntryDialog
 import org.shadowice.flocke.andotp.Dialogs.TagsDialog
 import org.shadowice.flocke.andotp.Activities.BaseActivity
+import org.shadowice.flocke.andotp.Activities.PanicResponderActivity
+import org.shadowice.flocke.andotp.Activities.SecureCaptureActivity
 import org.shadowice.flocke.andotp.Receivers.BackupBroadcastReceiver
 import org.shadowice.flocke.andotp.Receivers.EncryptedBackupBroadcastReceiver
 import org.shadowice.flocke.andotp.Tasks.EncryptedBackupWorker
@@ -113,6 +115,9 @@ import android.util.DisplayMetrics
 import android.view.KeyEvent
 import android.view.MotionEvent
 import android.view.View
+import android.view.WindowInsets
+import android.view.WindowInsetsController
+import android.view.WindowManager
 import android.view.inputmethod.EditorInfo
 import android.view.inputmethod.InputMethodManager
 import androidx.appcompat.app.AppCompatDialog
@@ -124,6 +129,7 @@ import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.google.android.material.textfield.TextInputEditText
 import com.google.android.material.textfield.TextInputLayout
+import com.journeyapps.barcodescanner.DecoratedBarcodeView
 import com.google.zxing.BarcodeFormat
 import com.google.zxing.ChecksumException
 import com.google.zxing.DecodeHintType
@@ -935,6 +941,43 @@ private class ScreenActivity : BaseActivity() {
 
 /** The preference key the fake context maps a resource id to. */
 private fun settingsKey(resId: Int): String = "key:" + resId
+
+/**
+ * The converted panic responder, driven by the checks: it answers with a controllable intent and
+ * reads the settings like [SettingsContext].
+ */
+private class PanicActivity : PanicResponderActivity() {
+    /** The intent the activity was started with. */
+    var launchIntent: Intent? = null
+
+    override fun getIntent(): Intent? = launchIntent
+
+    override fun getString(resId: Int): String = settingsKey(resId)
+
+    fun create() {
+        onCreate(null)
+    }
+}
+
+/**
+ * The converted QR scanner activity, driven by the checks: it reads the settings like
+ * [SettingsContext] and hands out its window, so the checks can see the flags.
+ */
+private class ScannerActivity : SecureCaptureActivity() {
+    /** The resources the activity reads; the checks read the applied locale from them. */
+    val config = Configuration()
+
+    override fun getString(resId: Int): String = settingsKey(resId)
+
+    override val resources: Resources get() = ScannerResources(config)
+
+    fun initialize(): DecoratedBarcodeView = initializeContent()
+}
+
+/** The resources of the scanner activity: they only carry the configuration the activity updates. */
+private class ScannerResources(private val config: Configuration) : Resources() {
+    override val configuration: Configuration get() = config
+}
 
 /**
  * Runs the block with the vault transaction poisoned. The converted construction runs
@@ -4152,6 +4195,121 @@ fun main() {
             partial.eventFlags = MotionEvent.FLAG_WINDOW_IS_PARTIALLY_OBSCURED
             expect(!activity.dispatchTouchEvent(partial), { "a partially obscured touch was accepted" })
             expect(activity.dispatchedTouches.size == 1, { "the partially obscured touch reached the activity" })
+        } finally {
+            Build.VERSION.SDK_INT = sdk
+        }
+    }
+
+    check("the panic responder wipes only what the panic action asks for") {
+        PreferenceManager.reset()
+        val activity = PanicActivity()
+        val work = WorkManager.getInstance(activity)
+        work.reset()
+        val store = PreferenceManager.getDefaultSharedPreferences(activity) as FakeSharedPreferences
+
+        try {
+            // The activity builds its own Settings, whose construction recovers a pending vault
+            // file. That recovery needs the Java-only FileHelper, which has no class file here.
+            withPoisonedTransaction {
+            // A foreign action changes nothing at all.
+            val foreign = Intent()
+            foreign.intentAction = "info.guardianproject.panic.action.OTHER"
+            activity.launchIntent = foreign
+            activity.create()
+            expect(activity.removedTasks == 1, { "the task was not removed" })
+            expect(work.cancelled.isEmpty(), { "a foreign action cancelled the backup work" })
+            expect(store.getString(settingsKey(R.string.settings_key_auto_backup_password_enc), null) == null,
+                    { "a foreign action disabled the automatic backups" })
+            expect(VaultSession.getKey() == null, { "a foreign action opened the vault" })
+
+            // The panic action without a configured response only removes the task.
+            val trigger = Intent()
+            trigger.intentAction = PanicResponderActivity.PANIC_TRIGGER_ACTION
+            activity.launchIntent = trigger
+            activity.create()
+            expect(activity.removedTasks == 2, { "the task was not removed" })
+            expect(work.cancelled.isEmpty(), { "the panic action cancelled the backup work without a response" })
+            expect(store.getString(settingsKey(R.string.settings_key_auto_backup_password_enc), null) == null,
+                    { "the panic action disabled the automatic backups without a response" })
+
+            // A configured "settings" response disables the automatic backups, cancels the pending
+            // encrypted backup and locks the vault.
+            store.edit().putStringSet(settingsKey(R.string.settings_key_panic), setOf("settings")).commit()
+            work.reset()
+            VaultSession.open(SecretKeySpec(ByteArray(32), "AES"))
+            expect(VaultSession.getKey() != null, { "the vault session could not be opened" })
+            activity.create()
+            expect(activity.removedTasks == 3, { "the task was not removed" })
+            expect(work.cancelled == listOf(EncryptedBackupBroadcastReceiver.UNIQUE_WORK_NAME),
+                    { "the pending encrypted backup was not cancelled: ${work.cancelled}" })
+            expect(store.getString(settingsKey(R.string.settings_key_auto_backup_password_enc), "") == "off",
+                    { "the automatic backups were not disabled" })
+            expect(store.stringSet(settingsKey(R.string.settings_key_backup_broadcasts)).isEmpty(),
+                    { "the backup broadcasts were not disabled" })
+            expect(VaultSession.getKey() == null, { "the vault was not locked" })
+
+            // A configured "accounts" response reaches the wipe of the database and the keys. The
+            // wipe itself needs the Java-only file helper, which has no class file here, so the
+            // check can only see that the wipe was reached.
+            store.edit().putStringSet(settingsKey(R.string.settings_key_panic), setOf("accounts")).commit()
+            work.reset()
+            expectThrows(NoClassDefFoundError::class.java) { activity.create() }
+            expect(work.cancelled == listOf(EncryptedBackupBroadcastReceiver.UNIQUE_WORK_NAME),
+                    { "the pending encrypted backup was not cancelled: ${work.cancelled}" })
+            val state = VaultSession.snapshot()
+            expect(state is SessionState.Locked && state.reason == SessionLockReason.RESET,
+                    { "the database wipe was not reached: $state" })
+            }
+        } finally {
+            // The session is global; no check may leave an open vault behind.
+            VaultSession.lock(SessionLockReason.RESET)
+        }
+    }
+
+    check("the QR scanner activity honours the theme, the language and the screenshot setting") {
+        PreferenceManager.reset()
+        val activity = ScannerActivity()
+        val store = PreferenceManager.getDefaultSharedPreferences(activity) as FakeSharedPreferences
+        store.edit().putString(settingsKey(R.string.settings_key_lang), "de_DE").commit()
+
+        val sdk = Build.VERSION.SDK_INT
+        try {
+            // Below Android 11 the system bars are hidden with the fullscreen flag.
+            Build.VERSION.SDK_INT = Build.VERSION_CODES.Q
+            withPoisonedTransaction { activity.initialize() }
+
+            expect(activity.appliedTheme == R.style.AppTheme_NoActionBar,
+                    { "the wrong theme was applied: ${activity.appliedTheme}" })
+            expect(activity.config.currentLocale == Locale("de", "DE"),
+                    { "the wrong language was applied: ${activity.config.currentLocale}" })
+
+            val flags = activity.getWindow().flagCalls.map { it.first }
+            expect(flags.contains(WindowManager.LayoutParams.FLAG_HARDWARE_ACCELERATED),
+                    { "the hardware acceleration was not requested" })
+            expect(flags.contains(WindowManager.LayoutParams.FLAG_SECURE),
+                    { "the screenshots were not blocked" })
+            expect(flags.contains(WindowManager.LayoutParams.FLAG_FULLSCREEN),
+                    { "the system bars were not hidden" })
+
+            // With the screenshots enabled the window is not made secure.
+            store.edit().putBoolean(settingsKey(R.string.settings_key_enable_screenshot), true).commit()
+            val second = ScannerActivity()
+            withPoisonedTransaction { second.initialize() }
+            expect(!second.getWindow().flagCalls.map { it.first }.contains(WindowManager.LayoutParams.FLAG_SECURE),
+                    { "the window was made secure although the screenshots are enabled" })
+
+            // From Android 11 on the system bars are hidden with the insets controller.
+            Build.VERSION.SDK_INT = Build.VERSION_CODES.R
+            val third = ScannerActivity()
+            val controller = WindowInsetsController()
+            third.getWindow().windowInsetsController = controller
+            withPoisonedTransaction { third.initialize() }
+            expect(controller.hiddenTypes == (WindowInsets.Type.statusBars() or WindowInsets.Type.navigationBars()),
+                    { "the system bars were not hidden: ${controller.hiddenTypes}" })
+            expect(controller.behavior == WindowInsetsController.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE,
+                    { "the wrong system bar behaviour was requested: ${controller.behavior}" })
+            expect(!third.getWindow().flagCalls.map { it.first }.contains(WindowManager.LayoutParams.FLAG_FULLSCREEN),
+                    { "the fullscreen flag was set although the insets controller was used" })
         } finally {
             Build.VERSION.SDK_INT = sdk
         }

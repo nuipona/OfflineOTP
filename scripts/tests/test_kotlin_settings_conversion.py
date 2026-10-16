@@ -299,9 +299,12 @@ class KotlinSettingsConversionTest(unittest.TestCase):
         self.assertIn("if (settings.getBlockAutofill()) {", preference)
         self.assertNotIn("settings.blockAccessibility", preference)
         # The still-Java and instrumentation callers keep constructing the class with its single
-        # Context parameter (11 in the app sources, 5 in the instrumentation suites).
+        # Context parameter (11 in the app sources, 5 in the instrumentation suites). The two
+        # converted activities construct it in Kotlin since the nineteenth batch.
         sites = sum(text.read_text().count("new Settings(")
                     for text in list(JAVA.rglob("*.java")) + list(ANDROID_TEST.rglob("*.java")))
+        sites += sum(text.read_text().count("Settings(this)")
+                     for text in KOTLIN.rglob("*.kt"))
         self.assertGreaterEqual(sites, 16, "the construction sites disappeared")
 
 

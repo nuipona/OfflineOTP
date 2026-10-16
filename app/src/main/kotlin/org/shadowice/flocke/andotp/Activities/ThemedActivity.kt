@@ -72,6 +72,7 @@ abstract class ThemedActivity : AppCompatActivity() {
     }
 
     /** Applies the selected language to this activity. */
+    @Suppress("DEPRECATION")
     public fun setLocale() {
         val locale: Locale = settings!!.getLocale()
         Locale.setDefault(locale)

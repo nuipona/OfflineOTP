@@ -68,7 +68,7 @@ Priorities below are remediation priorities, not CVSS scores or claims of demons
 
 **Action:** Decide whether arbitrary apps are intentionally trusted to trigger panic. Otherwise remove external access or require a user-authorized integration/capability. A signature permission works for same-signer applications but would break independently signed PanicKit integrations; do not apply it blindly. Test destructive behavior using disposable test data and an independently signed attacker app.
 
-Evidence: [manifest, lines 67–77](../app/src/main/AndroidManifest.xml); [PanicResponderActivity, lines 37–60](../app/src/main/java/org/shadowice/flocke/andotp/Activities/PanicResponderActivity.java); [Settings.getPanicResponse](../app/src/main/kotlin/org/shadowice/flocke/andotp/Utilities/Settings.kt) (Kotlin since the sixteenth batch; the stored keys and the default are unchanged).
+Evidence: [manifest, lines 67–77](../app/src/main/AndroidManifest.xml); [PanicResponderActivity, lines 37–60](../app/src/main/kotlin/org/shadowice/flocke/andotp/Activities/PanicResponderActivity.kt) (Kotlin since the nineteenth batch; the action, the responses and the order of the steps are unchanged); [Settings.getPanicResponse](../app/src/main/kotlin/org/shadowice/flocke/andotp/Utilities/Settings.kt) (Kotlin since the sixteenth batch; the stored keys and the default are unchanged).
 
 ### B. Validate and confirm externally supplied OTP entries — high priority
 

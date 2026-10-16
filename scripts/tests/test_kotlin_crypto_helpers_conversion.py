@@ -222,7 +222,7 @@ class KotlinCryptoHelpersConversionTest(unittest.TestCase):
         self.assertIn("EncryptionHelper.EncryptionChangeCallback", activity)
         self.assertIn("KeyStoreHelper.createEncryptionKey(this)", activity)
         self.assertIn("KeyStoreHelper.wipeKeys(getActivity())", activity)
-        panic = (JAVA / "Activities/PanicResponderActivity.java").read_text()
+        panic = self.read("Activities/PanicResponderActivity.kt")
         self.assertIn("KeyStoreHelper.wipeKeys(this)", panic)
         reset = (JAVA / "Activities/SettingsActivity.java").read_text()
         self.assertIn("KeyStoreHelper.wipeKeys(getActivity())", reset)

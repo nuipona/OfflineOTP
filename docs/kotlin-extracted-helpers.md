@@ -313,12 +313,37 @@ Eighteenth batch (the activity base classes):
   flags, including the partially obscured one from Android 10 on). The window, the theme, the
   configuration change and the real broadcast dispatch are not exercised.
 
+Nineteenth batch (the small standalone activities):
+
+- `Activities/PanicResponderActivity.kt` and `Activities/SecureCaptureActivity.kt` replace their
+  Java implementations. The panic responder still answers the PanicKit action only, still disables
+  the automatic backups, cancels the pending encrypted backup and locks the vault **before** it
+  wipes the accounts or the settings, and still removes its task. The scanner activity still
+  applies the theme and the language, still requests the hardware acceleration before the content
+  view is built, still blocks the screenshots with `FLAG_SECURE` unless the setting allows them,
+  and still hides the system bars with the insets controller from Android 11 on and with the
+  fullscreen flag below that.
+- Both classes stay extendable (`open`), like the Java classes, and the public constant
+  `PANIC_TRIGGER_ACTION` stays a `public static final` field, so the Java call site in
+  `MainActivity` (`SecureCaptureActivity.class`) and the manifest entries are unchanged.
+- The deprecated configuration update is still used, because the platform has no replacement for it
+  in an activity that does not extend `ThemedActivity`.
+- The sandbox compiles both and **executes** the panic decision (a foreign action wipes nothing,
+  the panic action without a configured response wipes nothing, the "settings" response disables
+  the automatic backups, cancels the pending encrypted backup and locks the vault, and the
+  "accounts" response reaches the wipe of the database) and the window handling of the scanner
+  (the theme, the language, the acceleration flag, the secure flag, the fullscreen flag below
+  Android 11 and the hidden system bars with the requested behaviour from Android 11 on). The wipe
+  of the database and the keys itself needs the Java-only file helper, which has no class file in
+  the sandbox, and the real activity start, the real theme, the real camera and the real
+  configuration change are not exercised.
+
 No entry-card list adapter/view holder, fragment, `CredentialsPreference` or large
-manual-entry dialog is converted, and none of the concrete activities is; the task runner and its
+manual-entry dialog is converted, and none of the large concrete activities is; the task runner and its
 subclasses are, and so are the entry
 model, the vault repository, the document/backup, notification, QR-image and three small UI pieces
-above, plus the crypto and KeyStore helpers, the settings facade, the Android components and the
-two activity base classes — the
+above, plus the crypto and KeyStore helpers, the settings facade, the Android components, the two
+activity base classes and the two small standalone activities — the
 two Java files that remain under `Utilities/` are `Constants.java` and `FileHelper.java`. The repository's own
 storage primitives (`Utilities/FileHelper.java`) and the Android file/preference surface it uses stay
 Java and are resolved by the sandbox rather than converted. No coroutine, Compose, new
@@ -919,15 +944,20 @@ replacements, the public `settings` field the Java activities read, the theme ap
 `super.onCreate()`, the unchanged locale handling, the screen-off registration, the vault lock
 with its reason, the callback, the finish, the lock listener's UI-thread delivery, the
 unregistration on destroy, the single-method callback interface the Java lambdas need and the
-obscured-touch rejection with its Android 10 gate.
+obscured-touch rejection with its Android 10 gate. The nineteenth batch adds
+`Activities/PanicResponderActivity` and `Activities/SecureCaptureActivity` to the stem list and
+`scripts/tests/test_kotlin_small_activities_conversion.py` pins the replacements, the panic
+action, the order of the panic steps, the theme and the language of the scanner activity, the
+acceleration, secure and fullscreen flags, the insets controller branch, the unchanged manifest
+entries and the Java class literal in `MainActivity`.
 
 ### Executed here: partial sandbox compile/run check
 
 `scripts/kotlin-sandbox/` compiles the converted platform-free/low-platform sources against
 hand-written platform stubs and runs `Checks.kt` on a desktop JVM; `bootstrap-toolchain.sh` fetches
 a JDK and the Kotlin compiler from package mirrors when the machine has neither. Executed on
-2026-10-15 with **Kotlin 2.3.20 and 2.4.21 plus Temurin 25.0.2** (`-jvm-target 1.8`), it reports 83 passing
-checks after the eighteenth batch:
+2026-10-15 with **Kotlin 2.3.20 and 2.4.21 plus Temurin 25.0.2** (`-jvm-target 1.8`), it reports 85 passing
+checks after the nineteenth batch:
 
 - RFC 6238 TOTP vectors (SHA-1/256/512, six timestamps, eight digits) and RFC 4226 HOTP vectors.
 - TOTP/HOTP agreement with an independent HMAC implementation, including offsets and 1/30/60/86400 s periods.
@@ -1131,8 +1161,9 @@ preference and the large manual-entry dialog remain Java.
 
 The thumbnail pair has also left this list (eighth batch). The small visibility widenings are
 explicitly recorded above; these leaf renderers still need Android acceptance despite their sandbox
-compile. The activity base classes are converted too (eighteenth batch); the concrete activities,
-the fragments, the credential preference and the large manual-entry dialog remain Java. Latest
-local check after the eighteenth batch: 113 Python guards and 83 sandbox checks passed. The both-flavor Gradle
+compile. The activity base classes are converted too (eighteenth batch) and so are the two small
+standalone activities (nineteenth batch); the large concrete activities, the fragments, the
+credential preference and the large manual-entry dialog remain Java. Latest local check after the
+nineteenth batch: 119 Python guards and 85 sandbox checks passed. The both-flavor Gradle
 host/lint/instrumentation-APK build was attempted but stopped at the Gradle 8.13 distribution download
 (`SSLHandshakeException` from `services.gradle.org`); no Android acceptance result is claimed.

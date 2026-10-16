@@ -22,6 +22,21 @@ open class Context {
      */
     open fun getString(resId: Int): String = "stub"
 
+    /**
+     * The theme that was applied to this context. The platform keeps the theme in the base
+     * context; here the applied id is only recorded, no theme is resolved.
+     */
+    var appliedTheme: Int = 0
+        private set
+
+    /** Records the applied theme; the platform resolves and stores the theme. */
+    open fun setTheme(theme: Int) {
+        appliedTheme = theme
+    }
+
+    /** The base context; the platform returns the context the application context was made from. */
+    open fun getBaseContext(): Context = this
+
     /** Format overload; the result stays a recognisable placeholder, arguments are not applied. */
     fun getString(resId: Int, vararg formatArgs: Any?): String = "text:$resId"
     /** Resolves to a recognisable placeholder so the checks can tell which resource was read. */

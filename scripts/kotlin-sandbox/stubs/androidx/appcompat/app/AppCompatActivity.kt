@@ -19,10 +19,6 @@ open class AppCompatActivity : Context() {
     /** The window the activity owns. */
     val activityWindow = Window()
 
-    /** The theme that was applied to the activity. */
-    var appliedTheme: Int = 0
-        private set
-
     /** The receivers the activity registered, in registration order. */
     val registeredReceivers = ArrayList<Pair<BroadcastReceiver, IntentFilter>>()
 
@@ -47,13 +43,7 @@ open class AppCompatActivity : Context() {
 
     protected open fun onDestroy() {}
 
-    fun setTheme(theme: Int) {
-        appliedTheme = theme
-    }
-
     open fun getWindow(): Window = activityWindow
-
-    open fun getBaseContext(): Context = this
 
     /** Records the delivery instead of running it on a looper; the checks drain it themselves. */
     open fun runOnUiThread(action: Runnable) {

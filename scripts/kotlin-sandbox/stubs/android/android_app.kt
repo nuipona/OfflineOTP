@@ -3,7 +3,10 @@ package android.app
 
 import android.content.Context
 import android.content.DialogInterface
+import android.content.Intent
+import android.os.Bundle
 import android.view.View
+import android.view.Window
 
 /**
  * The dialog only records what the builder wired up so the checks can drive the buttons; no
@@ -143,7 +146,26 @@ class NotificationChannel(private val id: String?, private var name: CharSequenc
 class Notification(val channelId: String?, val smallIcon: Int, val title: CharSequence?, val bigText: CharSequence?)
 
 /** A context subclass so a fragment can hand one back; no lifecycle is modelled. */
-open class Activity : Context()
+open class Activity : Context() {
+    /** The intent the activity was started with; the platform returns the launch intent. */
+    open fun getIntent(): Intent? = null
+
+    /** The window the activity owns. */
+    val activityWindow = Window()
+
+    /** How often the activity removed its task. */
+    var removedTasks = 0
+        private set
+
+    open fun getWindow(): Window = activityWindow
+
+    /** Removes the activity's task; the platform also drops the task from the recents list. */
+    open fun finishAndRemoveTask() {
+        removedTasks++
+    }
+
+    protected open fun onCreate(savedInstanceState: Bundle?) {}
+}
 
 /** The deprecated platform fragment the settings screen still uses; it only records requests. */
 open class Fragment {
