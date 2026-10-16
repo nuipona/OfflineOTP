@@ -1,0 +1,185 @@
+package org.shadowice.flocke.andotp.Preferences
+
+import android.app.AlertDialog
+import android.content.Context
+import android.content.res.TypedArray
+import android.preference.DialogPreference
+import android.text.Editable
+import android.text.InputType
+import android.text.TextWatcher
+import android.util.AttributeSet
+import android.util.Base64
+import android.view.View
+import android.widget.Button
+import android.widget.EditText
+import com.google.android.material.textfield.TextInputEditText
+import com.google.android.material.textfield.TextInputLayout
+import org.shadowice.flocke.andotp.R
+import org.shadowice.flocke.andotp.Utilities.ConfirmedPasswordTransformationHelper
+import org.shadowice.flocke.andotp.Utilities.Constants
+import org.shadowice.flocke.andotp.Utilities.EncryptionHelper
+import org.shadowice.flocke.andotp.Utilities.KeyStoreHelper
+import org.shadowice.flocke.andotp.Utilities.Settings
+import java.nio.charset.StandardCharsets
+import java.security.KeyPair
+
+/**
+ * Preference that stores a password/PIN encrypted with the KeyStore-backed key pair.
+ *
+ * `open` keeps the Java class's non-final shape and the two-argument constructor stays the one
+ * the preference framework inflates from XML.
+ */
+open class PasswordEncryptedPreference(context: Context, attrs: AttributeSet?) :
+    DialogPreference(context, attrs), View.OnClickListener, TextWatcher {
+
+    /** Which kind of credential the dialog asks for. */
+    enum class Mode { PASSWORD, PIN }
+
+    private val key: KeyPair? = try {
+        KeyStoreHelper.loadOrGenerateAsymmetricKeyPair(context, Constants.KEYSTORE_ALIAS_PASSWORD)
+    } catch (e: Exception) {
+        e.printStackTrace()
+        null
+    }
+
+    private var mode: Mode = Mode.PASSWORD
+
+    private lateinit var passwordInput: TextInputEditText
+    private lateinit var passwordConfirm: EditText
+    private lateinit var btnSave: Button
+
+    private var value: String = DEFAULT_VALUE
+
+    init {
+        setDialogLayoutResource(R.layout.component_password)
+    }
+
+    /** Sets whether a password or a PIN is entered. */
+    open fun setMode(mode: Mode) {
+        this.mode = mode
+    }
+
+    override fun onPrepareDialogBuilder(builder: AlertDialog.Builder) {
+        super.onPrepareDialogBuilder(builder)
+
+        builder.setPositiveButton(null as CharSequence?, null)
+        builder.setNegativeButton(null as CharSequence?, null)
+    }
+
+    override fun onBindDialogView(view: View) {
+        val settings = Settings(context)
+
+        val passwordLayout = requireNotNull(view.findViewById<TextInputLayout>(R.id.passwordLayout))
+        passwordInput = requireNotNull(view.findViewById(R.id.passwordEdit))
+        passwordConfirm = requireNotNull(view.findViewById(R.id.passwordConfirm))
+
+        if (settings.blockAccessibility) {
+            passwordLayout.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS)
+            passwordConfirm.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO)
+        }
+
+        if (settings.blockAutofill) {
+            passwordLayout.setImportantForAutofill(View.IMPORTANT_FOR_AUTOFILL_NO_EXCLUDE_DESCENDANTS)
+            passwordConfirm.setImportantForAutofill(View.IMPORTANT_FOR_AUTOFILL_NO)
+        }
+
+        val btnCancel = requireNotNull(view.findViewById<Button>(R.id.btnCancel))
+        btnSave = requireNotNull(view.findViewById(R.id.btnSave))
+        btnSave.isEnabled = false
+
+        btnCancel.setOnClickListener(this)
+        btnSave.setOnClickListener(this)
+
+        if (value.isNotEmpty()) {
+            passwordInput.text = value
+        }
+
+        if (mode == Mode.PASSWORD) {
+            passwordLayout.hint = context.getString(R.string.settings_hint_password)
+            passwordConfirm.setHint(R.string.settings_hint_password_confirm)
+
+            passwordInput.inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD
+            passwordConfirm.inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD
+        } else if (mode == Mode.PIN) {
+            passwordLayout.hint = context.getString(R.string.settings_hint_pin)
+            passwordConfirm.setHint(R.string.settings_hint_pin_confirm)
+
+            passwordInput.inputType = InputType.TYPE_CLASS_NUMBER or InputType.TYPE_NUMBER_VARIATION_PASSWORD
+            passwordConfirm.inputType = InputType.TYPE_CLASS_NUMBER or InputType.TYPE_NUMBER_VARIATION_PASSWORD
+        }
+
+        ConfirmedPasswordTransformationHelper.setup(passwordLayout, passwordInput, passwordConfirm)
+
+        passwordConfirm.addTextChangedListener(this)
+        passwordInput.addTextChangedListener(this)
+
+        super.onBindDialogView(view)
+    }
+
+    override fun onGetDefaultValue(a: TypedArray, index: Int): Any? = a.getString(index)
+
+    /** Encrypts the value with the KeyStore key and stores it Base64 encoded. */
+    private fun encryptAndPersist(value: String) {
+        try {
+            val pair = requireNotNull(key)
+            val encBytes = EncryptionHelper.encrypt(pair.getPublic(), value.toByteArray(StandardCharsets.UTF_8))
+            persistString(Base64.encodeToString(encBytes, Base64.URL_SAFE))
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    }
+
+    /** Loads and decrypts the stored Base64 value. */
+    private fun restoreAndDecrypt(encValue: String) {
+        try {
+            val pair = requireNotNull(key)
+            val encBytes = Base64.decode(encValue, Base64.URL_SAFE)
+            value = String(EncryptionHelper.decrypt(pair.getPrivate(), encBytes), StandardCharsets.UTF_8)
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    }
+
+    override fun onSetInitialValue(restorePersistedValue: Boolean, defaultValue: Any?) {
+        if (restorePersistedValue) {
+            restoreAndDecrypt(getPersistedString(DEFAULT_VALUE))
+        } else {
+            // This preference has no android:defaultValue. The framework therefore supplies null
+            // the first time it is attached; keep the in-memory empty default without persisting it.
+            val initialValue = defaultValue as? String ?: run {
+                value = DEFAULT_VALUE
+                return
+            }
+            value = initialValue
+            encryptAndPersist(value)
+        }
+    }
+
+    override fun onClick(view: View) {
+        when (view.id) {
+            R.id.btnCancel -> requireNotNull(getDialog()).dismiss()
+            R.id.btnSave -> {
+                value = passwordInput.text.toString()
+                encryptAndPersist(value)
+
+                requireNotNull(getDialog()).dismiss()
+            }
+        }
+    }
+
+    override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
+        if (passwordConfirm.editableText.toString() == passwordInput.editableText.toString()) {
+            btnSave.isEnabled = true
+        } else {
+            btnSave.isEnabled = false
+        }
+    }
+
+    // Unused TextWatcher callbacks (required by the interface)
+    override fun afterTextChanged(s: Editable?) {}
+    override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
+
+    companion object {
+        private const val DEFAULT_VALUE = ""
+    }
+}

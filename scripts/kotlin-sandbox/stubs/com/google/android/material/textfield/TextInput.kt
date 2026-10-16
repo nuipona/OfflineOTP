@@ -20,6 +20,7 @@ open class TextInputEditText : EditText {
  * platform click would; no drawable/state machinery exists here.
  */
 open class TextInputLayout : View() {
+    var hint: CharSequence? = null
     var endIconClickListener: View.OnClickListener? = null
         private set
     var refreshCount = 0

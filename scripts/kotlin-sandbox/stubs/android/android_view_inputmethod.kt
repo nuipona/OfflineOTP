@@ -6,6 +6,7 @@ import android.view.View
 
 class EditorInfo private constructor() {
     companion object {
+        const val IME_ACTION_NEXT = 5
         const val IME_ACTION_DONE = 6
     }
 }

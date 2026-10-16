@@ -105,8 +105,9 @@ Ninth batch (small UI adapters and autofill field):
 
 - `View/TagsAdapter.kt`, `View/ThumbnailSelectionAdapter.kt` and
   `View/AutoFillable/AutoFillableTextInputEditText.kt` replace their Java implementations. MainActivity,
-  EntriesCardAdapter, TagsDialog, ManualEntryDialog and AuthenticateActivity remain Java, with the
-  same call sites; the autofill widget keeps its XML class name and all three distinct super calls.
+  EntriesCardAdapter, ManualEntryDialog and AuthenticateActivity remain Java, with the same call
+  sites (`TagsDialog` joined Kotlin in the fourteenth batch); the autofill widget keeps its XML class
+  name and all three distinct super calls.
 - Tags retain natural sorted display order, borrowed maps, copied state snapshots, replacement
   semantics, unknown-tag no-op plus notification, and empty-map all-active behavior. The public
   `Boolean` getter/setter stay boxed (including nullable states), not primitive `boolean`; rendering
@@ -191,9 +192,21 @@ Thirteenth batch (notification and QR-image helpers):
   and the permission gate against fake fragments; the channel/notification members take the
   Java-only `Constants.NotificationChannel`, so they only compile here.
 
-No activity, entry-card list adapter/view holder, fragment, credential preference, receiver, worker
-or larger dialog renderer is converted; the task runner and its subclasses are, and so are the entry
-model, the vault repository and the document/backup, notification and QR-image helpers above. The repository's own storage primitives
+Fourteenth batch (small password/tag dialogs and encrypted-password preference):
+
+- `Dialogs/PasswordEntryDialog.kt`, `Dialogs/TagsDialog.kt` and
+  `Preferences/PasswordEncryptedPreference.kt` replace their Java implementations. `BackupActivity`,
+  `ManualEntryDialog`, `SettingsActivity` and preference XML retain the same Java/XML call sites.
+- The sandbox executes the password and tag dialog control flow against recording widgets/dialogs
+  and reflects all three Java surfaces. The encrypted preference compiles against the real Java
+  `Settings`/`KeyStoreHelper`/`EncryptionHelper` declarations but is not constructed there because
+  those resolution sources have no runtime classes; a checked-in Java instrumentation test covers
+  its real AndroidKeyStore/layout path.
+
+No activity, entry-card list adapter/view holder, fragment, `CredentialsPreference`, receiver, worker
+or large manual-entry dialog is converted; the task runner and its subclasses are, and so are the entry
+model, the vault repository and the document/backup, notification, QR-image and three small UI pieces
+above. The repository's own storage primitives
 (`Utilities/FileHelper.java`) and the Android file/preference surface it uses stay Java and are
 resolved by the sandbox rather than converted. No coroutine, Compose, new
 dependency, SDK/bytecode target, storage format or crypto change is included.
@@ -616,6 +629,35 @@ and refusal exactly where the Java had it.
   the decoded contents stay a nullable return; `context`, `fragment` and the notification channel
   fail fast when null — the Java dereferenced each of them without a check.
 
+### Password/tag dialogs and encrypted password preference
+
+These three are small Android-facing leaves, not orchestration owners. Their Activity/manual-dialog
+callers, the backup policy and the settings screen remain Java.
+
+- **Password entry**: `PasswordEntryDialog` stays open with the same five-argument Java constructor,
+  nested `Mode` enum and SAM `PasswordEnteredCallback`. ENTER still hides confirmation, listens on
+  the first field and enables OK at `AUTH_MIN_PASSWORD_LENGTH`; UPDATE shows/listens on both fields
+  and additionally requires `TextUtils.equals`. The short warning, privacy flags, shared password
+  transformation helper, IME-done/hardware-enter handling, enter-up suppression, callback-before-
+  dismissal ordering and nullable callback are unchanged. Required inflated children now fail with
+  explicit `requireNotNull` rather than a later dereference.
+- **Tag picker**: `TagsDialog` was static-only in use and becomes the documented Kotlin `object`
+  delta (`INSTANCE`, private constructor/final class) with an `@JvmStatic show(Context, TagsAdapter,
+  Callable, Callable)` forwarder. It keeps the original margins, adapter instance, checked-row
+  toggle, copied map/replacement semantics, new tags initially active, nullable callables, caught/
+  printed callback exceptions, cancel dismissal and nested new-tag dialog. It does not trim, reject
+  or de-duplicate empty/new names beyond the adapter map's existing replacement behavior.
+- **Encrypted preference**: `PasswordEncryptedPreference` stays open with its XML `(Context,
+  AttributeSet)` constructor, nested `Mode`, open `setMode`, protected framework hooks and listener
+  interfaces. It keeps the same AndroidKeyStore alias, RSA helper calls, UTF-8/Base64 URL-safe stored
+  format, password/PIN input flags, show-password wiring, matching-only save rule and caught/printed
+  crypto failures. `key` is explicitly nullable after generation failure and is required only inside
+  the existing catch blocks. One null edge is intentionally hardened: this preference XML has no
+  `android:defaultValue`, so first attachment can supply a null default. The Java stored null, caught
+  a failed encryption and later crashed when the dialog called `value.isEmpty()`; Kotlin now retains
+  the existing empty in-memory default and performs no write. Non-null explicit defaults and restored
+  ciphertext follow the original paths.
+
 ## Tests and acceptance
 
 Existing Java/Kotlin characterization tests remain in place and unchanged: the RFC vector tests in
@@ -673,15 +715,22 @@ the hint maps and the distinct resource stand-ins. `KotlinNotificationQrInteropT
 instrumentation) round-trips a QR code generated with zxing's own writer through the real
 `BitmapFactory`/zxing path, checks blank, undecodable, refused and missing images, the real channels'
 names and importances, and that both `notify` overloads are callable from Java. It has **not been
-compiled or run** here.
+compiled or run** here. With the password/tag/preference batch,
+`scripts/tests/test_kotlin_dialog_preferences_conversion.py` pins the three replacements, retained
+Java/XML call sites, enum/SAM/static/override shapes, dialog state rules, privacy flags, callable
+handling, exact keystore/Base64 path and the null-default guard. `KotlinPasswordDialogsInteropTest`
+uses real inflated password widgets from Java for both modes, privacy flags, watchers, callback and
+editor-action behavior; `KotlinPasswordEncryptedPreferenceInteropTest` records preference writes
+while exercising the real AndroidKeyStore round trip, first-attachment null default, restored field,
+input modes and matching rule. Both are checked in but have **not been compiled or run** here.
 
 ### Executed here: partial sandbox compile/run check
 
 `scripts/kotlin-sandbox/` compiles the converted platform-free/low-platform sources against
 hand-written platform stubs and runs `Checks.kt` on a desktop JVM; `bootstrap-toolchain.sh` fetches
 a JDK and the Kotlin compiler from package mirrors when the machine has neither. Executed on
-2026-10-15 with **Kotlin 2.4.21 and Temurin 25.0.2** (`-jvm-target 1.8`), it reports 60 passing
-checks after the thirteenth batch:
+2026-10-15 with **Kotlin 2.3.20 and 2.4.21 plus Temurin 25.0.2** (`-jvm-target 1.8`), it reports 63 passing
+checks after the fourteenth batch:
 
 - RFC 6238 TOTP vectors (SHA-1/256/512, six timestamps, eight digits) and RFC 4226 HOTP vectors.
 - TOTP/HOTP agreement with an independent HMAC implementation, including offsets and 1/30/60/86400 s periods.
@@ -701,6 +750,11 @@ checks after the thirteenth batch:
   missing-view no-ops).
 - `ConfirmedPasswordTransformationHelper` toggle sequence: masked start, both fields
   unmasked/re-masked together, the cursor restored, the layout refreshed.
+- `PasswordEntryDialog` against scripted children: both modes, minimum length/matching confirmation,
+  warning/OK state, privacy flags, IME done/enter-up, callback/dismissal and nullable callback;
+  `TagsDialog` row toggling and both dialog stages, including optional callables. Reflection pins
+  both Java APIs plus `PasswordEncryptedPreference`'s open class/setter, XML constructor and modes;
+  the preference's real crypto body is not executed here.
 - `BackupTaskResult` factories, field defaults, writable PGP fields and a payload-free `toString`.
 - The background runner on real executor threads with a queued fake main loop: single owned-value
   delivery and one-shot execution, null/exception mapping to typed failures with the legacy
@@ -833,6 +887,6 @@ components remain Java.
 
 The thumbnail pair has also left this list (eighth batch). The small visibility widenings are
 explicitly recorded above; these leaf renderers still need Android acceptance despite their sandbox
-compile. Latest local check after the thirteenth batch: 78 Python guards and 60 sandbox checks passed. The both-flavor Gradle
+compile. Latest local check after the fourteenth batch: 82 Python guards and 63 sandbox checks passed. The both-flavor Gradle
 host/lint/instrumentation-APK build was attempted but stopped at the Gradle 8.13 distribution download
 (`SSLHandshakeException` from `services.gradle.org`); no Android acceptance result is claimed.

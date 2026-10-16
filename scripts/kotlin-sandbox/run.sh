@@ -40,11 +40,14 @@ fi
 # Converted platform-free and low-platform utilities covered by this check. Every entry is
 # compiled and its Java-visible shapes are asserted in Checks.kt. The task subclasses resolve the
 # real Java settings/crypto helpers through JAVA_SOURCES below. Files that still depend
-# on the full Android/AndroidX graph (dialogs, adapters, preferences, activities) are deliberately
-# absent: see README.md for the list and the reason.
+# on the full Android/AndroidX graph (the larger dialogs, adapters, credential preference,
+# activities) are deliberately absent: see README.md for the list and the reason.
 APP_SOURCES=(
     "$KOTLIN_APP/Preferences/NumberPickerPreference.kt"
+    "$KOTLIN_APP/Preferences/PasswordEncryptedPreference.kt"
     "$KOTLIN_APP/Dialogs/HideableDialog.kt"
+    "$KOTLIN_APP/Dialogs/PasswordEntryDialog.kt"
+    "$KOTLIN_APP/Dialogs/TagsDialog.kt"
     "$KOTLIN_APP/View/TagsAdapter.kt"
     "$KOTLIN_APP/View/ThumbnailSelectionAdapter.kt"
     "$KOTLIN_APP/View/AutoFillable/AutoFillableTextInputEditText.kt"
