@@ -39,7 +39,7 @@
     <string name="about_thumbnails_disclaimer_no1"><b>1.</b> All thumbnails are trademarks of their
         respective owners.</string>
     <string name="about_thumbnails_disclaimer_no2"><b>2.</b> The use of these trademarks does not
-        indicate endorsement of the trademark holder by andOTP, nor vice versa.</string>
+        indicate endorsement of the trademark holder by OfflineOTP, nor vice versa.</string>
     <string name="about_thumbnails_disclaimer_no3"><b>3.</b> Thumbnails should only be used to
         represent the company or product to which they refer.</string>
     <string name="about_thumbnails_disclaimer_no4"><b>4. Please do not use thumbnails for any
@@ -47,7 +47,7 @@
 
     <!-- Support -->
     <string name="about_title_support">Support development</string>
-    <string name="about_desc_support">Find out how you can support the development of andOTP</string>
+    <string name="about_desc_support">Find out how you can support the development of OfflineOTP</string>
 
     <string name="about_title_special_features">Special features</string>
     <string name="about_dialog_special_features">Are you sure you want to enable the special

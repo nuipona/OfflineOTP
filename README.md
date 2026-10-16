@@ -1,6 +1,6 @@
-#  andOTP -  Android OTP Authenticator
+# OfflineOTP - Android OTP Authenticator
 
-![andOTP](./assets/logo.png)
+![OfflineOTP](./assets/logo.png)
 
 ## Unmaintained
 
@@ -8,7 +8,7 @@
 
 ## Intro
 
-andOTP is a two-factor authentication app for Android 9.0+.
+OfflineOTP is a two-factor authentication app for Android 9.0+.
 
 It implements Time-based One-time Passwords (TOTP) and HMAC-Based One-Time Passwords (HOTP).
 Simply scan the QR code and log in with the generated 6-digit code.
@@ -18,8 +18,8 @@ which has sadly been inactive since 2015. By now almost every aspect of the app 
 detached upon [user request](https://github.com/andOTP/andOTP/issues/145). But all credit for the original version and for starting this project still goes to Bruno!
 
 ## Help wanted:
-I currently don't have that much time to spend developing andOTP, so any contributions are always welcome.
-Don't worry, I will still continue to develop andOTP. It will just slow down from the incredible speed I had at the beginning.
+I currently don't have that much time to spend developing OfflineOTP, so any contributions are always welcome.
+Don't worry, I will still continue to develop OfflineOTP. It will just slow down from the incredible speed I had at the beginning.
 
 ## Features:
 
@@ -45,17 +45,17 @@ Don't worry, I will still continue to develop andOTP. It will just slow down fro
 
 ## Backups:
 
-To keep your account information as secure as possible andOTP only stores it in
+To keep your account information as secure as possible OfflineOTP only stores it in
 encrypted data files. A part of the encryption key used for that is stored in the
 Android KeyStore system. The advantage of this approach is that the key is kept
 separate from the apps data and, as a bonus, can be backed by hardware cryptography
 (if your device supports this).
 
 However, due to that separation, backups with 3rd-party apps like Titanium Backup can not
-be used with andOTP. Such apps only backup the encrypted data files and not the encryption
+be used with OfflineOTP. Such apps only backup the encrypted data files and not the encryption
 key, which renders them useless.
 
-**Please only use the internal backup functions provided by andOTP to backup your accounts!**
+**Please only use the internal backup functions provided by OfflineOTP to backup your accounts!**
 **Everything else WILL result in data loss.**
 
 ### Opening the backups on your PC:
@@ -68,7 +68,7 @@ key, which renders them useless.
 
 ### Automatic backups:
 
- * **Signature-authorized automation only:** `org.shadowice.flocke.andotp.broadcast.ENCRYPTED_BACKUP` requires `${applicationId}.permission.CONTROL_VAULT`, requested by a companion app signed with the **same signing identity** as andOTP. An explicit package/component is also required on modern Android, but is not authorization. Independently signed Tasker/PanicKit apps and ordinary `adb shell` commands no longer have access. This compatibility break also applies to panic IPC.
+ * **Signature-authorized automation only:** `org.shadowice.flocke.andotp.broadcast.ENCRYPTED_BACKUP` requires `${applicationId}.permission.CONTROL_VAULT`, requested by a companion app signed with the **same signing identity** as OfflineOTP. An explicit package/component is also required on modern Android, but is not authorization. Independently signed Tasker/PanicKit apps and ordinary `adb shell` commands no longer have access. This compatibility break also applies to panic IPC.
  * Broadcast backups require opt-in, KeyStore database encryption, a configured backup directory and a nonempty encrypted backup password. Duplicate requests are coalesced and rate-limited. Automatic exports use new UUID-named documents to avoid overwriting the last recoverable backup.
  * **Android cloud backup/device transfer are disabled.** Use portable password-encrypted or OpenPGP backups and verify that you can restore them before changing devices, clearing keys or switching signing identities.
 
@@ -78,7 +78,7 @@ and remaining verification requirements.
 
 ## Migration:
 
-Check out [this](https://github.com/andOTP/andOTP/wiki/Migration) wiki page to learn about the different ways to migrate to andOTP from other 2FA apps.
+Check out [this](https://github.com/andOTP/andOTP/wiki/Migration) wiki page to learn about the different ways to migrate to OfflineOTP from other 2FA apps.
 
 **Warning**: Builds signed with different keys are not compatible!
 You will have to uninstall one to install the other, which will delete all your data.
