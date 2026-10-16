@@ -641,9 +641,6 @@ private const val AUTH_ITERATIONS_MIN = 30000
 
 private fun hex(bytes: ByteArray): String = bytes.joinToString("") { String.format("%02x", it.toInt() and 0xFF) }
 
-private fun unhex(text: String): ByteArray =
-        ByteArray(text.length / 2) { ((Character.digit(text[2 * it], 16) shl 4) or Character.digit(text[2 * it + 1], 16)).toByte() }
-
 /** Independent PBKDF2-HMAC-SHA1 derivation used to cross-check the converted credential factory. */
 private fun ownPbkdf2(password: String, salt: ByteArray, iterations: Int, lengthBytes: Int): ByteArray {
     val spec = PBEKeySpec(password.toCharArray(), salt, iterations, lengthBytes * 8)

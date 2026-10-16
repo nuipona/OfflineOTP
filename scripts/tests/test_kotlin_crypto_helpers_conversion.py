@@ -113,8 +113,13 @@ class KotlinCryptoHelpersConversionTest(unittest.TestCase):
         self.assertEqual(sorted(positions), positions, "the staged re-encryption order changed")
         self.assertIn("synchronized(DatabaseHelper.DatabaseFileLock) {", helper)
         self.assertIn("else -> return EncryptionChangeResult.MISSING_NEW_KEY", helper)
-        # The five-argument overload still delegates with a permissive gate.
+        # The five-argument overload still delegates with a permissive gate, and both overloads stay
+        # callable as statics from Java (they resolve to the same forwarder name).
         self.assertIn("tryEncryptionChange(context, oldKey, newType, newKey, callback, BooleanSupplier { true })", helper)
+        self.assertIn("fun tryEncryptionChange(context: Context, oldKey: SecretKey?, newType: Constants.EncryptionType, newKey: ByteArray?,\n"
+                      "                            callback: EncryptionChangeCallback?, permitted: BooleanSupplier): EncryptionChangeResult {",
+                      helper)
+        self.assertEqual(2, helper.count("fun tryEncryptionChange("), "the overload count changed")
 
     def test_derivation_bounds_split_and_framing_stay_exact(self):
         helper = self.read("Utilities/EncryptionHelper.kt")
@@ -140,6 +145,14 @@ class KotlinCryptoHelpersConversionTest(unittest.TestCase):
         # The wrapped-key loader always reads the stored blob back, even right after generating it.
         self.assertIn("Even if we just generated the key, always read it back to ensure we", helper)
         self.assertIn("return wrapper.unwrap(wrapped)", helper)
+        # ... and it still mints and stores a key when the file is missing: the sandbox cannot run
+        # this path (FileHelper/AtomicFile are Java), so a dropped generation or write would
+        # otherwise pass unnoticed.
+        self.assertIn("if (!keyFile.exists()) {", helper)
+        self.assertIn("val raw = generateRandom(Constants.ENCRYPTION_KEY_LENGTH)", helper)
+        self.assertIn('val key = SecretKeySpec(raw, "AES")', helper)
+        self.assertIn("FileHelper.writeBytesToFile(keyFile, wrapped)", helper)
+        self.assertNotIn("if (false) {", helper)
 
     def test_random_backup_iterations_keep_the_offset_the_sandbox_check_caught(self):
         helper = self.read("Utilities/EncryptionHelper.kt")
@@ -234,6 +247,15 @@ class KotlinCryptoHelpersConversionTest(unittest.TestCase):
                      "KeyStoreHelper.loadEncryptionKeyFromKeyStore(", "KeyStoreHelper.wipeKeys(",
                      "EncryptionHelper.loadOrGenerateWrappedKey("):
             self.assertIn(used, interop)
+        # The legacy key is a plain SHA-256 digest (32 bytes), not the 16-byte ENCRYPTION_KEY_LENGTH
+        # of the KeyStore wrapping path. A device-only assertion cannot be run here, so pin the one
+        # value that was wrong once; the 32-byte digest itself is executed by the sandbox checks.
+        self.assertIn('MessageDigest.getInstance("SHA-256")', self.read("Utilities/EncryptionHelper.kt"))
+        self.assertIn('assertEquals(32, EncryptionHelper.generateSymmetricKeyFromPassword("synthetic").getEncoded().length)',
+                      interop)
+        self.assertNotIn("assertEquals(16, EncryptionHelper.generateSymmetricKeyFromPassword", interop)
+        self.assertEqual(1, interop.count("generateSymmetricKeyFromPassword(\"synthetic\")"),
+                         "the legacy key length must be asserted exactly once")
 
     def test_sandbox_check_literals_stay_equal_to_the_java_constants(self):
         constants = (JAVA / "Utilities/Constants.java").read_text()

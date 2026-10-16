@@ -693,18 +693,24 @@ that matter:
   to `DECRYPTION_FAILED`, a missing/oversized new key to `MISSING_NEW_KEY`, a failed write to
   `CHANGE_FAILURE`, and `SUCCESS` is only reported after the staged file-plus-metadata commit has
   been recovered.
-- **Null safety, not behavior changes**, is the documented delta: the `PBKDF2Credentials` holder
+- **Null safety, not behavior changes**, is the documented delta. The `PBKDF2Credentials` holder
   stays `open` with public mutable `@JvmField byte[]` fields for `password` and `key`, but the fields
-  are non-null and start as empty arrays instead of `null`; `oldKey`, `newKey`, `callback`, both
-  derived-credential passwords/salts and the framed ciphertext stay nullable exactly where the Java
-  accepted `null`; `createEncryptionKey`, the two lookups and the `EncryptionChangeCallback`
-  parameter are `SecretKey?`/`KeyPair?` only because the Java returned `null` on failure. The
-  callback parameter itself is non-null (it is only ever invoked with a key), so the Java
-  `ChangeEncryptionTask` override tightened from `SecretKey?` to `SecretKey` while its `Result` field
-  stayed nullable, and the non-framed byte-array parameters of the `encrypt`/`decrypt` overloads are
-  non-null so a Java `null` fails at the Kotlin boundary instead of inside the provider. The framed
-  `decrypt(SecretKey, byte[]?)` keeps the Java `IllegalArgumentException` for `null` and every frame
-  shorter than nonce plus tag.
+  are non-null and start as empty arrays instead of `null`. Parameters and results are nullable
+  exactly where the Java accepted or returned `null`: `oldKey`, `newKey`, `callback`, both derived
+  credential passwords/salts, the framed ciphertext (`decrypt(SecretKey, byte[]?)` keeps the Java
+  `IllegalArgumentException` for `null` and every frame shorter than nonce plus tag), and the
+  `SecretKey?`/`KeyPair?` results of `createEncryptionKey`, `loadEncryptionKeyFromKeyStore` and the
+  two lookups. The one deliberate tightening is the callback parameter: `onSuccessfulEncryptionChange`
+  takes a non-null `newEncryptionKey`, because `tryEncryptionChange` returns `MISSING_NEW_KEY`
+  before it can invoke the callback. Java implementations compile unchanged (the only one,
+  `SettingsActivity`, already null-checked), `ChangeEncryptionTask`'s override dropped the `?`, and
+  its `Result.newEncryptionKey` **field** stayed nullable for the Java callers that inspect it. The
+  non-framed byte-array parameters of the `encrypt`/`decrypt` overloads are non-null as well, so a
+  Java `null` fails at the Kotlin boundary (`NullPointerException` from the generated parameter
+  check) instead of inside the JCA provider. No Java call site passes a value that can be `null`:
+  `MainActivity.updateEncryption` guards `newKey != null && newKey.length > 0` before calling
+  `generateSymmetricKey`, and every other caller either checks for `null` or uses the converted
+  Kotlin code, where the compiler enforces it.
 - **`KeyStoreHelper` keeps the same alias, creation and failure policy**: the RSA wrapping key is
   created under the unchanged alias with `PURPOSE_ENCRYPT`/`PURPOSE_DECRYPT`,
   `ENCRYPTION_PADDING_RSA_PKCS1`, the `CN=<alias>` subject, serial `1` and a 100-year validity

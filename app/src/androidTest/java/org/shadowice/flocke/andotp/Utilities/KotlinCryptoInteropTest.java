@@ -26,9 +26,11 @@ import static org.junit.Assert.*;
  * sites. The desktop sandbox executes the platform-free crypto (PBKDF2 split, RSA helpers, the
  * pre-provider framing guard) and reflects KeyStoreHelper, but it has no AndroidKeyStore and its
  * JDK rejects the unchanged Android GCM nonce type, so the keystore round trip and the AES-GCM
- * provider path need a device. This test uses a dedicated synthetic alias and the app's private
- * files directory, and it wipes both again afterwards; it never touches the vault or a real
- * account. Run on disposable emulators.
+ * provider path need a device. The wrap/unwrap round trip uses a dedicated synthetic alias plus its
+ * own key file in the app's private files directory; the test also drives the production key entry
+ * points (`createEncryptionKey`, `loadEncryptionKeyFromKeyStore`) and `wipeKeys`, so it deletes the
+ * app's stored vault key and both AndroidKeyStore aliases. Run it on disposable emulators only, and
+ * never with data you care about. It never opens the vault.
  */
 @RunWith(AndroidJUnit4.class)
 public class KotlinCryptoInteropTest {
@@ -75,7 +77,9 @@ public class KotlinCryptoInteropTest {
         // The explicit-nonce overload the instrumentation vectors use.
         byte[] iv = EncryptionHelper.generateRandom(Constants.ENCRYPTION_IV_LENGTH);
         assertEquals(Constants.ENCRYPTION_IV_LENGTH, iv.length);
-        assertEquals(16, EncryptionHelper.generateSymmetricKeyFromPassword("synthetic").getEncoded().length);
+        // The legacy backup key is a plain SHA-256 digest, so it is 32 bytes (not the 16-byte
+        // ENCRYPTION_KEY_LENGTH of the KeyStore wrapping path).
+        assertEquals(32, EncryptionHelper.generateSymmetricKeyFromPassword("synthetic").getEncoded().length);
         SecretKey derivedBackupKey = EncryptionHelper.generateSymmetricKeyPBKDF2("synthetic-password", 1000,
                 EncryptionHelper.generateRandom(Constants.PBKDF2_SALT_LENGTH));
         byte[] explicit = EncryptionHelper.encrypt(derivedBackupKey, new IvParameterSpec(iv), plain);
