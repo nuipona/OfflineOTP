@@ -1,0 +1,53 @@
+/*
+ * Copyright (C) 2018 Jakob Nixdorf
+ * Copyright (C) 2018 Richy HBM
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ */
+
+package org.shadowice.flocke.andotp.Utilities
+
+import android.app.backup.BackupAgentHelper
+import android.app.backup.BackupDataInput
+import android.app.backup.BackupDataOutput
+import android.app.backup.FullBackupDataOutput
+import android.os.ParcelFileDescriptor
+
+import java.io.IOException
+
+/**
+ * Legacy class retained to refuse old platform backup/restore callbacks. Not registered.
+ *
+ * Converted from the Java class of the same name. The class stays extendable and the restore stays
+ * refused with the same message. The callback parameters stay nullable: the platform passes them
+ * without annotations and the Java version accepted nulls, so the refusal is not preceded by a
+ * Kotlin null check.
+ */
+open class BackupAgent : BackupAgentHelper() {
+    override fun onCreate() {}
+
+    override fun onBackup(oldState: ParcelFileDescriptor?, data: BackupDataOutput?, newState: ParcelFileDescriptor?) {}
+
+    override fun onFullBackup(data: FullBackupDataOutput?) {}
+
+    @Throws(IOException::class)
+    override fun onRestore(data: BackupDataInput?, version: Int, state: ParcelFileDescriptor?) {
+        throw IOException("Platform restore is disabled; use portable encrypted backups")
+    }
+}

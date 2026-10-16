@@ -124,6 +124,26 @@ encrypt/decrypt round trip, restored layout text, PASSWORD/PIN input classes and
 These still require the API 28/36 instrumentation matrix; the desktop sandbox uses recording widgets
 and cannot validate real window, IME, Material or keystore behavior.
 
+`KotlinBackupComponentsInteropTest` drives the converted backup components on a real device: the
+encrypted backup broadcast receiver with a keystore-backed password queues the WorkManager job
+under its unique name, a disabled broadcast and a broadcast for another action queue nothing, and
+the queued work really runs the worker and reaches a terminal state. It stores a synthetic
+password in the app's `AndroidKeyStore` and clears the vault and the keystore afterwards, so run
+it only on disposable emulators. The desktop sandbox can only check the receiver's action gate and
+the worker's early exits; the failure notifications need the notification channels and the happy
+path needs the keystore.
+
+`KotlinSmallActivitiesInteropTest` drives the converted small activities on a real device: the
+panic responder is started for real with the PanicKit action, so the destructive path is observed
+on the platform — a foreign action wipes nothing, the "accounts" response deletes the vault file,
+disables the automatic backups and leaves no pending encrypted backup, and the "settings" response
+clears the settings. The QR scanner activity is only checked for its shape (it still extends the
+scanner library's activity, its content hook is still protected and declared in the converted
+class, and the manifest still declares it as not exported), because starting it needs a camera the
+emulators do not have. The test wipes the vault of the device it runs on, so run it only on
+disposable emulators. The desktop sandbox executes the panic decision and the window handling
+against stand-ins, but it cannot start an activity, cannot apply a real theme and has no camera.
+
 The new guards impose a **16 MiB document limit** and a **1,000,000-iteration backup-read ceiling**. The current writer's 140,000–160,000 range is unchanged; valid historical counts below that range remain readable. Backups above either bound now fail closed. These are explicit compatibility/security policy limits; review them rather than silently increasing them after a failing test. Decoded QR images now have dimension/pixel bounds checked before pixel-buffer allocation; account/URI/JSON limits are documented in the hardening notes.
 
 Fixtures are synthetic, contain no user accounts, and were generated with Python `cryptography==44.0.3`, not the app's crypto implementation. Fixed salt/nonces are intentionally confined to fixtures. Optional regeneration:

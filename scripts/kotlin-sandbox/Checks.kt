@@ -80,9 +80,17 @@ import org.shadowice.flocke.andotp.Preferences.PasswordEncryptedPreference
 import org.shadowice.flocke.andotp.Dialogs.HideableDialog
 import org.shadowice.flocke.andotp.Dialogs.PasswordEntryDialog
 import org.shadowice.flocke.andotp.Dialogs.TagsDialog
+import org.shadowice.flocke.andotp.Activities.BaseActivity
+import org.shadowice.flocke.andotp.Activities.PanicResponderActivity
+import org.shadowice.flocke.andotp.Activities.SecureCaptureActivity
+import org.shadowice.flocke.andotp.Receivers.BackupBroadcastReceiver
+import org.shadowice.flocke.andotp.Receivers.EncryptedBackupBroadcastReceiver
+import org.shadowice.flocke.andotp.Tasks.EncryptedBackupWorker
+import org.shadowice.flocke.andotp.Utilities.BackupAgent
 import org.shadowice.flocke.andotp.R
 
 import android.app.AlertDialog
+import android.app.NotificationManager
 import android.content.Context
 import android.content.DialogInterface
 import android.content.Intent
@@ -105,16 +113,23 @@ import android.text.method.TransformationMethod
 import android.util.Base64
 import android.util.DisplayMetrics
 import android.view.KeyEvent
+import android.view.MotionEvent
 import android.view.View
+import android.view.WindowInsets
+import android.view.WindowInsetsController
+import android.view.WindowManager
 import android.view.inputmethod.EditorInfo
 import android.view.inputmethod.InputMethodManager
 import androidx.appcompat.app.AppCompatDialog
+import androidx.work.WorkManager
+import androidx.work.WorkerParameters
 import androidx.recyclerview.widget.GridLayoutManager
 import androidx.recyclerview.widget.ItemTouchHelper
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.google.android.material.textfield.TextInputEditText
 import com.google.android.material.textfield.TextInputLayout
+import com.journeyapps.barcodescanner.DecoratedBarcodeView
 import com.google.zxing.BarcodeFormat
 import com.google.zxing.ChecksumException
 import com.google.zxing.DecodeHintType
@@ -853,7 +868,7 @@ private class SettingsResources(
 }
 
 /** Context whose resource strings are the preference keys themselves, plus the default values above. */
-private class SettingsContext : Context() {
+private open class SettingsContext : Context() {
     val consulted = ArrayList<Int>()
     val config = Configuration()
     private val settingsResources = SettingsResources(consulted, config)
@@ -866,8 +881,103 @@ private class SettingsContext : Context() {
     }
 }
 
+/**
+ * Context for the converted components: it reads the settings like [SettingsContext] and hands
+ * out a recording notification manager, so a check can see which message was posted.
+ */
+private class ComponentContext : SettingsContext() {
+    /** The notifications that were posted through this context. */
+    val notifications = NotificationManager()
+
+    override fun getSystemService(name: String): Any? =
+        if (name == Context.NOTIFICATION_SERVICE) notifications else null
+}
+
+/**
+ * The converted base activity, driven by the checks: it reads the settings like
+ * [SettingsContext] and records what the base class delivered.
+ */
+private class ScreenActivity : BaseActivity() {
+    /** How often the vault lock was delivered to the activity. */
+    var lockEvents = 0
+
+    /** How often the screen-off callback was delivered. */
+    var screenOffEvents = 0
+
+    /** Whether the activity requires an open vault session. */
+    var requiresSession: Boolean = false
+
+    /** Whether the activity is closed when the screen turns off. */
+    var destroyOnScreenOff: Boolean = true
+
+    /** The settings of the activity are read from the in-memory store. */
+    override fun getString(resId: Int): String = settingsKey(resId)
+
+    fun create() {
+        onCreate(null)
+    }
+
+    fun resume() {
+        onResume()
+    }
+
+    fun destroy() {
+        onDestroy()
+    }
+
+    /** Runs the deliveries that were posted to the UI thread. */
+    fun drainUiThread() {
+        while (uiThreadDeliveries.isNotEmpty()) uiThreadDeliveries.removeAt(0).run()
+    }
+
+    override fun requiresVaultSession(): Boolean = requiresSession
+
+    override fun onVaultLocked() {
+        lockEvents++
+    }
+
+    override fun shouldDestroyOnScreenOff(): Boolean = destroyOnScreenOff
+}
+
 /** The preference key the fake context maps a resource id to. */
 private fun settingsKey(resId: Int): String = "key:" + resId
+
+/**
+ * The converted panic responder, driven by the checks: it answers with a controllable intent and
+ * reads the settings like [SettingsContext].
+ */
+private class PanicActivity : PanicResponderActivity() {
+    /** The intent the activity was started with. */
+    var launchIntent: Intent? = null
+
+    override fun getIntent(): Intent? = launchIntent
+
+    override fun getString(resId: Int): String = settingsKey(resId)
+
+    fun create() {
+        onCreate(null)
+    }
+}
+
+/**
+ * The converted QR scanner activity, driven by the checks: it reads the settings like
+ * [SettingsContext] and hands out its window, so the checks can see the flags.
+ */
+private class ScannerActivity : SecureCaptureActivity() {
+    /** The resources the activity reads; the checks read the applied locale from them. */
+    val config = Configuration()
+
+    override fun getString(resId: Int): String = settingsKey(resId)
+
+    override val resources: Resources get() = ScannerResources(config)
+
+    fun initialize(): DecoratedBarcodeView = initializeContent()
+}
+
+/** The resources of the scanner activity: they only carry the configuration the activity updates. */
+private class ScannerResources(private val config: Configuration) : Resources() {
+    override val configuration: Configuration get() = config
+}
 
 /**
  * Runs the block with the vault transaction poisoned. The converted construction runs
@@ -877,17 +987,20 @@ private fun settingsKey(resId: Int): String = "key:" + resId
 private fun <T> withPoisonedTransaction(block: () -> T): T {
     val poison = DatabaseHelper::class.java.getDeclaredField("transactionPoisoned")
     poison.isAccessible = true
+    // The flag is restored, not cleared: a nested block (a settings fixture inside a component
+    // check) must not un-poison the block around it.
+    val previous = poison.getBoolean(null)
     poison.setBoolean(null, true)
     try {
         return block()
     } finally {
-        poison.setBoolean(null, false)
+        poison.setBoolean(null, previous)
     }
 }
 
 /** One clean in-memory preference store plus the `Settings` instance reading and writing it. */
-private class SettingsFixture {
-    val context = SettingsContext()
+private class SettingsFixture(fixtureContext: SettingsContext = SettingsContext()) {
+    val context: SettingsContext = fixtureContext
     val settings: Settings
     val store: FakeSharedPreferences
 
@@ -3925,6 +4038,281 @@ fun main() {
         fixture.settings.setAndroidBackupServiceEnabled(true)
         expect(!fixture.store.getBoolean(settingsKey(R.string.settings_key_enable_android_backup_service), true),
                 { "the setter must keep writing false" })
+    }
+
+    check("the backup broadcast receiver ignores every broadcast that is not its own") {
+        // The action gate is the first thing the receiver does: another action is not ours and
+        // must not reach the settings, the notifications or the work manager. The failure paths
+        // behind it need the Java-only Constants enum and the AndroidKeyStore, so they are
+        // covered by the source guards and the device test instead.
+        val context = ComponentContext()
+        val work = WorkManager.getInstance(context)
+        work.reset()
+        val receiver = EncryptedBackupBroadcastReceiver()
+        val foreign = Intent()
+        foreign.intentAction = "org.shadowice.flocke.andotp.broadcast.SOMETHING_ELSE"
+
+        receiver.onReceive(context, null)
+        receiver.onReceive(context, foreign)
+        expect(context.notifications.posted.isEmpty(),
+                { "an unrelated broadcast notified: ${context.notifications.posted}" })
+        expect(work.enqueued.isEmpty(), { "an unrelated broadcast queued work" })
+    }
+
+    check("the backup worker fails early when the broadcast is disabled or the work is stopped") {
+      // The worker builds its own Settings, whose construction recovers a pending vault file.
+      // That recovery needs the Java-only FileHelper, which has no class file here.
+      withPoisonedTransaction {
+        val context = ComponentContext()
+        val fixture = SettingsFixture(context)
+        val worker = EncryptedBackupWorker(context, WorkerParameters())
+
+        // The broadcast opt-in is missing: the work fails without a notification.
+        expect(worker.doWork().kind == "failure", { "the disabled broadcast did not fail the work" })
+        expect(context.notifications.posted.isEmpty(),
+                { "the disabled broadcast notified: ${context.notifications.posted}" })
+
+        // Stopped work fails the same way, before any settings are read.
+        fixture.store.edit().putStringSet(settingsKey(R.string.settings_key_backup_broadcasts), setOf("encrypted")).commit()
+        worker.stopped = true
+        expect(worker.doWork().kind == "failure", { "the stopped work did not fail" })
+        expect(context.notifications.posted.isEmpty(),
+                { "the stopped work notified: ${context.notifications.posted}" })
+      }
+    }
+
+    check("the legacy backup agent still refuses the platform restore") {
+        val agent = BackupAgent()
+        agent.onCreate()
+        agent.onBackup(null, null, null)
+        agent.onFullBackup(null)
+        // The refusal must not be preceded by a Kotlin null check on the platform's arguments.
+        val failure = try {
+            agent.onRestore(null, 1, null)
+            null
+        } catch (error: IOException) {
+            error
+        }
+        expect(failure != null, { "the platform restore was not refused" })
+        expect(failure!!.message == "Platform restore is disabled; use portable encrypted backups",
+                { "wrong message: ${failure!!.message}" })
+    }
+
+    check("the converted backup components keep their Java-visible API shapes") {
+        // The two constants stay public static final fields: the panic responder and the settings
+        // screen cancel the queued work by its name.
+        for ((name, value) in listOf("UNIQUE_WORK_NAME" to "encrypted_backup",
+                "ACTION" to "org.shadowice.flocke.andotp.broadcast.ENCRYPTED_BACKUP")) {
+            val field = EncryptedBackupBroadcastReceiver::class.java.getDeclaredField(name)
+            expect(Modifier.isPublic(field.modifiers) && Modifier.isStatic(field.modifiers)
+                    && Modifier.isFinal(field.modifiers), { "$name must stay a public static final field" })
+            expect(field.type == String::class.java, { "$name must stay a String" })
+            expect(field.get(null) == value, { "$name changed: ${field.get(null)}" })
+        }
+
+        // The receiver stays extendable, its base class stays abstract and the helper stays protected.
+        expect(!Modifier.isFinal(EncryptedBackupBroadcastReceiver::class.java.modifiers),
+                { "the receiver must stay extendable" })
+        expect(Modifier.isAbstract(BackupBroadcastReceiver::class.java.modifiers),
+                { "the receiver base class must stay abstract" })
+        val helper = BackupBroadcastReceiver::class.java.getDeclaredMethod("canSaveBackup", Context::class.java)
+        expect(Modifier.isProtected(helper.modifiers) && !Modifier.isStatic(helper.modifiers),
+                { "canSaveBackup must stay a protected instance method" })
+        expect(helper.returnType == Boolean::class.javaPrimitiveType, { "canSaveBackup must keep returning a boolean" })
+
+        // The worker keeps its WorkManager constructor and its result type.
+        val worker = EncryptedBackupWorker::class.java
+        expect(!Modifier.isFinal(worker.modifiers), { "the worker must stay extendable" })
+        val constructor = worker.getDeclaredConstructor(Context::class.java, WorkerParameters::class.java)
+        expect(Modifier.isPublic(constructor.modifiers), { "the worker constructor must stay public" })
+        val doWork = worker.getDeclaredMethod("doWork")
+        expect(doWork.returnType.name == "androidx.work.ListenableWorker\$Result",
+                { "the worker must keep returning the WorkManager result: ${doWork.returnType.name}" })
+
+        // The legacy agent keeps its class shape and the refused callback.
+        expect(!Modifier.isFinal(BackupAgent::class.java.modifiers), { "the backup agent must stay extendable" })
+        val restore = BackupAgent::class.java.getDeclaredMethod("onRestore",
+                android.app.backup.BackupDataInput::class.java, Int::class.javaPrimitiveType,
+                android.os.ParcelFileDescriptor::class.java)
+        expect(Modifier.isPublic(restore.modifiers), { "onRestore must stay public" })
+        expect(restore.exceptionTypes.toList() == listOf(IOException::class.java),
+                { "onRestore must keep declaring IOException" })
+    }
+
+    check("the base activity locks the vault when the screen turns off") {
+      // The activity builds its own Settings, whose construction recovers a pending vault file.
+      // That recovery needs the Java-only FileHelper, which has no class file here.
+      withPoisonedTransaction {
+        val activity = ScreenActivity()
+        activity.create()
+
+        // The screen-off receiver is registered with the platform's action.
+        expect(activity.registeredReceivers.size == 1, { "the screen-off receiver was not registered" })
+        val filter = activity.registeredReceivers[0].second
+        expect(filter.action == Intent.ACTION_SCREEN_OFF, { "wrong filter: ${filter.action}" })
+        val receiver = activity.registeredReceivers[0].first
+
+        // Another action is not ours: nothing happens.
+        receiver.onReceive(activity, Intent())
+        expect(activity.finishes == 0, { "another broadcast finished the activity" })
+        expect(activity.screenOffEvents == 0, { "another broadcast notified the callback" })
+
+        // The screen-off broadcast notifies the callback, locks the vault and finishes.
+        activity.setBroadcastCallback { activity.screenOffEvents++ }
+        val screenOff = Intent()
+        screenOff.intentAction = Intent.ACTION_SCREEN_OFF
+        receiver.onReceive(activity, screenOff)
+        expect(activity.screenOffEvents == 1, { "the screen-off callback was not delivered" })
+        expect(activity.finishes == 1, { "the activity was not finished: ${activity.finishes}" })
+
+        // The lock is delivered to the activity on the UI thread.
+        activity.drainUiThread()
+        expect(activity.lockEvents == 1, { "the vault lock was not delivered: ${activity.lockEvents}" })
+
+        // The receiver is unregistered when the activity is destroyed.
+        activity.destroy()
+        expect(activity.registeredReceivers.isEmpty(), { "the screen-off receiver was not unregistered" })
+      }
+    }
+
+    check("the base activity rejects the touches of an obscured window") {
+        val activity = ScreenActivity()
+
+        val obscured = MotionEvent()
+        obscured.eventFlags = MotionEvent.FLAG_WINDOW_IS_OBSCURED
+        expect(!activity.dispatchTouchEvent(obscured), { "an obscured touch was accepted" })
+        expect(activity.dispatchedTouches.isEmpty(), { "an obscured touch reached the activity" })
+
+        val normal = MotionEvent()
+        expect(activity.dispatchTouchEvent(normal), { "a normal touch was rejected" })
+        expect(activity.dispatchedTouches.size == 1, { "the normal touch was not dispatched" })
+
+        // From Android 10 on, a partially obscured window is refused as well.
+        val sdk = Build.VERSION.SDK_INT
+        try {
+            Build.VERSION.SDK_INT = Build.VERSION_CODES.Q
+            val partial = MotionEvent()
+            partial.eventFlags = MotionEvent.FLAG_WINDOW_IS_PARTIALLY_OBSCURED
+            expect(!activity.dispatchTouchEvent(partial), { "a partially obscured touch was accepted" })
+            expect(activity.dispatchedTouches.size == 1, { "the partially obscured touch reached the activity" })
+        } finally {
+            Build.VERSION.SDK_INT = sdk
+        }
+    }
+
+    check("the panic responder wipes only what the panic action asks for") {
+        PreferenceManager.reset()
+        val activity = PanicActivity()
+        val work = WorkManager.getInstance(activity)
+        work.reset()
+        val store = PreferenceManager.getDefaultSharedPreferences(activity) as FakeSharedPreferences
+
+        try {
+            // The activity builds its own Settings, whose construction recovers a pending vault
+            // file. That recovery needs the Java-only FileHelper, which has no class file here.
+            withPoisonedTransaction {
+            // A foreign action changes nothing at all.
+            val foreign = Intent()
+            foreign.intentAction = "info.guardianproject.panic.action.OTHER"
+            activity.launchIntent = foreign
+            activity.create()
+            expect(activity.removedTasks == 1, { "the task was not removed" })
+            expect(work.cancelled.isEmpty(), { "a foreign action cancelled the backup work" })
+            expect(store.getString(settingsKey(R.string.settings_key_auto_backup_password_enc), null) == null,
+                    { "a foreign action disabled the automatic backups" })
+            expect(VaultSession.getKey() == null, { "a foreign action opened the vault" })
+
+            // The panic action without a configured response only removes the task.
+            val trigger = Intent()
+            trigger.intentAction = PanicResponderActivity.PANIC_TRIGGER_ACTION
+            activity.launchIntent = trigger
+            activity.create()
+            expect(activity.removedTasks == 2, { "the task was not removed" })
+            expect(work.cancelled.isEmpty(), { "the panic action cancelled the backup work without a response" })
+            expect(store.getString(settingsKey(R.string.settings_key_auto_backup_password_enc), null) == null,
+                    { "the panic action disabled the automatic backups without a response" })
+
+            // A configured "settings" response disables the automatic backups, cancels the pending
+            // encrypted backup and locks the vault.
+            store.edit().putStringSet(settingsKey(R.string.settings_key_panic), setOf("settings")).commit()
+            work.reset()
+            VaultSession.open(SecretKeySpec(ByteArray(32), "AES"))
+            expect(VaultSession.getKey() != null, { "the vault session could not be opened" })
+            activity.create()
+            expect(activity.removedTasks == 3, { "the task was not removed" })
+            expect(work.cancelled == listOf(EncryptedBackupBroadcastReceiver.UNIQUE_WORK_NAME),
+                    { "the pending encrypted backup was not cancelled: ${work.cancelled}" })
+            expect(store.getString(settingsKey(R.string.settings_key_auto_backup_password_enc), "") == "off",
+                    { "the automatic backups were not disabled" })
+            expect(store.stringSet(settingsKey(R.string.settings_key_backup_broadcasts)).isEmpty(),
+                    { "the backup broadcasts were not disabled" })
+            expect(VaultSession.getKey() == null, { "the vault was not locked" })
+
+            // A configured "accounts" response reaches the wipe of the database and the keys. The
+            // wipe itself needs the Java-only file helper, which has no class file here, so the
+            // check can only see that the wipe was reached.
+            store.edit().putStringSet(settingsKey(R.string.settings_key_panic), setOf("accounts")).commit()
+            work.reset()
+            expectThrows(NoClassDefFoundError::class.java) { activity.create() }
+            expect(work.cancelled == listOf(EncryptedBackupBroadcastReceiver.UNIQUE_WORK_NAME),
+                    { "the pending encrypted backup was not cancelled: ${work.cancelled}" })
+            val state = VaultSession.snapshot()
+            expect(state is SessionState.Locked && state.reason == SessionLockReason.RESET,
+                    { "the database wipe was not reached: $state" })
+            }
+        } finally {
+            // The session is global; no check may leave an open vault behind.
+            VaultSession.lock(SessionLockReason.RESET)
+        }
+    }
+
+    check("the QR scanner activity honours the theme, the language and the screenshot setting") {
+        PreferenceManager.reset()
+        val activity = ScannerActivity()
+        val store = PreferenceManager.getDefaultSharedPreferences(activity) as FakeSharedPreferences
+        store.edit().putString(settingsKey(R.string.settings_key_lang), "de_DE").commit()
+
+        val sdk = Build.VERSION.SDK_INT
+        try {
+            // Below Android 11 the system bars are hidden with the fullscreen flag.
+            Build.VERSION.SDK_INT = Build.VERSION_CODES.Q
+            withPoisonedTransaction { activity.initialize() }
+
+            expect(activity.appliedTheme == R.style.AppTheme_NoActionBar,
+                    { "the wrong theme was applied: ${activity.appliedTheme}" })
+            expect(activity.config.currentLocale == Locale("de", "DE"),
+                    { "the wrong language was applied: ${activity.config.currentLocale}" })
+
+            val flags = activity.getWindow().flagCalls.map { it.first }
+            expect(flags.contains(WindowManager.LayoutParams.FLAG_HARDWARE_ACCELERATED),
+                    { "the hardware acceleration was not requested" })
+            expect(flags.contains(WindowManager.LayoutParams.FLAG_SECURE),
+                    { "the screenshots were not blocked" })
+            expect(flags.contains(WindowManager.LayoutParams.FLAG_FULLSCREEN),
+                    { "the system bars were not hidden" })
+
+            // With the screenshots enabled the window is not made secure.
+            store.edit().putBoolean(settingsKey(R.string.settings_key_enable_screenshot), true).commit()
+            val second = ScannerActivity()
+            withPoisonedTransaction { second.initialize() }
+            expect(!second.getWindow().flagCalls.map { it.first }.contains(WindowManager.LayoutParams.FLAG_SECURE),
+                    { "the window was made secure although the screenshots are enabled" })
+
+            // From Android 11 on the system bars are hidden with the insets controller.
+            Build.VERSION.SDK_INT = Build.VERSION_CODES.R
+            val third = ScannerActivity()
+            val controller = WindowInsetsController()
+            third.getWindow().windowInsetsController = controller
+            withPoisonedTransaction { third.initialize() }
+            expect(controller.hiddenTypes == (WindowInsets.Type.statusBars() or WindowInsets.Type.navigationBars()),
+                    { "the system bars were not hidden: ${controller.hiddenTypes}" })
+            expect(controller.behavior == WindowInsetsController.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE,
+                    { "the wrong system bar behaviour was requested: ${controller.behavior}" })
+            expect(!third.getWindow().flagCalls.map { it.first }.contains(WindowManager.LayoutParams.FLAG_FULLSCREEN),
+                    { "the fullscreen flag was set although the insets controller was used" })
+        } finally {
+            Build.VERSION.SDK_INT = sdk
+        }
     }
 
     if (failures == 0) {

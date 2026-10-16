@@ -22,6 +22,21 @@ open class Context {
      */
     open fun getString(resId: Int): String = "stub"
 
+    /**
+     * The theme that was applied to this context. The platform keeps the theme in the base
+     * context; here the applied id is only recorded, no theme is resolved.
+     */
+    var appliedTheme: Int = 0
+        private set
+
+    /** Records the applied theme; the platform resolves and stores the theme. */
+    open fun setTheme(theme: Int) {
+        appliedTheme = theme
+    }
+
+    /** The base context; the platform returns the context the application context was made from. */
+    open fun getBaseContext(): Context = this
+
     /** Format overload; the result stays a recognisable placeholder, arguments are not applied. */
     fun getString(resId: Int, vararg formatArgs: Any?): String = "text:$resId"
     /** Resolves to a recognisable placeholder so the checks can tell which resource was read. */
@@ -104,8 +119,37 @@ class ClipboardManager {
     fun setPrimaryClip(clip: ClipData) {}
 }
 
-/** Field/type-only stand-in; the checked code never touches Intent internals. */
-class Intent
+/**
+ * Field/type-only stand-in; the checked code only reads the action of an intent.
+ *
+ * `getAction()` is a method (not a property) on purpose: the platform class is a Java class, so
+ * the converted receivers call `intent.getAction()` and that call must resolve here as well.
+ */
+open class Intent {
+    /** The action the stand-in was created with. */
+    var intentAction: String? = null
+
+    /** The action of the intent, or null. */
+    open fun getAction(): String? = intentAction
+
+    companion object {
+        const val ACTION_SCREEN_OFF = "android.intent.action.SCREEN_OFF"
+    }
+}
+
+/**
+ * Stand-in for the platform broadcast receiver base class. Nothing is dispatched here; the
+ * converted receivers are called directly by the checks.
+ */
+abstract class BroadcastReceiver {
+    abstract fun onReceive(context: Context, intent: Intent?)
+}
+
+/** Field/type-only stand-in for the platform intent filter. */
+class IntentFilter(action: String? = null) {
+    /** The action the filter was created with. */
+    val action: String? = action
+}
 
 /** The nested listener mirrors the platform nesting; `fun interface` keeps SAM conversion working. */
 interface DialogInterface {

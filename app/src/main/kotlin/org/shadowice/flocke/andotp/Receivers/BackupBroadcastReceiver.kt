@@ -21,22 +21,24 @@
  * SOFTWARE.
  */
 
-package org.shadowice.flocke.andotp.Utilities;
+package org.shadowice.flocke.andotp.Receivers
 
-import android.app.backup.BackupAgentHelper;
-import android.app.backup.BackupDataInput;
-import android.app.backup.BackupDataOutput;
-import android.app.backup.FullBackupDataOutput;
-import android.os.ParcelFileDescriptor;
-import java.io.IOException;
+import android.content.BroadcastReceiver
+import android.content.Context
 
-/** Legacy class retained to refuse old platform backup/restore callbacks. Not registered. */
-public class BackupAgent extends BackupAgentHelper {
-    @Override public void onCreate() { }
-    @Override public void onBackup(ParcelFileDescriptor oldState, BackupDataOutput data,
-                                    ParcelFileDescriptor newState) { }
-    @Override public void onFullBackup(FullBackupDataOutput data) { }
-    @Override public void onRestore(BackupDataInput data, int version, ParcelFileDescriptor state) throws IOException {
-        throw new IOException("Platform restore is disabled; use portable encrypted backups");
+import org.shadowice.flocke.andotp.Utilities.Settings
+
+/**
+ * Base class for the receivers that trigger a backup from an external broadcast.
+ *
+ * Converted from the Java class of the same name. It stays abstract and extendable, and the
+ * protected helper keeps its name, parameter and return type, so the Java/Kotlin subclasses
+ * call it unchanged.
+ */
+abstract class BackupBroadcastReceiver : BroadcastReceiver() {
+    /** True if a backup location is configured. */
+    protected fun canSaveBackup(context: Context): Boolean {
+        val settings = Settings(context)
+        return settings.isBackupLocationSet()
     }
 }

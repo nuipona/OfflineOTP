@@ -103,16 +103,26 @@ APP_SOURCES=(
     "$KOTLIN_APP/Utilities/ConfirmedPasswordTransformationHelper.kt"
     "$KOTLIN_APP/Utilities/EntryPersistence.kt"
     "$KOTLIN_APP/Utilities/VaultRestoreOperation.kt"
+    "$KOTLIN_APP/Receivers/BackupBroadcastReceiver.kt"
+    "$KOTLIN_APP/Receivers/EncryptedBackupBroadcastReceiver.kt"
+    "$KOTLIN_APP/Tasks/EncryptedBackupWorker.kt"
+    "$KOTLIN_APP/Utilities/BackupAgent.kt"
+    "$KOTLIN_APP/Activities/ThemedActivity.kt"
+    "$KOTLIN_APP/Activities/BaseActivity.kt"
+    "$KOTLIN_APP/Activities/PanicResponderActivity.kt"
+    "$KOTLIN_APP/Activities/SecureCaptureActivity.kt"
 )
 
 STUBS=("$SANDBOX"/stubs/android/*.kt
     "$SANDBOX"/stubs/androidx/recyclerview/widget/*.kt
+    "$SANDBOX"/stubs/androidx/work/*.kt
     "$SANDBOX"/stubs/androidx/documentfile/provider/*.kt
     "$SANDBOX"/stubs/androidx/appcompat/app/*.kt
     "$SANDBOX"/stubs/androidx/appcompat/content/res/*.kt
     "$SANDBOX"/stubs/androidx/core/app/*.kt
     "$SANDBOX"/stubs/androidx/core/content/*.kt
     "$SANDBOX"/stubs/com/google/android/material/textfield/*.kt
+    "$SANDBOX"/stubs/com/journeyapps/barcodescanner/*.kt
     "$SANDBOX"/stubs/com/google/zxing/*.kt
     "$SANDBOX"/stubs/com/google/zxing/common/*.kt
     "$SANDBOX"/stubs/com/google/zxing/qrcode/*.kt
