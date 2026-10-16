@@ -1,19 +1,40 @@
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
         android:width="108dp"
         android:height="108dp"
-        android:viewportWidth="264.31125"
-        android:viewportHeight="264.31125">
-    <group android:translateX="68.35382"
-            android:translateY="68.35382">
+        android:viewportWidth="108"
+        android:viewportHeight="108">
+    <!-- Layered pine forest backdrop within the adaptive-icon canvas -->
+    <group>
+        <!-- Distant pine silhouettes -->
         <path
-            android:pathData="M63.8,0A63.8,63.8 0,0 0,0 63.8A63.8,63.8 0,0 0,63.8 127.6A63.8,63.8 0,0 0,127.6 63.8A63.8,63.8 0,0 0,63.8 0zM63.8,17.38A46.42,46.42 0,0 1,108.35 50.96L19.23,50.96A46.42,46.42 0,0 1,63.8 17.38zM63.72,71.19A8.82,8.82 0,0 1,72.54 80.01A8.82,8.82 0,0 1,67.54 87.96L69.29,91.81C70.51,94.49 72.27,98.34 73.2,100.37L74.89,104.07L63.73,104.07C53.2,104.07 52.57,104.04 52.73,103.62C52.82,103.37 54.56,99.51 56.58,95.04L59.82,87.91A8.82,8.82 0,0 1,54.9 80.01A8.82,8.82 0,0 1,63.72 71.19z"
-            android:strokeLineCap="butt"
-            android:fillAlpha="1"
+            android:fillColor="#1B5E20"
+            android:pathData="M24,22 L12,46 L19,46 L10,66 L20,66 L8,88 L40,88 L28,66 L38,66 L29,46 L36,46 Z"/>
+        <path
+            android:fillColor="#1B5E20"
+            android:pathData="M84,22 L72,46 L79,46 L70,66 L80,66 L68,88 L100,88 L88,66 L98,66 L89,46 L96,46 Z"/>
+        <path
+            android:fillColor="#2E7D32"
+            android:pathData="M54,14 L40,38 L47,38 L37,58 L46,58 L35,84 L73,84 L62,58 L71,58 L61,38 L68,38 Z"/>
+        <!-- Midground pine trees -->
+        <path
+            android:fillColor="#388E3C"
+            android:pathData="M35,28 L23,50 L30,50 L21,70 L30,70 L20,90 L50,90 L40,70 L49,70 L40,50 L47,50 Z"/>
+        <path
+            android:fillColor="#388E3C"
+            android:pathData="M73,28 L61,50 L68,50 L59,70 L68,70 L58,90 L88,90 L78,70 L87,70 L78,50 L85,50 Z"/>
+        <!-- Foreground black padlock -->
+        <!-- Shackle -->
+        <path
+            android:fillColor="#000000"
             android:fillType="evenOdd"
-            android:strokeColor="#00000000"
-            android:fillColor="#ffcc00"
-            android:strokeWidth="0.72619933"
-            android:strokeLineJoin="round"
-            android:strokeAlpha="1"/>
+            android:pathData="M54,24 A15,15 0 0,0 39,39 L39,50 L45,50 L45,39 A9,9 0 0,1 63,39 L63,50 L69,50 L69,39 A15,15 0 0,0 54,24 Z"/>
+        <!-- Lock body -->
+        <path
+            android:fillColor="#000000"
+            android:pathData="M38,47 L70,47 A6,6 0 0,1 76,53 L76,77 A6,6 0 0,1 70,83 L38,83 A6,6 0 0,1 32,77 L32,53 A6,6 0 0,1 38,47 Z"/>
+        <!-- Golden keyhole (theme accent #FFCC00) -->
+        <path
+            android:fillColor="#FFCC00"
+            android:pathData="M54,56 A4.5,4.5 0 1,1 53.99,56 Z M51.8,63 L56.2,63 L58,74 L50,74 Z"/>
     </group>
 </vector>

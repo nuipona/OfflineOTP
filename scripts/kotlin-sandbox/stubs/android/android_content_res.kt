@@ -22,6 +22,12 @@ open class Resources {
     /** Resolves to the id itself, like [getDimensionPixelSize], so checks can tell them apart. */
     open fun getInteger(id: Int): Int = id
 
+    /**
+     * Reads an empty stream by default, so the library-list reader sees an empty document; the
+     * about checks substitute their own resources with a scripted raw stream.
+     */
+    open fun openRawResource(id: Int): java.io.InputStream = java.io.ByteArrayInputStream(ByteArray(0))
+
     /** Recognisable placeholder; the settings checks override it with their own values. */
     open fun getString(id: Int): String = "res:$id"
 

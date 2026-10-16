@@ -52,6 +52,11 @@ open class Context {
     open fun getContentResolver(): ContentResolver = ContentResolver()
     /** `open` so the storage checks can supply their own private cache directory. */
     open fun getCacheDir(): java.io.File = java.io.File(".")
+    /** `open` so the about checks can report a package that is not installed. */
+    open fun getPackageManager(): android.content.pm.PackageManager = android.content.pm.PackageManager
+    open fun getPackageName(): String = "org.shadowice.flocke.andotp"
+    /** `open` so the about checks can record or refuse the activity start. */
+    open fun startActivity(intent: Intent) {}
 
     companion object {
         const val CLIPBOARD_SERVICE = "clipboard"
@@ -108,15 +113,20 @@ interface SharedPreferences {
     }
 }
 
-class ClipData private constructor() {
+class ClipData private constructor(val label: CharSequence?, val text: CharSequence?) {
     companion object {
         @JvmStatic
-        fun newPlainText(label: CharSequence?, text: CharSequence?): ClipData = ClipData()
+        fun newPlainText(label: CharSequence?, text: CharSequence?): ClipData = ClipData(label, text)
     }
 }
 
 class ClipboardManager {
-    fun setPrimaryClip(clip: ClipData) {}
+    /** The clips that were set, in order; the platform hands them to other apps instead. */
+    val clips = ArrayList<ClipData>()
+
+    fun setPrimaryClip(clip: ClipData) {
+        clips.add(clip)
+    }
 }
 
 /**
@@ -125,17 +135,31 @@ class ClipboardManager {
  * `getAction()` is a method (not a property) on purpose: the platform class is a Java class, so
  * the converted receivers call `intent.getAction()` and that call must resolve here as well.
  */
-open class Intent {
+open class Intent(action: String? = null) {
     /** The action the stand-in was created with. */
-    var intentAction: String? = null
+    var intentAction: String? = action
+
+    /** The data URI the stand-in received via [setData]. */
+    var intentData: android.net.Uri? = null
+        private set
 
     /** The action of the intent, or null. */
     open fun getAction(): String? = intentAction
 
+    /** Records the data; the platform resolves it into the intent. */
+    open fun setData(uri: android.net.Uri?): Intent {
+        intentData = uri
+        return this
+    }
+
     companion object {
         const val ACTION_SCREEN_OFF = "android.intent.action.SCREEN_OFF"
+        const val ACTION_VIEW = "android.intent.action.VIEW"
     }
 }
+
+/** Thrown when no activity can handle an intent; the fallback paths catch it. */
+class ActivityNotFoundException : RuntimeException()
 
 /**
  * Stand-in for the platform broadcast receiver base class. Nothing is dispatched here; the

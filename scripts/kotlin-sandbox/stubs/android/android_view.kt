@@ -56,8 +56,11 @@ open class View {
         importantForAutofillMode = mode
     }
 
-    /** Inert lookup; `AppCompatDialog` routes through a scripted provider for the dialog checks. */
-    fun <T : View> findViewById(id: Int): T? = null
+    /**
+     * Inert lookup; `AppCompatDialog` routes through a scripted provider for the dialog checks,
+     * and `open` so the about checks can hand out scripted children of an inflated layout.
+     */
+    open fun <T : View> findViewById(id: Int): T? = null
 
     companion object {
         const val VISIBLE = 0
@@ -90,13 +93,53 @@ open class ViewGroup : View() {
             const val WRAP_CONTENT = -2
         }
     }
+
+    private val children = mutableListOf<View>()
+
+    /** Records the child; no measurement, layout or drawing is implemented. */
+    open fun addView(view: View) {
+        children.add(view)
+    }
+
+    open fun getChildAt(index: Int): View = children[index]
+
+    open val childCount: Int get() = children.size
 }
 
 class LayoutInflater private constructor() {
-    fun inflate(resource: Int, parent: ViewGroup, attachToRoot: Boolean): View = android.widget.CheckedTextView()
+    fun inflate(resource: Int, parent: ViewGroup?, attachToRoot: Boolean): View =
+        layoutProvider?.invoke(resource, parent, attachToRoot) ?: android.widget.CheckedTextView()
+
+    /** The two-argument overload; the platform attaches to `parent` only when it is non-null. */
+    fun inflate(resource: Int, parent: ViewGroup?): View =
+        layoutProvider?.invoke(resource, parent, parent != null) ?: android.widget.CheckedTextView()
+
     companion object {
+        /**
+         * Scripted inflation for the checks; the platform resolves XML layouts instead. Nothing in
+         * production sets this.
+         */
+        var layoutProvider: ((Int, ViewGroup?, Boolean) -> View)? = null
+
         @JvmStatic fun from(context: android.content.Context): LayoutInflater = LayoutInflater()
     }
+}
+
+/**
+ * Inflates the real layout in its place when a screen is created. `inflate` is `open` so the
+ * checks can return a scripted root with scripted children; the platform replaces the stub view
+ * in the hierarchy instead.
+ */
+open class ViewStub : View() {
+    private var layoutResource = 0
+
+    open fun setLayoutResource(layoutResId: Int) {
+        layoutResource = layoutResId
+    }
+
+    open fun getLayoutResource(): Int = layoutResource
+
+    open fun inflate(): View = android.widget.CheckedTextView()
 }
 
 object Gravity { const val CENTER = 17 }
