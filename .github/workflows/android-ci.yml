@@ -53,18 +53,19 @@ jobs:
       - name: Host regression tests, focused lint and debug APKs
         shell: bash
         run: |
+          (while true; do echo "$(date +%T) $(free -m | awk '/Mem:/{print "used=" $3 "MB"}')"; sleep 5; done) > mem-host.log 2>&1 &
           rc=0
           ./gradlew --no-daemon \
             :app:testFdroidDebugUnitTest :app:testPlayDebugUnitTest \
             :app:lintFdroidRelease :app:lintPlayRelease \
             :app:assembleFdroidDebug :app:assemblePlayDebug > gradle-host.log 2>&1 || rc=$?
           echo "gradle exit code: $rc" >> gradle-host.log
-          free -m >> gradle-host.log 2>&1 || true
-          sudo -n dmesg 2>/dev/null | grep -i -E 'killed process|out of memory' | tail -5 >> gradle-host.log || true
           exit $rc
       - name: Publish Gradle failure context
         if: failure()
-        run: python3 scripts/ci_failure_annotation.py gradle-host.log
+        run: |
+          python3 scripts/diagnose_ci_failure.py gradle-host.log mem-host.log
+          python3 scripts/ci_failure_annotation.py gradle-host.log
       - name: Compare independent builds and inspect packaged manifests
         run: bash scripts/verify_reproducible_build.sh
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
@@ -77,6 +78,7 @@ jobs:
             app/build/reports/
             app/build/test-results/
             gradle-host.log
+            mem-host.log
 
   android-tests:
     name: ${{ matrix.flavor }} security tests on API ${{ matrix.api }}
@@ -113,16 +115,17 @@ jobs:
           disable-animations: true
           script: |
             set -e
+            (while true; do echo "$(date +%T) $(free -m | awk '/Mem:/{print "used=" $3 "MB"}')"; sleep 5; done) > mem-emulator.log 2>&1 &
             rc=0; ./gradlew --no-daemon :security-test-client:installDebug > gradle-install.log 2>&1 || rc=$?
-            echo "gradle exit code: $rc" >> gradle-install.log; free -m >> gradle-install.log 2>&1 || true
+            echo "gradle exit code: $rc" >> gradle-install.log
             [ "$rc" -eq 0 ]
             rc=0; ./gradlew --no-daemon :app:connected${{ matrix.flavor }}DebugAndroidTest > gradle-connected.log 2>&1 || rc=$?
-            echo "gradle exit code: $rc" >> gradle-connected.log; free -m >> gradle-connected.log 2>&1 || true
-            sudo -n dmesg 2>/dev/null | grep -i -E 'killed process|out of memory' | tail -5 >> gradle-connected.log || true
+            echo "gradle exit code: $rc" >> gradle-connected.log
             [ "$rc" -eq 0 ]
       - name: Publish Gradle failure context
         if: failure()
         run: |
+          python3 scripts/diagnose_ci_failure.py gradle-install.log gradle-connected.log mem-emulator.log
           for log in gradle-install.log gradle-connected.log; do
             [ -f "$log" ] && python3 scripts/ci_failure_annotation.py "$log"
           done
@@ -137,3 +140,4 @@ jobs:
             app/build/outputs/androidTest-results/
             gradle-install.log
             gradle-connected.log
+            mem-emulator.log
