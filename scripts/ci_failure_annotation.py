@@ -62,6 +62,17 @@ def main(argv: list[str]) -> int:
         if key:
             distinct[key[:220]] = distinct.get(key[:220], 0) + 1
     summary = []
+    # Gradle's own statement of the failure goes first; the tail alone often cuts it off.
+    wrong = [i for i, line in enumerate(lines) if "What went wrong" in line]
+    if wrong:
+        block = []
+        for line in lines[wrong[0] + 1:]:
+            if line.startswith("* Try") or len(block) >= 12:
+                break
+            block.append(f"  {line.strip()[:200]}")
+        if block:
+            summary.append("Gradle says:")
+            summary.extend(block)
     if distinct:
         summary.append(f"Distinct compiler errors: {len(distinct)} ({sum(distinct.values())} occurrences)")
         summary.extend(f"  {count}x {key[:150]}" for key, count in list(distinct.items())[:30])

@@ -8,7 +8,7 @@ tasks.register('writeDependencyInventory') {
     outputs.upToDateWhen { false }
     doLast {
         def lines = new TreeSet<String>()
-        def record = { String label, configuration ->
+        def recordResolved = { String label, configuration ->
             configuration.incoming.resolutionResult.allDependencies.each { dependency ->
                 if (dependency instanceof org.gradle.api.artifacts.result.UnresolvedDependencyResult) {
                     throw new GradleException("Unresolved dependency in ${label}: ${dependency.attempted}", dependency.failure)
@@ -25,6 +25,14 @@ tasks.register('writeDependencyInventory') {
                     }
                 }
                 lines.add("artifact ${label} ${artifact.moduleVersion.id} ${artifact.name}:${artifact.classifier ?: ''}:${artifact.extension} ${digest.digest().encodeHex()}")
+            }
+        }
+        // Name the configuration in the error: Gradle's variant-ambiguity text does not say which consumer failed.
+        def record = { String label, configuration ->
+            try {
+                recordResolved(label, configuration)
+            } catch (Exception failure) {
+                throw new GradleException("Dependency inventory could not resolve ${label}", failure)
             }
         }
         record('root-buildscript', project.buildscript.configurations.classpath)
