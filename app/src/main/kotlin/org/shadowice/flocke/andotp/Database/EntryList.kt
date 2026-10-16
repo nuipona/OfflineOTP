@@ -7,6 +7,7 @@ import java.util.ArrayList
 import java.util.Collections
 import java.util.Comparator
 import java.util.HashSet
+import java.util.Locale
 import java.util.concurrent.atomic.AtomicLong
 
 /** The complete entry list; the adapter keeps a sorted/filtered copy of it. */
@@ -107,14 +108,14 @@ class EntryList {
         if (constraint != null && constraint.length != 0) {
             filtered = ArrayList()
             for (i in 0 until entries.size) {
-                if (filterValues.contains(Constants.SearchIncludes.LABEL) && entries[i].getLabel().lowercase().contains(constraint.toString().lowercase())) {
+                if (filterValues.contains(Constants.SearchIncludes.LABEL) && entries[i].getLabel().lowercase(Locale.getDefault()).contains(constraint.toString().lowercase(Locale.getDefault()))) {
                     filtered.add(entries[i])
-                } else if (filterValues.contains(Constants.SearchIncludes.ISSUER) && entries[i].getIssuer().lowercase().contains(constraint.toString().lowercase())) {
+                } else if (filterValues.contains(Constants.SearchIncludes.ISSUER) && entries[i].getIssuer().lowercase(Locale.getDefault()).contains(constraint.toString().lowercase(Locale.getDefault()))) {
                     filtered.add(entries[i])
                 } else if (filterValues.contains(Constants.SearchIncludes.TAGS)) {
                     val tags = entries[i].getTags()
                     for (j in 0 until tags.size) {
-                        if (tags[j].lowercase().contains(constraint.toString().lowercase())) {
+                        if (tags[j].lowercase(Locale.getDefault()).contains(constraint.toString().lowercase(Locale.getDefault()))) {
                             filtered.add(entries[i])
                             break
                         }
