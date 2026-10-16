@@ -9,6 +9,8 @@ buildscript {
     repositories {
         google()
         mavenCentral()
+        // AboutLibraries' Gradle plugin is published to the Gradle Plugin Portal, not to Maven Central.
+        gradlePluginPortal()
     }
     dependencies {
         classpath 'com.android.tools.build:gradle:8.13.2'
