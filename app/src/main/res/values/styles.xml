@@ -1,137 +1,334 @@
-<resources xmlns:tools="http://schemas.android.com/tools">
-    <!-- Definitions -->
-    <attr name="windowBackground" format="reference" />
+<resources>
+
+    <!-- Custom Theme Attribute Definitions -->
+    <attr name="windowBackground" format="color|reference" />
     <attr name="cardStyle" format="reference" />
     <attr name="dialogTheme" format="reference" />
 
-    <attr name="colorGithub" format="reference" />
-    <attr name="thumbnailBackground" format="reference" />
-    
-    <attr name="navigationBarColor" format="reference" />
+    <attr name="colorGithub" format="color|reference" />
+    <attr name="thumbnailBackground" format="color|reference" />
 
-    <attr name="colorExpiring" format="reference"/>
+    <attr name="navigationBarColor" format="color|reference" />
 
-    <!-- General styles -->
-    <style name="AppTheme.AppBarOverlay" parent="ThemeOverlay.AppCompat.Dark.ActionBar" />
+    <attr name="colorExpiring" format="color|reference" />
 
-    <style name="Theme.Intro.Solid" parent="Theme.Intro">
-        <!-- Android 15+ (targetSdk 35): keep the existing layouts clear of the system bars until edge-to-edge is supported -->
-        <item name="android:windowOptOutEdgeToEdgeEnforcement" tools:targetApi="35">true</item>
-        <item name="android:windowIsTranslucent">false</item>
-    </style>
+    <!-- ============================================================================
+         Unified Homemade Dark Forest Theme (Theme.OfflineOTP.DarkForest)
+         ============================================================================ -->
+    <style name="Theme.OfflineOTP.DarkForest" parent="Theme.MaterialComponents.Bridge">
+        <item name="isMaterialTheme">true</item>
 
-    <!-- Light application theme -->
-    <style name="AppBaseTheme" parent="Theme.AppCompat.Light.DarkActionBar">
-        <!-- Android 15+ (targetSdk 35): keep the existing layouts clear of the system bars until edge-to-edge is supported -->
-        <item name="android:windowOptOutEdgeToEdgeEnforcement" tools:targetApi="35">true</item>
+        <!-- Core Forest & Sage/Emerald Brand Palette -->
         <item name="colorPrimary">@color/colorPrimary</item>
         <item name="colorPrimaryDark">@color/colorPrimaryDark</item>
+        <item name="colorPrimaryVariant">@color/colorPrimaryVariant</item>
+        <item name="colorSecondary">@color/colorAccent</item>
+        <item name="colorSecondaryVariant">@color/colorPrimary</item>
         <item name="colorAccent">@color/colorAccent</item>
 
-        <item name="windowBackground">?android:attr/colorBackground</item>
-        <item name="navigationBarColor">?android:attr/colorBackground</item>
+        <!-- Surfaces, Backgrounds & On-Colors -->
+        <item name="colorSurface">@color/forest_surface</item>
+        <item name="colorPrimarySurface">@color/forest_surface</item>
+        <item name="colorError">@color/warning_red</item>
+        <item name="colorOnPrimary">@color/forest_on_primary</item>
+        <item name="colorOnSecondary">@color/forest_on_secondary</item>
+        <item name="colorOnBackground">@color/forest_text_primary</item>
+        <item name="colorOnSurface">@color/forest_text_primary</item>
+        <item name="colorOnPrimarySurface">@color/forest_text_primary</item>
+        <item name="colorOnError">@color/forest_on_primary</item>
+
+        <item name="windowBackground">@color/forest_background</item>
+        <item name="android:windowBackground">@color/forest_background</item>
+        <item name="android:colorBackground">@color/forest_background</item>
+        <item name="colorBackgroundFloating">@color/forest_surface_elevated</item>
+        <item name="android:colorBackgroundFloating">@color/forest_surface_elevated</item>
+
+        <!-- System Bars -->
+        <item name="android:statusBarColor">@color/colorPrimaryDark</item>
+        <item name="navigationBarColor">@color/forest_background_deep</item>
+        <item name="android:navigationBarColor">@color/forest_background_deep</item>
+        <item name="android:windowLightStatusBar">false</item>
+
+        <!-- Typography & Control Tints -->
+        <item name="android:textColorPrimary">@color/forest_text_primary</item>
+        <item name="android:textColorSecondary">@color/forest_text_secondary</item>
+        <item name="android:textColorTertiary">@color/forest_text_hint</item>
+        <item name="android:textColorHint">@color/forest_text_hint</item>
+        <item name="android:textColorLink">@color/colorAccent</item>
+        <item name="colorControlNormal">@color/forest_text_secondary</item>
+        <item name="colorControlActivated">@color/colorAccent</item>
+        <item name="colorControlHighlight">@color/forest_ripple</item>
+        <item name="android:listDivider">@color/forest_divider</item>
+
+        <!-- OfflineOTP Custom Theme Attributes -->
+        <item name="cardStyle">@style/CardViewStyle</item>
+        <item name="cardViewStyle">@style/CardViewStyle</item>
+        <item name="materialCardViewStyle">@style/Widget.OfflineOTP.DarkForest.MaterialCardView</item>
+        <item name="tabStyle">@style/Widget.OfflineOTP.DarkForest.TabLayout</item>
+        <item name="dialogTheme">@style/DialogTheme</item>
+        <item name="android:dialogTheme">@style/DialogTheme</item>
+        <item name="alertDialogTheme">@style/DialogTheme</item>
+        <item name="android:alertDialogTheme">@style/DialogTheme</item>
+        <item name="materialAlertDialogTheme">@style/ThemeOverlay.OfflineOTP.DarkForest.MaterialAlertDialog</item>
+        <item name="actionBarPopupTheme">@style/Theme.OfflineOTP.DarkForest.PopupOverlay</item>
 
         <item name="colorGithub">@color/github_dark</item>
-        <item name="thumbnailBackground">@android:color/transparent</item>
-
-        <item name="cardStyle">@style/CardViewStyle</item>
-        <item name="dialogTheme">@style/DialogTheme</item>
-
-        <item name="about_libraries_card">@color/cardview_light_background</item>
-        <item name="about_libraries_title_openSource">@color/about_libraries_text_openSource</item>
-        <item name="about_libraries_text_openSource">@color/about_libraries_text_openSource</item>
-        <item name="about_libraries_dividerDark_openSource">@color/about_libraries_dividerDark_openSource</item>
-        <item name="about_libraries_dividerLight_openSource">@color/about_libraries_dividerLight_openSource</item>
-
+        <item name="thumbnailBackground">@color/forest_thumbnail_background</item>
         <item name="colorExpiring">@color/expiring_red_dark</item>
+
+        <item name="preferenceTheme">@style/PreferenceThemeOverlay.v14.Material</item>
+
+        <item name="elevationOverlayEnabled">false</item>
+        <item name="elevationOverlayColor">@color/forest_text_primary</item>
+
+        <!-- Material Typography & Shape Appearances (preserving original sizing/spacing) -->
+        <item name="textAppearanceHeadline5">@style/TextAppearance.OfflineOTP.DarkForest.Headline5</item>
+        <item name="textAppearanceHeadline6">@style/TextAppearance.OfflineOTP.DarkForest.Headline6</item>
+        <item name="textAppearanceSubtitle1">@style/TextAppearance.OfflineOTP.DarkForest.Subtitle1</item>
+        <item name="textAppearanceSubtitle2">@style/TextAppearance.OfflineOTP.DarkForest.Subtitle2</item>
+        <item name="textAppearanceBody1">@style/TextAppearance.OfflineOTP.DarkForest.Body1</item>
+        <item name="textAppearanceBody2">@style/TextAppearance.OfflineOTP.DarkForest.Body2</item>
+        <item name="textAppearanceCaption">@style/TextAppearance.OfflineOTP.DarkForest.Caption</item>
+        <item name="textAppearanceButton">@style/TextAppearance.OfflineOTP.DarkForest.Button</item>
+
+        <item name="shapeAppearanceSmallComponent">@style/ShapeAppearance.OfflineOTP.DarkForest.SmallComponent</item>
+        <item name="shapeAppearanceMediumComponent">@style/ShapeAppearance.OfflineOTP.DarkForest.MediumComponent</item>
+        <item name="shapeAppearanceLargeComponent">@style/ShapeAppearance.OfflineOTP.DarkForest.LargeComponent</item>
+
+        <!-- AboutLibraries 14.x Theme Attributes -->
+        <item name="aboutLibrariesStyle">@style/Widget.OfflineOTP.DarkForest.AboutLibraries</item>
+        <item name="aboutLibrariesCardBackground">@color/forest_surface</item>
+        <item name="aboutLibrariesDescriptionTitle">@color/forest_text_primary</item>
+        <item name="aboutLibrariesDescriptionText">@color/forest_text_secondary</item>
+        <item name="aboutLibrariesDescriptionDivider">@color/forest_divider</item>
+        <item name="aboutLibrariesOpenSourceTitle">@color/forest_text_primary</item>
+        <item name="aboutLibrariesOpenSourceText">@color/forest_text_secondary</item>
+        <item name="aboutLibrariesSpecialButtonText">@color/colorAccent</item>
+        <item name="aboutLibrariesOpenSourceDivider">@color/forest_divider</item>
+
+        <!-- AboutLibraries Legacy Attributes (used by fragment_about.xml) -->
+        <item name="about_libraries_card">@color/forest_surface</item>
+        <item name="about_libraries_title_openSource">@color/forest_text_primary</item>
+        <item name="about_libraries_text_openSource">@color/forest_text_secondary</item>
+        <item name="about_libraries_dividerDark_openSource">@color/forest_divider</item>
+        <item name="about_libraries_dividerLight_openSource">@color/forest_divider</item>
     </style>
 
-    <style name="AppTheme" parent="AppBaseTheme"/>
-
-    <style name="AppTheme.NoActionBar">
-        <item name="windowActionBar">false</item>
-        <item name="windowNoTitle">true</item>
-    </style>
-
-    <style name="CardViewStyle" parent="CardView">
-        <item name="contentPadding">@dimen/activity_margin</item>
-    </style>
-
-    <style name="DialogTheme" parent="Theme.AppCompat.Light.Dialog.MinWidth">
-        <item name="colorAccent">@color/colorAccent</item>
-    </style>
-
-    <!-- Dark application theme. -->
-    <style name="AppBaseTheme.Dark" parent="Theme.AppCompat">
-        <!-- Android 15+ (targetSdk 35): keep the existing layouts clear of the system bars until edge-to-edge is supported -->
-        <item name="android:windowOptOutEdgeToEdgeEnforcement" tools:targetApi="35">true</item>
-        <item name="colorPrimary">@color/colorPrimary</item>
+    <!-- Homemade Dark Forest Overlays & Dialogs -->
+    <style name="Theme.OfflineOTP.DarkForest.AppBarOverlay" parent="ThemeOverlay.MaterialComponents.Dark.ActionBar">
+        <item name="colorPrimary">@color/forest_appbar</item>
         <item name="colorPrimaryDark">@color/colorPrimaryDark</item>
         <item name="colorAccent">@color/colorAccent</item>
-
-        <item name="windowBackground">?android:attr/colorBackground</item>
-        <item name="navigationBarColor">?android:attr/colorBackground</item>
-        <item name="thumbnailBackground">@color/dark_thumbnail_background</item>
-
-        <item name="colorGithub">@color/github_light</item>
-
-        <item name="cardStyle">@style/CardViewStyle</item>
-        <item name="dialogTheme">@style/DialogTheme.Dark</item>
-
-        <item name="about_libraries_card">@color/cardview_dark_background</item>
-        <item name="about_libraries_title_openSource">@color/about_libraries_text_openSource_dark</item>
-        <item name="about_libraries_text_openSource">@color/about_libraries_text_openSource_dark</item>
-        <item name="about_libraries_dividerDark_openSource">@color/about_libraries_dividerDark_openSource_dark</item>
-        <item name="about_libraries_dividerLight_openSource">@color/about_libraries_dividerLight_openSource_dark</item>
-
-        <item name="colorExpiring">@color/expiring_red_light</item>
+        <item name="android:textColorPrimary">@color/forest_on_primary</item>
+        <item name="android:textColorSecondary">@color/forest_text_secondary</item>
+        <item name="actionBarPopupTheme">@style/Theme.OfflineOTP.DarkForest.PopupOverlay</item>
     </style>
 
-    <style name="AppTheme.Dark" parent = "AppBaseTheme.Dark"/>
-
-    <style name="AppTheme.Dark.NoActionBar">
-        <item name="windowActionBar">false</item>
-        <item name="windowNoTitle">true</item>
+    <style name="Theme.OfflineOTP.DarkForest.PopupOverlay" parent="ThemeOverlay.MaterialComponents.Dark">
+        <item name="android:colorBackground">@color/forest_surface_elevated</item>
+        <item name="colorBackgroundFloating">@color/forest_surface_elevated</item>
+        <item name="colorSurface">@color/forest_surface_elevated</item>
+        <item name="colorOnSurface">@color/forest_text_primary</item>
+        <item name="android:textColorPrimary">@color/forest_text_primary</item>
+        <item name="android:textColorSecondary">@color/forest_text_secondary</item>
     </style>
 
-    <style name="DialogTheme.Dark" parent="Theme.AppCompat.Dialog.MinWidth">
-        <item name="colorAccent">@color/colorAccent</item>
-    </style>
-
-    <!-- Black application theme. -->
-    <style name="AppBaseTheme.Black" parent="Theme.AppCompat">
-        <!-- Android 15+ (targetSdk 35): keep the existing layouts clear of the system bars until edge-to-edge is supported -->
-        <item name="android:windowOptOutEdgeToEdgeEnforcement" tools:targetApi="35">true</item>
+    <style name="Theme.OfflineOTP.DarkForest.Dialog" parent="Theme.MaterialComponents.Dialog.MinWidth.Bridge">
+        <item name="isMaterialTheme">true</item>
         <item name="colorPrimary">@color/colorPrimary</item>
         <item name="colorPrimaryDark">@color/colorPrimaryDark</item>
+        <item name="colorPrimaryVariant">@color/colorPrimaryVariant</item>
+        <item name="colorSecondary">@color/colorAccent</item>
+        <item name="colorSecondaryVariant">@color/colorPrimary</item>
         <item name="colorAccent">@color/colorAccent</item>
-
-        <item name="windowBackground">@color/black</item>
-        <item name="navigationBarColor">@color/black</item>
-        <item name="thumbnailBackground">@color/dark_thumbnail_background</item>
-
-        <item name="colorGithub">@color/github_light</item>
-
-        <item name="cardStyle">@style/CardViewStyle.Black</item>
-        <item name="dialogTheme">@style/DialogTheme.Dark</item>
-
-        <item name="about_libraries_card">@color/black</item>
-        <item name="about_libraries_title_openSource">@color/about_libraries_text_openSource_dark</item>
-        <item name="about_libraries_text_openSource">@color/about_libraries_text_openSource_dark</item>
-        <item name="about_libraries_dividerDark_openSource">@color/about_libraries_dividerDark_openSource_dark</item>
-        <item name="about_libraries_dividerLight_openSource">@color/about_libraries_dividerLight_openSource_dark</item>
-
-        <item name="colorExpiring">@color/expiring_red_light</item>
+        <item name="colorSurface">@color/forest_surface_elevated</item>
+        <item name="colorPrimarySurface">@color/forest_surface_elevated</item>
+        <item name="colorOnPrimary">@color/forest_on_primary</item>
+        <item name="colorOnSecondary">@color/forest_on_secondary</item>
+        <item name="colorOnBackground">@color/forest_text_primary</item>
+        <item name="colorOnSurface">@color/forest_text_primary</item>
+        <item name="android:colorBackground">@color/forest_surface_elevated</item>
+        <item name="colorBackgroundFloating">@color/forest_surface_elevated</item>
+        <item name="android:colorBackgroundFloating">@color/forest_surface_elevated</item>
+        <item name="android:textColorPrimary">@color/forest_text_primary</item>
+        <item name="android:textColorSecondary">@color/forest_text_secondary</item>
+        <item name="android:textColorHint">@color/forest_text_hint</item>
+        <item name="colorControlNormal">@color/forest_text_secondary</item>
+        <item name="colorControlActivated">@color/colorAccent</item>
+        <item name="colorControlHighlight">@color/forest_ripple</item>
+        <item name="thumbnailBackground">@color/forest_thumbnail_background</item>
+        <item name="colorExpiring">@color/expiring_red_dark</item>
+        <item name="elevationOverlayEnabled">false</item>
     </style>
 
-    <style name="AppTheme.Black" parent="AppBaseTheme.Black"/>
-
-    <style name="CardViewStyle.Black">
-        <item name="cardBackgroundColor">@color/black</item>
+    <style name="ThemeOverlay.OfflineOTP.DarkForest.MaterialAlertDialog" parent="ThemeOverlay.MaterialComponents.MaterialAlertDialog">
+        <item name="colorPrimary">@color/colorPrimary</item>
+        <item name="colorSecondary">@color/colorAccent</item>
+        <item name="colorSurface">@color/forest_surface_elevated</item>
+        <item name="colorOnSurface">@color/forest_text_primary</item>
+        <item name="android:colorBackground">@color/forest_surface_elevated</item>
+        <item name="colorBackgroundFloating">@color/forest_surface_elevated</item>
+        <item name="android:colorBackgroundFloating">@color/forest_surface_elevated</item>
+        <item name="android:textColorPrimary">@color/forest_text_primary</item>
+        <item name="android:textColorSecondary">@color/forest_text_secondary</item>
+        <item name="elevationOverlayEnabled">false</item>
     </style>
 
-    <style name="AppTheme.Black.NoActionBar">
+    <!-- Homemade Dark Forest Widget Styles -->
+    <style name="Widget.OfflineOTP.DarkForest.CardView" parent="CardView">
+        <item name="contentPadding">@dimen/forest_card_content_padding</item>
+        <item name="cardBackgroundColor">@color/forest_surface</item>
+        <item name="cardCornerRadius">@dimen/forest_card_corner_radius</item>
+        <item name="cardElevation">@dimen/forest_card_elevation</item>
+    </style>
+
+    <style name="Widget.OfflineOTP.DarkForest.MaterialCardView" parent="Widget.MaterialComponents.CardView">
+        <item name="cardBackgroundColor">@color/forest_surface</item>
+        <item name="cardCornerRadius">@dimen/forest_card_corner_radius</item>
+        <item name="cardElevation">@dimen/forest_card_elevation</item>
+        <item name="rippleColor">@color/forest_ripple</item>
+        <item name="strokeColor">@color/forest_divider</item>
+        <item name="strokeWidth">0dp</item>
+    </style>
+
+    <style name="Widget.OfflineOTP.DarkForest.TabLayout" parent="Widget.MaterialComponents.TabLayout">
+        <item name="tabBackground">@color/forest_surface</item>
+        <item name="tabIndicatorColor">@color/colorAccent</item>
+        <item name="tabIndicatorHeight">@dimen/forest_tab_indicator_height</item>
+        <item name="tabTextColor">@color/forest_text_secondary</item>
+        <item name="tabSelectedTextColor">@color/colorAccent</item>
+        <item name="tabRippleColor">@color/forest_ripple</item>
+    </style>
+
+    <style name="Widget.OfflineOTP.DarkForest.AboutLibraries" parent="AboutLibrariesStyle">
+        <item name="aboutLibrariesCardBackground">@color/forest_surface</item>
+        <item name="aboutLibrariesDescriptionTitle">@color/forest_text_primary</item>
+        <item name="aboutLibrariesDescriptionText">@color/forest_text_secondary</item>
+        <item name="aboutLibrariesDescriptionDivider">@color/forest_divider</item>
+        <item name="aboutLibrariesOpenSourceTitle">@color/forest_text_primary</item>
+        <item name="aboutLibrariesOpenSourceText">@color/forest_text_secondary</item>
+        <item name="aboutLibrariesSpecialButtonText">@color/colorAccent</item>
+        <item name="aboutLibrariesOpenSourceDivider">@color/forest_divider</item>
+    </style>
+
+    <!-- Homemade Dark Forest Typography & Shape Styles -->
+    <style name="TextAppearance.OfflineOTP.DarkForest.Headline5" parent="TextAppearance.MaterialComponents.Headline5">
+        <item name="android:textSize">18sp</item>
+        <item name="android:textColor">@color/forest_text_primary</item>
+    </style>
+
+    <style name="TextAppearance.OfflineOTP.DarkForest.Headline6" parent="TextAppearance.MaterialComponents.Headline6">
+        <item name="android:textSize">20sp</item>
+        <item name="android:textColor">@color/forest_text_primary</item>
+    </style>
+
+    <style name="TextAppearance.OfflineOTP.DarkForest.Subtitle1" parent="TextAppearance.MaterialComponents.Subtitle1">
+        <item name="android:textSize">14sp</item>
+        <item name="android:textColor">@color/forest_text_secondary</item>
+    </style>
+
+    <style name="TextAppearance.OfflineOTP.DarkForest.Subtitle2" parent="TextAppearance.MaterialComponents.Subtitle2">
+        <item name="android:textSize">14sp</item>
+        <item name="android:textColor">@color/forest_text_secondary</item>
+    </style>
+
+    <style name="TextAppearance.OfflineOTP.DarkForest.Body1" parent="TextAppearance.MaterialComponents.Body1">
+        <item name="android:textSize">14sp</item>
+        <item name="android:textColor">@color/forest_text_primary</item>
+    </style>
+
+    <style name="TextAppearance.OfflineOTP.DarkForest.Body2" parent="TextAppearance.MaterialComponents.Body2">
+        <item name="android:textSize">14sp</item>
+        <item name="android:textColor">@color/forest_text_secondary</item>
+    </style>
+
+    <style name="TextAppearance.OfflineOTP.DarkForest.Caption" parent="TextAppearance.MaterialComponents.Caption">
+        <item name="android:textSize">12sp</item>
+        <item name="android:textColor">@color/forest_text_secondary</item>
+    </style>
+
+    <style name="TextAppearance.OfflineOTP.DarkForest.Button" parent="TextAppearance.MaterialComponents.Button">
+        <item name="android:textSize">14sp</item>
+        <item name="android:textColor">@color/forest_text_primary</item>
+    </style>
+
+    <style name="ShapeAppearance.OfflineOTP.DarkForest.SmallComponent" parent="ShapeAppearance.MaterialComponents.SmallComponent">
+        <item name="cornerSize">@dimen/forest_card_corner_radius</item>
+    </style>
+
+    <style name="ShapeAppearance.OfflineOTP.DarkForest.MediumComponent" parent="ShapeAppearance.MaterialComponents.MediumComponent">
+        <item name="cornerSize">@dimen/forest_card_corner_radius</item>
+    </style>
+
+    <style name="ShapeAppearance.OfflineOTP.DarkForest.LargeComponent" parent="ShapeAppearance.MaterialComponents.LargeComponent">
+        <item name="cornerSize">@dimen/forest_dialog_corner_radius</item>
+    </style>
+
+    <!-- ============================================================================
+         Application Theme Hooks (all unified onto Theme.OfflineOTP.DarkForest)
+         ============================================================================ -->
+    <style name="AppTheme.AppBarOverlay" parent="Theme.OfflineOTP.DarkForest.AppBarOverlay" />
+
+    <style name="Theme.Intro.Solid" parent="Theme.Intro">
+        <item name="isMaterialTheme">true</item>
+        <item name="android:windowIsTranslucent">false</item>
+        <item name="colorPrimary">@color/colorPrimary</item>
+        <item name="colorPrimaryDark">@color/colorPrimaryDark</item>
+        <item name="colorPrimaryVariant">@color/colorPrimaryVariant</item>
+        <item name="colorSecondary">@color/colorAccent</item>
+        <item name="colorSecondaryVariant">@color/colorPrimary</item>
+        <item name="colorAccent">@color/colorAccent</item>
+        <item name="colorSurface">@color/forest_surface</item>
+        <item name="colorOnPrimary">@color/forest_on_primary</item>
+        <item name="colorOnSecondary">@color/forest_on_secondary</item>
+        <item name="colorOnBackground">@color/forest_text_primary</item>
+        <item name="colorOnSurface">@color/forest_text_primary</item>
+        <item name="android:windowBackground">@color/forest_background</item>
+        <item name="android:colorBackground">@color/forest_background</item>
+        <item name="android:textColorPrimary">@color/forest_text_primary</item>
+        <item name="android:textColorSecondary">@color/forest_text_secondary</item>
+        <item name="android:textColorHint">@color/forest_text_hint</item>
+        <item name="colorControlNormal">@color/forest_text_secondary</item>
+        <item name="colorControlActivated">@color/colorAccent</item>
+        <item name="colorControlHighlight">@color/forest_ripple</item>
+        <item name="navigationBarColor">@color/forest_background_deep</item>
+        <item name="android:navigationBarColor">@color/forest_background_deep</item>
+    </style>
+
+    <style name="AppBaseTheme" parent="Theme.OfflineOTP.DarkForest" />
+
+    <style name="AppTheme" parent="AppBaseTheme" />
+
+    <style name="AppTheme.NoActionBar" parent="AppTheme">
         <item name="windowActionBar">false</item>
         <item name="windowNoTitle">true</item>
     </style>
+
+    <style name="CardViewStyle" parent="Widget.OfflineOTP.DarkForest.CardView" />
+
+    <style name="DialogTheme" parent="Theme.OfflineOTP.DarkForest.Dialog" />
+
+    <!-- Dark & Black Theme Hooks (unified onto Dark Forest theme) -->
+    <style name="AppBaseTheme.Dark" parent="AppBaseTheme" />
+
+    <style name="AppTheme.Dark" parent="AppBaseTheme.Dark" />
+
+    <style name="AppTheme.Dark.NoActionBar" parent="AppTheme.Dark">
+        <item name="windowActionBar">false</item>
+        <item name="windowNoTitle">true</item>
+    </style>
+
+    <style name="DialogTheme.Dark" parent="DialogTheme" />
+
+    <style name="AppBaseTheme.Black" parent="AppBaseTheme" />
+
+    <style name="AppTheme.Black" parent="AppBaseTheme.Black" />
+
+    <style name="CardViewStyle.Black" parent="CardViewStyle" />
+
+    <style name="AppTheme.Black.NoActionBar" parent="AppTheme.Black">
+        <item name="windowActionBar">false</item>
+        <item name="windowNoTitle">true</item>
+    </style>
+
 </resources>

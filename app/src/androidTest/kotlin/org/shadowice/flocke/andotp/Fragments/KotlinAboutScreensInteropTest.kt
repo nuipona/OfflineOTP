@@ -131,6 +131,10 @@ class KotlinAboutScreensInteropTest {
 
                 val found = activity.supportFragmentManager.fragments.any { it is AboutFragment }
                 assertTrue("the about tab fragment is missing", found)
+
+                pager.currentItem = 1
+                assertEquals(1, pager.currentItem)
+                pager.currentItem = 0
             }
         } finally {
             InstrumentationRegistry.getInstrumentation().runOnMainSync { activity.finish() }
