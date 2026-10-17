@@ -4,7 +4,7 @@
 
 - Gradle **8.13**, with the official wrapper JAR/scripts and the published **all-distribution SHA-256**. `scripts/check_build_inputs.py` detects wrapper substitution or a missing/changed checksum. The independent GitHub wrapper-validation action also runs.
 - CI uses Temurin **17.0.14+7**, Android command-line tools **12266719**, platform **android-36**, build tools **36.0.0**, Ubuntu **24.04**, UTC and UTF-8. The app's Java bytecode target remains 8; minimum Android remains API 28 and target remains API 35.
-- The narrow Kotlin parser pilot pins Kotlin Gradle plugin/stdlib **2.3.20** and aligns Kotlin/Java bytecode at **1.8**. Compiler/build-tools/plugin classpaths join the dependency inventory; actual Kotlin/Android compilation remains a required gate.
+- The narrow Kotlin parser pilot pins Kotlin Gradle plugin/stdlib **2.4.21** and aligns Kotlin/Java bytecode at **1.8**. Compiler/build-tools/plugin classpaths join the dependency inventory; actual Kotlin/Android compilation remains a required gate.
 - GitHub Actions are pinned to full commit SHAs, have read-only repository permissions and do not retain checkout credentials. No signing credentials are needed.
 - Dynamic/changing Gradle dependencies are rejected. JitPack is exclusive to the two existing JitPack groups; it cannot supply arbitrary Maven Central/Google coordinates.
 - Both flavors get host unit tests, a focused fatal lint gate, debug builds, unsigned release builds, and packaged-manifest inspection.

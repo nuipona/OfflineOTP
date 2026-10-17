@@ -47,8 +47,8 @@ kotlin {
 }
 
 dependencies {
-    implementation('org.jetbrains.kotlin:kotlin-stdlib:2.3.20') {
-        version { strictly '2.3.20' }
+    implementation('org.jetbrains.kotlin:kotlin-stdlib:2.4.21') {
+        version { strictly '2.4.21' }
     }
 }
 
