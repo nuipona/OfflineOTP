@@ -35,6 +35,14 @@ The mutation lock remains the existing database lock. Controller lock order is m
 
 Metadata callbacks return `VaultCommitDecision.COMMITTED`, `CANCELED` or `UNKNOWN`. `CANCELED` is only valid **before any metadata mutation**. Even a claimed cancellation is treated as uncertain if the new UUID is present. Exceptions, null decisions, mismatching committed UUIDs and unreadable markers are not acknowledged writes. Unknown commits block further operations in this process until restart/recovery or an explicit destructive reset. Never delete authoritative data merely to make recovery succeed.
 
+Startup recovery is deferred while a live metadata callback is on the stack. The mutation lock is
+reentrant, so constructing `Settings` or receiving a synchronous preference listener inside the callback
+must not discard an uncommitted journal or promote it before the callback's decision is known.
+`Settings` skips deprecated-setting migration during that interval. The guard is released in `finally`
+on success, cancellation and exception; it is separate from the poisoned-transaction flag. A live
+acknowledged commit requires its staged file and matching UUID, even though startup recovery normally
+accepts “no journal” as clean. Missing/replaced journals cannot yield `Saved`.
+
 Legacy `LoadResult`, boolean write APIs and metadata callback adapters remain for compatibility/tests. A legacy boolean write is true only for `Saved`; its metadata false result maps to `UNKNOWN`. `LoadResult.requireEntries()` is now a one-use ownership transfer rather than a repeatable shallow copy. Task-specific Java-facing domain DTOs such as encryption-change and setup results still project business status; only `Saved` can yield a successful key-installation path.
 
 ## Task contract and UI adapter

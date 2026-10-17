@@ -1,4 +1,5 @@
 import java.security.MessageDigest
+import org.gradle.api.artifacts.component.ModuleComponentIdentifier
 
 // Include resolved graph edges and artifact bytes, not machine-specific cache paths.
 // This is provenance for independent-build comparison; it is NOT a committed lockfile.
@@ -9,13 +10,22 @@ tasks.register('writeDependencyInventory') {
     doLast {
         def lines = new TreeSet<String>()
         def recordResolved = { String label, configuration ->
+            lines.add("configuration ${label}")
             configuration.incoming.resolutionResult.allDependencies.each { dependency ->
                 if (dependency instanceof org.gradle.api.artifacts.result.UnresolvedDependencyResult) {
                     throw new GradleException("Unresolved dependency in ${label}: ${dependency.attempted}", dependency.failure)
                 }
                 lines.add("graph ${label} ${dependency.from.id.displayName} -> ${dependency.selected.id.displayName}")
             }
-            configuration.resolvedConfiguration.resolvedArtifacts.each { artifact ->
+            // Test classpaths include the tested :app component. Its graph variant is unambiguous,
+            // but it publishes several *artifact* variants (classes, resources, APK metadata, ...).
+            // Inventory the full graph above, then request bytes only for external components.
+            // Filtering before artifact selection avoids that ambiguity and does not build/hash
+            // local project outputs. Do not use a lenient view: missing external inputs must fail.
+            def externalArtifacts = configuration.incoming.artifactView {
+                componentFilter { id -> id instanceof ModuleComponentIdentifier }
+            }.artifacts
+            externalArtifacts.artifacts.each { artifact ->
                 def digest = MessageDigest.getInstance('SHA-256')
                 artifact.file.withInputStream { input ->
                     byte[] buffer = new byte[8192]
@@ -24,7 +34,9 @@ tasks.register('writeDependencyInventory') {
                         digest.update(buffer, 0, count)
                     }
                 }
-                lines.add("artifact ${label} ${artifact.moduleVersion.id} ${artifact.name}:${artifact.classifier ?: ''}:${artifact.extension} ${digest.digest().encodeHex()}")
+                def component = artifact.id.componentIdentifier
+                // Published filenames include classifiers/extensions without machine-specific paths.
+                lines.add("artifact ${label} ${component.group}:${component.module}:${component.version} ${artifact.file.name} ${digest.digest().encodeHex()}")
             }
         }
         // Name the configuration in the error: Gradle's variant-ambiguity text does not say which consumer failed.
@@ -37,12 +49,12 @@ tasks.register('writeDependencyInventory') {
         }
         record('root-buildscript', project.buildscript.configurations.classpath)
         def app = project(':app')
-        // Test-only classpaths are not inputs to the APKs. Gradle cannot pick one variant of :app for
-        // them outside their own tasks ("Could not resolve all artifacts ... variant ambiguity"),
-        // so they are not in the inventory; the unit and instrumentation test tasks resolve them.
-        ['fdroidDebug', 'fdroidRelease', 'playDebug', 'playRelease'].each { variant ->
+        ['fdroidDebug', 'fdroidRelease', 'playDebug', 'playRelease',
+         'fdroidDebugUnitTest', 'playDebugUnitTest',
+         'fdroidDebugAndroidTest', 'playDebugAndroidTest'].each { variant ->
             ['CompileClasspath', 'RuntimeClasspath'].each { suffix ->
                 def name = "${variant}${suffix}"
+                // Missing configurations are errors, not a reason to silently drop test inputs.
                 record(name, app.configurations.getByName(name))
             }
         }
@@ -57,8 +69,7 @@ tasks.register('writeDependencyInventory') {
         // for both Kotlin-enabled Android modules.
         [app, securityClient].each { kotlinProject ->
             def kotlinTooling = kotlinProject.configurations.findAll { configuration ->
-                configuration.canBeResolved && !(configuration.name ==~ /.*(UnitTest|AndroidTest).*/)
-                        && (configuration.name.startsWith('kotlinCompiler')
+                configuration.canBeResolved && (configuration.name.startsWith('kotlinCompiler')
                         || configuration.name.startsWith('kotlinBuildTools'))
             }.sort { it.name }
             if (!kotlinTooling.any { it.name == 'kotlinCompilerClasspath' }) {

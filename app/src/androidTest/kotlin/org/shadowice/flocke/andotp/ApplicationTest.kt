@@ -23,12 +23,14 @@
 
 package org.shadowice.flocke.andotp
 
-import android.content.Context
+import android.preference.PreferenceManager
 import androidx.test.platform.app.InstrumentationRegistry
 import org.apache.commons.codec.binary.Base32
 import org.apache.commons.codec.binary.Hex
 import org.json.JSONObject
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -41,10 +43,8 @@ import org.shadowice.flocke.andotp.Utilities.Settings
 import org.shadowice.flocke.andotp.Utilities.TokenCalculator
 import java.io.File
 import java.nio.charset.StandardCharsets
-import java.security.KeyStore
 import java.util.ArrayList
 import java.util.Arrays
-import javax.crypto.SecretKey
 import javax.crypto.spec.IvParameterSpec
 import javax.crypto.spec.SecretKeySpec
 
@@ -153,48 +153,60 @@ class ApplicationTest {
     }
 
     @Test fun testSettingsHelper() {
-        val context = InstrumentationRegistry.getInstrumentation().getTargetContext()
-        val keyStore = KeyStore.getInstance("AndroidKeyStore")
-        keyStore.load(null)
-        keyStore.deleteEntry("settings")
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val preferences = PreferenceManager.getDefaultSharedPreferences(context)
+        fun cleanup() {
+            DatabaseHelper.wipeDatabase(context)
+            KeyStoreHelper.wipeKeys(context)
+            assertTrue(preferences.edit().clear().commit())
+        }
 
-        DatabaseHelper.wipeDatabase(context)
-        File(context.getFilesDir().toString() + "/" + Constants.FILENAME_ENCRYPTED_KEY).delete()
-
-        val encryptionKey = KeyStoreHelper.createEncryptionKey(context)
-        assertTrue(
-            DatabaseHelper.changeEncryption(context, null, encryptionKey, true) { id ->
-                Settings(context).commitVaultSettings(
-                    id,
-                    Constants.EncryptionType.KEYSTORE,
-                    Constants.AuthMethod.NONE,
-                    null,
-                    true
-                )
-            }
-        )
-        var entries = DatabaseHelper.loadDatabase(context, encryptionKey)
-        assertEquals(0, entries.size)
-
+        cleanup()
         val newEntries = ArrayList<Entry>()
-        var entry = Entry()
-        entry.setLabel("label")
-        entry.setIssuer("", false)
-        entry.setSecret("secret".toByteArray())
-        newEntries.add(entry)
+        var entries = ArrayList<Entry>()
+        try {
+            val encryptionKey = KeyStoreHelper.createEncryptionKey(context)
+            assertNotNull("The fixture must create a wrapped vault key", encryptionKey)
+            assertTrue(
+                DatabaseHelper.changeEncryption(context, null, encryptionKey, true) { id ->
+                    // Construct here deliberately: Settings startup recovery used to discard the
+                    // live journal before the callback committed its marker, yet report success.
+                    Settings(context).commitVaultSettings(
+                        id,
+                        Constants.EncryptionType.KEYSTORE,
+                        Constants.AuthMethod.NONE,
+                        null,
+                        true
+                    )
+                }
+            )
+            assertTrue(File(context.filesDir, Constants.FILENAME_DATABASE).isFile)
+            assertFalse(File(context.filesDir, DatabaseHelper.PENDING_FILE).exists())
+            entries = DatabaseHelper.loadDatabase(context, encryptionKey)
+            assertEquals(0, entries.size)
 
-        entry = Entry()
-        entry.setLabel("label2")
-        entry.setIssuer("", false)
-        entry.setSecret("secret2".toByteArray())
-        newEntries.add(entry)
+            for ((label, secret) in listOf("label" to "secret", "label2" to "secret2")) {
+                val entry = Entry()
+                entry.setLabel(label)
+                entry.setIssuer("", false)
+                entry.setSecret(secret.toByteArray(StandardCharsets.UTF_8))
+                newEntries.add(entry)
+            }
 
-        assertTrue(DatabaseHelper.saveDatabase(context, newEntries, encryptionKey))
-        entries = DatabaseHelper.loadDatabase(context, encryptionKey)
-        assertEquals(newEntries, entries)
-
-        DatabaseHelper.wipeDatabase(context)
-        File(context.getFilesDir().toString() + "/" + Constants.FILENAME_ENCRYPTED_KEY).delete()
+            assertTrue(DatabaseHelper.saveDatabase(context, newEntries, encryptionKey))
+            // A fresh Settings instance and a read-only key lookup must see the committed vault.
+            val settings = Settings(context)
+            assertEquals(Constants.EncryptionType.KEYSTORE, settings.getEncryption())
+            assertEquals(Constants.AuthMethod.NONE, settings.getAuthMethod())
+            val storedKey = KeyStoreHelper.loadEncryptionKeyFromKeyStore(context, true)
+            assertNotNull(storedKey)
+            entries = DatabaseHelper.loadDatabase(context, storedKey)
+            assertEquals(newEntries, entries)
+        } finally {
+            entries.forEach { it.destroy() }
+            newEntries.forEach { it.destroy() }
+            cleanup()
+        }
     }
 
     @Test fun testEncryptionHelper() {

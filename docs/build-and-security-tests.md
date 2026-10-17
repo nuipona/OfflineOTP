@@ -8,7 +8,7 @@
 - GitHub Actions are pinned to full commit SHAs, have read-only repository permissions and do not retain checkout credentials. No signing credentials are needed.
 - Dynamic/changing Gradle dependencies are rejected. JitPack is exclusive to the two existing JitPack groups; it cannot supply arbitrary Maven Central/Google coordinates.
 - Both flavors get host unit tests, a focused fatal lint gate, debug builds, unsigned release builds, and packaged-manifest inspection.
-- The reproducibility script builds from **two distinct source directories and Gradle user homes**, without build/configuration caches, and compares both unsigned APKs byte for byte. It also compares resolved dependency graphs and artifact SHA-256s, including the root buildscript dependencies. A different graph or artifact byte sequence fails even if the APKs happen to match.
+- The reproducibility script builds from **two distinct source directories and Gradle user homes**, without build/configuration caches, and compares both unsigned APKs byte for byte. It also compares resolved dependency graphs and external artifact SHA-256s, including the root buildscript, both flavors' compile/runtime and debug unit-test/androidTest classpaths, the security client, and Kotlin tooling (including test compiler-plugin classpaths). A different graph or artifact byte sequence fails even if the APKs happen to match.
 - Instrumentation runs on disposable API **28 and 36** emulators, for **both** flavors, including the existing RFC OTP/AES-GCM tests and the new adversarial crypto/restore tests.
 
 **Scope:** a successful workflow demonstrates repeatability of the unsigned APKs for the source/tooling inputs of that run. It does not by itself prove supply-chain authenticity, cross-OS reproducibility, identical signed APKs, or safety of every application feature. SDK platform/system-image packages and hosted runners can receive revisions; their names are selected explicitly but their revisions are not frozen by sdkmanager. Release reproducibility across time needs the reviewed dependency baseline below plus an archived toolchain/SDK snapshot or a digest-pinned build image.
@@ -31,6 +31,10 @@ From the repository root:
 python3 scripts/check_build_inputs.py
 python3 -m unittest discover -s scripts/tests -v
 
+# Provision the wrapper, then test inventory artifact selection without Android or Maven downloads.
+./gradlew --no-daemon --version
+GRADLE_EXECUTABLE="$PWD/gradlew" python3 scripts/tests/test_dependency_inventory.py -v
+
 ./gradlew --no-daemon \
   :app:testFdroidDebugUnitTest :app:testPlayDebugUnitTest \
   :app:lintFdroidRelease :app:lintPlayRelease \
@@ -47,7 +51,8 @@ against hand-written platform stubs and runs behavior/API-shape checks on a desk
 [its README](../scripts/kotlin-sandbox/README.md) first: a green run there is not the Gradle, lint,
 packaging or device result, and the stub Android surface is not the platform. For the vault
 repository it executes only the outcome mapping, the document boundary (including a stored-document
-round trip over real entries) and the poisoned-transaction short-circuits; the file transaction,
+round trip over real entries), the poisoned-transaction short-circuits and the live metadata-callback
+recovery/migration guard (flags set by reflection); the file transaction,
 promotion and backup/wipe paths stay with `VaultFailureSecurityTest` and
 `VaultRestoreOperationTest` below.
 
@@ -64,6 +69,28 @@ With a disposable API 28 or 36 emulator already running:
 The test-only client is a Kotlin Activity signed with an independently generated key, not the target debug key; the language conversion does not change its application ID, UID or signing identity. The IPC test verifies different UIDs/certificates and denial of `CONTROL_VAULT` before launching that caller. Debug builds alone declare package visibility for this client; it is not a release component. If you delete its generated key and rebuild on an existing emulator, uninstall the old **test client** before installing the newly signed one. Never distribute this client.
 
 Reports live under `app/build/reports/` and `reports/reproducibility/`, and are uploaded on CI failure as well as success. Each independent build preserves unsigned APKs, text manifests, build logs, dependency inventory and SHA256SUMS. A `result.txt` success marker is written only after all comparisons pass. None of these generated reports/APKs should be committed.
+
+## Dependency inventory coverage
+
+`writeDependencyInventory` records a sorted `configuration` marker, the **complete resolved graph**
+(including local project edges), and SHA-256s of the published external artifacts for each covered
+configuration. It does not hash local project build outputs: the unsigned APK comparison covers the
+packaged app, and source is copied into each independent build.
+
+Android test configurations depend on the tested `:app` component, which exposes several artifact
+variants (classes, resources, metadata, etc.). The graph resolves correctly; requesting all artifacts
+without an artifact type is ambiguous. The inventory uses a strict `incoming.artifactView` with a
+`ModuleComponentIdentifier` filter **before artifact selection** to hash external dependencies
+without asking Gradle to choose or build a local app artifact. It does not remove project dependencies
+from the graph, pick an arbitrary app variant, or use lenient resolution. Missing test configurations,
+unresolved edges and missing external artifacts remain fatal, with the configuration name in the error.
+Test-specific Kotlin compiler/build-tools/plugin configurations are no longer excluded.
+
+The offline Gradle fixture in `scripts/tests/test_dependency_inventory.py` first reproduces the
+unfiltered artifact ambiguity, then checks test dependency hashes/project edges, test tooling coverage,
+sorted/path-independent reports, and failure on missing test inputs. Python-only runs skip its two
+Gradle tests explicitly; the CI build job runs them with the pinned wrapper. The real Android inventory
+is still checked by both independent release builds.
 
 ## Establish the reviewed dependency baseline
 
@@ -149,7 +176,15 @@ against stand-ins, but it cannot start an activity, cannot apply a real theme an
 `KotlinAboutScreensInteropTest` drives the converted about screens on a real device: the about
 activity is started for real, so the real layouts resolve their rows and image tint, the real
 version name is bound and both pager pages are built (the flavor about tab and the AboutLibraries
-list). Java construction, subclassing and the public static state of the shared fragment are
+list). **Theme decision:** keep AboutLibraries 14.2.1 and the app-wide
+`Theme.MaterialComponents.Bridge` parent, which supplies Material attributes while retaining
+AppCompat widget defaults and the Dark Forest palette. All light/dark/black and NoActionBar hooks,
+including the API-specific overrides, inherit it. The test inflates the dependency's actual
+`listitem_opensource` (`MaterialCardView`) under all six hooks and waits for a real card in the
+asynchronously populated Libraries tab; merely creating a pager is not enough to catch this crash.
+The theme migration also retains the old dimension names used by the About/entry/drawer layouts;
+`tile_letter_font_size_scale` is a float (`0.67`), not the invalid float text `67%`.
+Java construction, subclassing and the public static state of the shared fragment are
 checked directly, and the clipboard fallback of `copyToClipboard`/`openURI` is exercised with a
 scheme no installed app handles, so nothing is launched. The seven-tap easter egg stays with the
 desktop sandbox checks and the Python guards; driving seven timed taps through a real window would
@@ -192,6 +227,15 @@ The stdlib Python suite mutates synthetic manifests to prove that these checks f
 ### Vault and independently signed IPC regression tests
 
 `VaultFailureSecurityTest`, `CredentialLifecycleSecurityTest`, `EntryInputSecurityTest`, `EntryJsonTest`, `BackgroundTaskCancellationSecurityTest` and `IpcAuthorizationSecurityTest` exercise strict vault failures, crash-recovery markers, credentials/ciphertext consistency, malformed inputs, the stored entry-document format with its owned one-use seed, cancellation and a different-UID/different-certificate attacker. The IPC assertion checks denied panic, unchanged vault/settings and no backup work queued with automation enabled. These are Android tests prepared for CI, **not locally executed results**.
+
+`ApplicationTest.testSettingsHelper` deliberately constructs `Settings` inside the initialization
+commit callback. This used to run startup recovery under a reentrant lock, delete the not-yet-committed
+journal, and then report success without creating a vault. Live callbacks now defer recovery/migration;
+the guard is cleared in `finally`, and acknowledged commits must promote their own journal UUID.
+`VaultFailureSecurityTest` additionally covers construction before/after the marker commit, nonempty
+key rotation and its backup, cancellation/exception cleanup, and missing/replaced journals that must
+report `RecoveryRequired(COMMITTED)`, never `Saved`. The missing-vault and failed-authentication
+write refusals remain intact.
 
 See [Vault security hardening](vault-security-hardening.md) for the intentional IPC/platform-backup compatibility breaks and implementation details. Further runtime review is needed for UI/rotation/process death, authorized same-signer integrations, OEM restore behavior and storage-provider failure injection. The manifest gate checks caller-permission configuration; only execution of the separately signed client exercises the Android authorization boundary.
 

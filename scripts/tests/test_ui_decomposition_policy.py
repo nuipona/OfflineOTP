@@ -344,6 +344,19 @@ class UiDecompositionSourceTest(unittest.TestCase):
         self.assertIn("throw VaultException.create(Status.CORRUPT)", parse)
         self.assertNotIn("!!", helper)
 
+    def test_live_metadata_callbacks_cannot_recover_or_silently_lose_their_journal(self):
+        helper = (KOTLIN / "Utilities/DatabaseHelper.kt").read_text()
+        recover = helper[helper.index("private fun recoverPendingDatabaseLocked("):
+                         helper.index("fun readVault(")]
+        self.assertLess(recover.index("if (metadataCommitInProgress) return false"),
+                        recover.index("FileHelper.exists(pending)"))
+        self.assertIn("if (!FileHelper.exists(pending)) return expectedId == null", recover)
+        self.assertIn("if (expectedId != null && (id != expectedId || id != committed)) return false", recover)
+        commit = helper[helper.index("val decision = try {"):helper.index("val marker = try {")]
+        self.assertLess(commit.index("metadataCommitInProgress = true"), commit.index("commit.commit(id)"))
+        self.assertIn("finally {\n                    metadataCommitInProgress = false", commit)
+        self.assertIn("recoverPendingDatabaseLocked(context, id)", helper)
+
     def test_converted_io_and_otp_utilities_keep_java_visible_shapes(self):
         reader = (KOTLIN / "Utilities/BoundedInputReader.kt").read_text()
         for api in ("object BoundedInputReader", "const val MAX_DOCUMENT_BYTES = 16 * 1024 * 1024",

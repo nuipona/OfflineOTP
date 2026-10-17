@@ -116,9 +116,37 @@ class BrandingPolicyTest(unittest.TestCase):
         # API 27+ navigation bar stays dark for all theme hooks
         v27_root = ET.parse(v27_styles_path).getroot()
         for style_el in v27_root.findall("style"):
+            self.assertEqual(styles[style_el.attrib["name"]]["parent"], style_el.attrib["parent"],
+                             "API-specific themes must preserve Material inheritance")
             items = {item.attrib["name"]: (item.text or "").strip() for item in style_el.findall("item")}
             self.assertEqual("false", items.get("android:windowLightNavigationBar"),
                              f"{style_el.attrib['name']} in values-v27 must use dark navigation bar")
+
+    def test_theme_migration_keeps_layout_dimensions_and_a_real_float_scale(self):
+        root = ET.parse(ROOT / "app/src/main/res/values/dimens.xml").getroot()
+        dimensions = {el.attrib["name"]: (el.text or "").strip() for el in root.findall("dimen")}
+        for name, value in {
+            "activity_margin_xxsmall": "1dp", "activity_margin_xsmall": "4dp",
+            "card_padding_without_corners": "14dp", "author_image_size": "64dp",
+            "drawer_width": "200dp", "divider_size": "1dp", "fab_recyclerview_padding": "84dp",
+        }.items():
+            self.assertEqual(value, dimensions.get(name), f"existing layouts still reference {name}")
+        scale = root.find("item[@name='tile_letter_font_size_scale']")
+        self.assertIsNotNone(scale)
+        self.assertEqual("float", scale.attrib["format"])
+        self.assertGreater(float(scale.text), 0)
+        self.assertLessEqual(float(scale.text), 1)
+
+    def test_about_regression_inflates_the_dependency_row_not_just_the_pager(self):
+        test = (ROOT / "app/src/androidTest/kotlin/org/shadowice/flocke/andotp/Fragments/"
+                "KotlinAboutScreensInteropTest.kt").read_text()
+        self.assertIn("AboutLibrariesR.layout.listitem_opensource", test)
+        self.assertIn("row is MaterialCardView", test)
+        for theme in ("AppTheme", "AppTheme_NoActionBar", "AppTheme_Dark",
+                      "AppTheme_Dark_NoActionBar", "AppTheme_Black", "AppTheme_Black_NoActionBar"):
+            self.assertIn(f"R.style.{theme}", test)
+        self.assertIn('waitUntil("render a library card")', test)
+        self.assertIn("list.getChildAt(it) is MaterialCardView", test)
 
     def test_adaptive_icon_foreground_depicts_black_lock_and_forest(self):
         for variant in ("main", "debug"):

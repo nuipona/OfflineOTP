@@ -57,6 +57,11 @@ object DatabaseHelper {
     // A failed preference commit leaves process memory ambiguous. Require restart.
     private var transactionPoisoned = false
 
+    // DatabaseFileLock is reentrant. Settings construction (or a preference listener) inside a
+    // metadata callback must not mistake the live journal for an abandoned startup transaction.
+    // Accessed only under DatabaseFileLock; other threads already wait for the transaction.
+    private var metadataCommitInProgress = false
+
     enum class Status { SUCCESS, MISSING, MISSING_KEY, AUTHENTICATION_FAILED, CORRUPT, IO_FAILURE }
 
     /**
@@ -137,28 +142,35 @@ object DatabaseHelper {
     @JvmStatic
     fun recoverPendingDatabase(context: Context): Boolean {
         synchronized(DatabaseFileLock) {
-            if (transactionPoisoned) return false
-            val pending = file(context, PENDING_FILE)
-            if (!FileHelper.exists(pending)) return true
-            return try {
-                val staged = FileHelper.readFileToBytes(pending)
-                if (staged.size < 36 + 28) return false
-                val id = String(staged, 0, 36, StandardCharsets.US_ASCII)
-                val committed = PreferenceManager.getDefaultSharedPreferences(context)
-                    .getString(TRANSACTION_ID, "") ?: ""
-                if (id == committed) {
-                    // Preferences committed first. Finish promotion after a crash/write failure.
-                    FileHelper.writeBytesToFile(file(context, Constants.FILENAME_DATABASE),
-                        Arrays.copyOfRange(staged, 36, staged.size))
-                }
-                // An uncommitted staged write is not authoritative; keep the old vault.
-                FileHelper.delete(pending)
-                true
-            } catch (error: IOException) {
-                false
-            } catch (error: RuntimeException) {
-                false
+            return recoverPendingDatabaseLocked(context, null)
+        }
+    }
+
+    /** Caller holds DatabaseFileLock. A live commit must promote its own journal, not just find no work. */
+    private fun recoverPendingDatabaseLocked(context: Context, expectedId: String?): Boolean {
+        if (transactionPoisoned) return false
+        if (metadataCommitInProgress) return false
+        val pending = file(context, PENDING_FILE)
+        if (!FileHelper.exists(pending)) return expectedId == null
+        return try {
+            val staged = FileHelper.readFileToBytes(pending)
+            if (staged.size < 36 + 28) return false
+            val id = String(staged, 0, 36, StandardCharsets.US_ASCII)
+            val committed = PreferenceManager.getDefaultSharedPreferences(context)
+                .getString(TRANSACTION_ID, "") ?: ""
+            if (expectedId != null && (id != expectedId || id != committed)) return false
+            if (id == committed) {
+                // Preferences committed first. Finish promotion after a crash/write failure.
+                FileHelper.writeBytesToFile(file(context, Constants.FILENAME_DATABASE),
+                    Arrays.copyOfRange(staged, 36, staged.size))
             }
+            // An uncommitted staged write is not authoritative; keep the old vault.
+            FileHelper.delete(pending)
+            true
+        } catch (error: IOException) {
+            false
+        } catch (error: RuntimeException) {
+            false
         }
     }
 
@@ -286,9 +298,12 @@ object DatabaseHelper {
                 System.arraycopy(encrypted, 0, staged, 36, encrypted.size)
                 FileHelper.writeBytesToFile(file(context, PENDING_FILE), staged)
                 val decision = try {
+                    metadataCommitInProgress = true
                     commit.commit(id)
                 } catch (unknown: Exception) {
                     VaultCommitDecision.UNKNOWN
+                } finally {
+                    metadataCommitInProgress = false
                 }
                 val marker = try {
                     PreferenceManager.getDefaultSharedPreferences(context).getString(TRANSACTION_ID, "")
@@ -304,7 +319,7 @@ object DatabaseHelper {
                     transactionPoisoned = true
                     return recoveryRequired(VaultCommitState.UNKNOWN)
                 }
-                return if (recoverPendingDatabase(context)) VaultWriteResult.Saved
+                return if (recoverPendingDatabaseLocked(context, id)) VaultWriteResult.Saved
                 else recoveryRequired(VaultCommitState.COMMITTED)
             } catch (error: IllegalArgumentException) {
                 return rejected(VaultWriteError.INVALID_INPUT)

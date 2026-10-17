@@ -15,6 +15,9 @@
     <!-- ============================================================================
          Unified Homemade Dark Forest Theme (Theme.OfflineOTP.DarkForest)
          ============================================================================ -->
+    <!-- Keep AboutLibraries 14.x: its listitem_opensource is a MaterialCardView. The bridge
+         supplies the full Material theme contract while retaining AppCompat widget defaults.
+         Every AppTheme hook (including values-v27) must inherit this, not Theme.AppCompat. -->
     <style name="Theme.OfflineOTP.DarkForest" parent="Theme.MaterialComponents.Bridge">
         <item name="isMaterialTheme">true</item>
 

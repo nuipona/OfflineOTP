@@ -64,6 +64,104 @@ class VaultFailureSecurityTest {
         assertTrue(DatabaseHelper.loadDatabase(context, key).isEmpty())
     }
 
+    @Test fun settingsConstructionCannotRecoverALiveInitialization() {
+        val result = DatabaseHelper.changeVaultEncryption(context, null, key, true) { id ->
+            val staged = FileHelper.readFileToBytes(file(DatabaseHelper.PENDING_FILE))
+            val settings = Settings(context)
+            assertFalse(DatabaseHelper.recoverPendingDatabase(context))
+            assertArrayEquals(staged, FileHelper.readFileToBytes(file(DatabaseHelper.PENDING_FILE)))
+            assertFalse(file(Constants.FILENAME_DATABASE).exists())
+
+            val committed = settings.commitVaultSettings(
+                id, Constants.EncryptionType.KEYSTORE, Constants.AuthMethod.NONE, null, true
+            )
+            // A synchronous preference listener may construct Settings after the marker is set,
+            // but promotion still belongs to the outer transaction, after the callback returns.
+            Settings(context)
+            assertFalse(DatabaseHelper.recoverPendingDatabase(context))
+            assertArrayEquals(staged, FileHelper.readFileToBytes(file(DatabaseHelper.PENDING_FILE)))
+            assertFalse(file(Constants.FILENAME_DATABASE).exists())
+            VaultCommitDecision.fromCommit(committed)
+        }
+        assertSame(VaultWriteResult.Saved, result)
+        assertFalse(FileHelper.exists(file(DatabaseHelper.PENDING_FILE)))
+        assertTrue(DatabaseHelper.loadDatabase(context, key).isEmpty())
+        assertTrue(DatabaseHelper.saveDatabase(context, arrayListOf(), key))
+    }
+
+    @Test fun settingsConstructionDuringKeyRotationPreservesEntriesAndBackup() {
+        initialize()
+        val entries = arrayListOf(Entry("otpauth://totp/synthetic?secret=GEZDGNBVGY3TQOJQ"))
+        try {
+            assertTrue(DatabaseHelper.saveDatabase(context, entries, key))
+            val original = FileHelper.readFileToBytes(file(Constants.FILENAME_DATABASE))
+            val newKey = SecretKeySpec(ByteArray(16) { 1 }, "AES")
+            val result = DatabaseHelper.changeVaultEncryption(context, key, newKey, false) { id ->
+                val staged = FileHelper.readFileToBytes(file(DatabaseHelper.PENDING_FILE))
+                val settings = Settings(context)
+                assertArrayEquals(staged, FileHelper.readFileToBytes(file(DatabaseHelper.PENDING_FILE)))
+                val committed = settings.commitVaultSettings(
+                    id, Constants.EncryptionType.PASSWORD, null, null, false
+                )
+                Settings(context)
+                assertArrayEquals(staged, FileHelper.readFileToBytes(file(DatabaseHelper.PENDING_FILE)))
+                assertArrayEquals(original, FileHelper.readFileToBytes(file(Constants.FILENAME_DATABASE)))
+                VaultCommitDecision.fromCommit(committed)
+            }
+            assertSame(VaultWriteResult.Saved, result)
+            assertArrayEquals(original, FileHelper.readFileToBytes(file(Constants.FILENAME_DATABASE_BACKUP)))
+            val loaded = DatabaseHelper.loadDatabase(context, newKey)
+            try {
+                assertEquals(entries, loaded)
+            } finally {
+                loaded.forEach { it.destroy() }
+            }
+            assertEquals(DatabaseHelper.Status.AUTHENTICATION_FAILED,
+                DatabaseHelper.loadDatabaseResult(context, key).status)
+            assertFalse(FileHelper.exists(file(DatabaseHelper.PENDING_FILE)))
+        } finally {
+            entries.forEach { it.destroy() }
+        }
+    }
+
+    @Test fun acknowledgedCommitNeedsItsOwnJournalToReportSuccess() {
+        for (replaceJournal in listOf(false, true)) {
+            val result = DatabaseHelper.changeVaultEncryption(context, null, key, true) { id ->
+                assertTrue(PreferenceManager.getDefaultSharedPreferences(context).edit()
+                    .putString(DatabaseHelper.TRANSACTION_ID, id).commit())
+                val pending = file(DatabaseHelper.PENDING_FILE)
+                if (replaceJournal) {
+                    val staged = FileHelper.readFileToBytes(pending)
+                    // A well-formed but different transaction must not be treated as our promotion.
+                    "00000000-0000-0000-0000-000000000000".toByteArray(StandardCharsets.US_ASCII)
+                        .copyInto(staged)
+                    FileHelper.writeBytesToFile(pending, staged)
+                } else {
+                    FileHelper.delete(pending)
+                }
+                VaultCommitDecision.COMMITTED
+            }
+            assertEquals(VaultWriteResult.RecoveryRequired(VaultCommitState.COMMITTED), result)
+            assertFalse(file(Constants.FILENAME_DATABASE).exists())
+            assertNull(VaultSession.getKey())
+            DatabaseHelper.wipeDatabase(context)
+        }
+    }
+
+    @Test fun callbackExceptionDoesNotLeaveTheReentrancyGuardSetAfterExplicitWipe() {
+        val result = DatabaseHelper.changeVaultEncryption(context, null, key, true) {
+            Settings(context)
+            throw IllegalStateException("Synthetic metadata failure")
+        }
+        assertEquals(VaultWriteResult.RecoveryRequired(VaultCommitState.UNKNOWN), result)
+        assertFalse(DatabaseHelper.recoverPendingDatabase(context))
+        // Wipe may clear quarantine, but it does not clear the live-callback guard. Only finally can.
+        DatabaseHelper.wipeDatabase(context)
+        assertTrue(DatabaseHelper.canInitialize(context))
+        initialize()
+        assertTrue(DatabaseHelper.loadDatabase(context, key).isEmpty())
+    }
+
     @Test fun failedAuthenticationCannotOverwriteVaultOrMigrate() {
         initialize()
         val original = FileHelper.readFileToBytes(file(Constants.FILENAME_DATABASE))
@@ -172,7 +270,12 @@ class VaultFailureSecurityTest {
         initialize()
         VaultSession.open(key)
         val original = FileHelper.readFileToBytes(file(Constants.FILENAME_DATABASE))
-        val result = DatabaseHelper.changeVaultEncryption(context, key, key, false) { VaultCommitDecision.CANCELED }
+        val result = DatabaseHelper.changeVaultEncryption(context, key, key, false) {
+            val staged = FileHelper.readFileToBytes(file(DatabaseHelper.PENDING_FILE))
+            Settings(context)
+            assertArrayEquals(staged, FileHelper.readFileToBytes(file(DatabaseHelper.PENDING_FILE)))
+            VaultCommitDecision.CANCELED
+        }
         assertEquals(VaultWriteError.CANCELED, (result as VaultWriteResult.Rejected).error)
         assertSame(key, VaultSession.getKey())
         assertTrue(DatabaseHelper.recoverPendingDatabase(context))

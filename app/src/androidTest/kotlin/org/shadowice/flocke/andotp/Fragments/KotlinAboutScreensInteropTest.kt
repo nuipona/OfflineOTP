@@ -7,7 +7,10 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageInfo
 import android.graphics.drawable.Drawable
+import android.view.ContextThemeWrapper
+import android.view.LayoutInflater
 import android.view.View
+import android.widget.FrameLayout
 import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
@@ -16,6 +19,9 @@ import androidx.test.platform.app.InstrumentationRegistry
 import androidx.test.runner.lifecycle.ActivityLifecycleMonitorRegistry
 import androidx.test.runner.lifecycle.Stage
 import androidx.viewpager.widget.ViewPager
+import androidx.recyclerview.widget.RecyclerView
+import com.google.android.material.card.MaterialCardView
+import com.mikepenz.aboutlibraries.R as AboutLibrariesR
 import org.junit.Assert.*
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -102,6 +108,32 @@ class KotlinAboutScreensInteropTest {
     }
 
     @Test
+    fun libraryCardInflatesUnderEveryAppThemeHook() {
+        // Inflate the dependency's real row, not an app-owned imitation or just the pager shell.
+        // API 28/36 CI also covers the values-v27 overrides; both flavors run this same test.
+        val themes = intArrayOf(
+            R.style.AppTheme, R.style.AppTheme_NoActionBar,
+            R.style.AppTheme_Dark, R.style.AppTheme_Dark_NoActionBar,
+            R.style.AppTheme_Black, R.style.AppTheme_Black_NoActionBar
+        )
+        InstrumentationRegistry.getInstrumentation().runOnMainSync {
+            for (theme in themes) {
+                val base = context()
+                // Start with an empty theme so the application's default cannot supply missing
+                // Material attributes and mask a broken dark/black/NoActionBar parent.
+                val isolatedTheme = base.resources.newTheme().apply { applyStyle(theme, true) }
+                val themed = ContextThemeWrapper(base, isolatedTheme)
+                val row = LayoutInflater.from(themed).inflate(
+                    AboutLibrariesR.layout.listitem_opensource, FrameLayout(themed), false
+                )
+                assertTrue("${themed.resources.getResourceName(theme)} must support MaterialCardView",
+                    row is MaterialCardView)
+                assertNotNull(row.findViewById<TextView>(AboutLibrariesR.id.libraryName))
+            }
+        }
+    }
+
+    @Test
     fun realScreenBindsItsVersionAndBuildsBothPages() {
         val activity = startAboutScreen()
         try {
@@ -132,9 +164,22 @@ class KotlinAboutScreensInteropTest {
                 val found = activity.supportFragmentManager.fragments.any { it is AboutFragment }
                 assertTrue("the about tab fragment is missing", found)
 
-                pager.currentItem = 1
+                pager.setCurrentItem(1, false)
                 assertEquals(1, pager.currentItem)
-                pager.currentItem = 0
+            }
+            // AboutLibraries loads asynchronously. Merely switching pages and immediately
+            // finishing the activity can pass without ever constructing the crashing card.
+            waitUntil("render a library card") {
+                var rendered = false
+                InstrumentationRegistry.getInstrumentation().runOnMainSync {
+                    val list = activity.findViewById<RecyclerView>(AboutLibrariesR.id.cardListView)
+                    rendered = list != null && (list.adapter?.itemCount ?: 0) > 0 &&
+                        (0 until list.childCount).any { list.getChildAt(it) is MaterialCardView }
+                }
+                rendered
+            }
+            InstrumentationRegistry.getInstrumentation().runOnMainSync {
+                requireNotNull(activity.findViewById<ViewPager>(R.id.viewPager)).setCurrentItem(0, false)
             }
         } finally {
             InstrumentationRegistry.getInstrumentation().runOnMainSync { activity.finish() }

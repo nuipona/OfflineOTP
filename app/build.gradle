@@ -95,6 +95,8 @@ dependencies {
     implementation "me.zhanghai.android.materialprogressbar:library:1.6.1"
     implementation "com.github.open-keychain.open-keychain:openpgp-api:v5.7.1"
     implementation "com.leinardi.android:speed-dial:3.3.0"
+    // The View UI requires MaterialCardView: all app themes inherit MaterialComponents.Bridge.
+    // Keep this version aligned with the build-time plugin in the root build.gradle.
     implementation "com.mikepenz:aboutlibraries:14.2.1"
 
     testImplementation 'junit:junit:4.13.2'
