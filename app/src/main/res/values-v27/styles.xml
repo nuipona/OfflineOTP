@@ -1,7 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- Light application theme -->
     <style name="AppTheme" parent="AppBaseTheme">
-        <item name="android:windowLightNavigationBar">true</item>
+        <item name="android:windowLightNavigationBar">false</item>
     </style>
 
     <style name="AppTheme.Dark" parent="AppBaseTheme.Dark">
