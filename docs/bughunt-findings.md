@@ -50,6 +50,17 @@ popup.getMenu().findItem(R.id.menu_popup_establishPin)?.setVisible(true)
 > upstream andOTP master, so this is an **inherited** bug rather than one introduced by this fork's
 > Kotlin conversion. It is still a real defect in the current source and is fixed here.
 
+**Regression guard added:** `scripts/tests/test_popup_menu_item_lookup.py` (3 tests). It fails if a
+positional `getMenu().getItem(...)` lookup or a `*_MENU_INDEX` constant reappears, if any
+`R.id.menu_*` referenced from Kotlin stops being declared in `res/menu/`, or if
+`menu_popup_establishPin` stops being revealed by id for mOTP entries. Verified by reintroducing the
+original bug: 2 of the 3 tests fail.
+
+> Note: the mOTP PIN is **not persisted** — it is absent from `EntryJson`, the vault JSON and the
+> `otpauth://motp` URI, and its only writer is `establishPIN()` → `EntryActionDialogs.pin()`. It is
+> therefore session-only and must be re-entered after each app restart. This is upstream behaviour
+> and was left unchanged; it is a design limitation, not a defect introduced here.
+
 ## 2. Confirmed defect — stray `%` in a string resource
 
 **File:** `app/src/main/res/values/strings_backup.xml`
