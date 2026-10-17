@@ -2,11 +2,12 @@ name: Build installable APK
 
 on:
   workflow_dispatch:
-  # Also build when this workflow is first introduced on a branch (manual dispatch
-  # is only available after a workflow exists on the default branch).
+  # Build when app sources or this workflow change on a branch. Manual dispatch
+  # is available once the workflow exists on the default branch.
   push:
     paths:
       - .github/workflows/apk-build.yml
+      - 'app/**'
 
 permissions:
   contents: read
