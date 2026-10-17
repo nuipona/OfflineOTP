@@ -19,6 +19,6 @@ object LocaleContextHelper {
     @JvmStatic
     fun isLocaleApplied(context: Context, locale: Locale): Boolean {
         val locales = context.resources.configuration.locales
-        return locales.size > 0 && locales[0] == locale
+        return locales.size() > 0 && locales[0] == locale
     }
 }
