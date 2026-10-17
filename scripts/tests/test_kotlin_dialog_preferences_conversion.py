@@ -1,6 +1,7 @@
 """Source-level migration guards; Android layout/lifecycle acceptance requires device tests."""
 from pathlib import Path
 import unittest
+import xml.etree.ElementTree as ET
 
 ROOT = Path(__file__).resolve().parents[2]
 KOTLIN = ROOT / "app/src/main/kotlin/org/shadowice/flocke/andotp"
@@ -42,9 +43,16 @@ class KotlinDialogPreferencesConversionTest(unittest.TestCase):
         self.assertLess(source.index("EditorActionHelper.isActionDoneOrKeyboardEnter(actionId, event)"),
                         source.index("EditorActionHelper.isActionUpKeyboardEnter(event)"))
         self.assertIn("if (okButton.isEnabled) okButton.performClick()", source)
-        self.assertLess(source.index("callback?.onPasswordEntered(passwordInput.text.toString())"),
-                        source.index("dismiss()"))
+        click = source[source.index("// View.OnClickListener callback"):]
+        self.assertLess(click.index("callback?.onPasswordEntered(passwordInput.text.toString())"),
+                        click.index("dismiss()"))
+        self.assertIn("finally", click)
+        self.assertIn("override fun dismiss()", source)
         self.assertIn("if (view.id == R.id.buttonOk)", source)
+        self.assertIn("passwordInput.isSaveEnabled = false", source)
+        self.assertIn("passwordConfirm.isSaveEnabled = false", source)
+        self.assertIn("override fun dismiss()", source)
+        self.assertIn("passwordInput.setText(\"\")", source)
         # The mode wiring the Java constructor had, in the same branches.
         self.assertIn("passwordConfirm.visibility = View.VISIBLE", source)
         self.assertIn("passwordConfirm.visibility = View.GONE", source)
@@ -84,21 +92,26 @@ class KotlinDialogPreferencesConversionTest(unittest.TestCase):
         self.assertIn("KeyStoreHelper.loadOrGenerateAsymmetricKeyPair(context, Constants.KEYSTORE_ALIAS_PASSWORD)",
                       source)
         self.assertIn("EncryptionHelper.encrypt(pair.getPublic(), value.toByteArray(StandardCharsets.UTF_8))", source)
-        self.assertIn("persistString(Base64.encodeToString(encBytes, Base64.URL_SAFE))", source)
-        self.assertIn("private fun restoreAndDecrypt(encValue: String?)", source)
-        self.assertIn("val encoded = requireNotNull(encValue)", source)
-        self.assertIn("Base64.decode(encoded, Base64.URL_SAFE)", source)
+        self.assertIn("if (persistString(encoded)) encryptedValue = encoded", source)
+        self.assertIn("private fun restoreAndDecrypt(encValue: String?): String", source)
+        self.assertIn("if (encValue.isNullOrEmpty()) return DEFAULT_VALUE", source)
+        self.assertIn("Base64.decode(encValue, Base64.URL_SAFE)", source)
         self.assertIn("EncryptionHelper.decrypt(pair.getPrivate(), encBytes)", source)
         self.assertIn("if (restorePersistedValue) {", source)
-        self.assertIn("restoreAndDecrypt(getPersistedString(DEFAULT_VALUE))", source)
+        self.assertIn("encryptedValue = getPersistedString(DEFAULT_VALUE)", source)
         self.assertIn("val initialValue = defaultValue as? String ?: run", source)
-        self.assertIn("value = DEFAULT_VALUE\n                return", source)
-        self.assertIn("value = initialValue", source)
-        self.assertIn("if (value.isNotEmpty())", source)
+        self.assertIn("encryptedValue = null\n                return", source)
+        self.assertIn("encryptAndPersist(initialValue)", source)
+        self.assertIn("passwordInput.setText(restoreAndDecrypt(encryptedValue))", source)
+        self.assertNotIn("private var value: String", source)
+        self.assertIn("passwordInput.isSaveEnabled = false", source)
+        self.assertIn("passwordConfirm.isSaveEnabled = false", source)
         self.assertIn("if (passwordConfirm.editableText.toString() == passwordInput.editableText.toString())", source)
         self.assertIn("btnSave.isEnabled = true", source)
         self.assertIn("R.id.btnCancel -> requireNotNull(getDialog()).dismiss()", source)
-        self.assertIn("value = passwordInput.text.toString()", source)
+        self.assertIn("encryptAndPersist(passwordInput.text.toString())", source)
+        self.assertIn("override fun onDialogClosed(positiveResult: Boolean)", source)
+        self.assertIn("passwordInput.setText(\"\")", source)
         self.assertIn("passwordInput.inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD",
                       source)
         self.assertIn("passwordInput.inputType = InputType.TYPE_CLASS_NUMBER or InputType.TYPE_NUMBER_VARIATION_PASSWORD",
@@ -108,3 +121,40 @@ class KotlinDialogPreferencesConversionTest(unittest.TestCase):
         self.assertIn("settings.getBlockAutofill()", source)
         self.assertIn("builder.setPositiveButton(null as CharSequence?, null)", source)
         self.assertNotIn("!!", source)
+
+    def test_sensitive_password_and_manual_secret_views_cannot_save_instance_state(self):
+        android = "{http://schemas.android.com/apk/res/android}"
+        layouts = {
+            "component_password.xml": ("passwordEdit", "passwordConfirm"),
+            "component_authentication.xml": ("passwordEdit", "passwordConfirm"),
+            "component_intro_authentication.xml": ("introPasswordEdit", "introPasswordConfirm"),
+            "content_authenticate.xml": ("passwordEdit",),
+            "dialog_password_entry.xml": ("passwordInput", "passwordConfirm"),
+            "dialog_manual_entry.xml": ("manual_secret", "manual_secret_view"),
+        }
+        for layout, ids in layouts.items():
+            with self.subTest(layout=layout):
+                root = ET.parse(ROOT / "app/src/main/res/layout" / layout).getroot()
+                widgets = {
+                    element.get(android + "id", "").split("/")[-1]: element
+                    for element in root.iter()
+                }
+                for view_id in ids:
+                    self.assertIn(view_id, widgets, f"{layout} is missing {view_id}")
+                    self.assertEqual(
+                        "false", widgets[view_id].get(android + "saveEnabled"),
+                        f"{layout}/{view_id} can save secret instance state",
+                    )
+
+        preference = (KOTLIN / "Preferences/PasswordEncryptedPreference.kt").read_text()
+        password_dialog = (KOTLIN / "Dialogs/PasswordEntryDialog.kt").read_text()
+        manual_dialog = (KOTLIN / "Dialogs/ManualEntryDialog.kt").read_text()
+        self.assertIn("passwordInput.isSaveEnabled = false", preference)
+        self.assertIn("passwordConfirm.isSaveEnabled = false", preference)
+        self.assertIn("passwordInput.isSaveEnabled = false", password_dialog)
+        self.assertIn("passwordConfirm.isSaveEnabled = false", password_dialog)
+        self.assertIn("secretInput.isSaveEnabled = false", manual_dialog)
+        self.assertIn("secretView.isSaveEnabled = false", manual_dialog)
+        self.assertIn("dialog.setOnDismissListener {", manual_dialog)
+        self.assertIn("secretInput.setText(\"\")", manual_dialog)
+        self.assertNotIn("private var value: String", preference)

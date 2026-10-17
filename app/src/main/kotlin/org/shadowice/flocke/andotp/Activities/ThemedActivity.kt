@@ -22,12 +22,12 @@
 
 package org.shadowice.flocke.andotp.Activities
 
-import android.content.res.Configuration
-import android.content.res.Resources
+import android.content.Context
 import android.os.Bundle
 import androidx.appcompat.app.AppCompatActivity
 
 import org.shadowice.flocke.andotp.R
+import org.shadowice.flocke.andotp.Utilities.LocaleContextHelper
 import org.shadowice.flocke.andotp.Utilities.Settings
 import org.shadowice.flocke.andotp.Utilities.Tools
 
@@ -37,7 +37,8 @@ import java.util.Locale
  * Base activity that applies the selected theme and language.
  *
  * Converted from the Java class of the same name. The theme is still applied before
- * `super.onCreate()`, which is what AppCompat expects, and the locale handling is unchanged.
+ * `super.onCreate()`, which is what AppCompat expects. Locale resources are now provided by a
+ * configuration-specific base context instead of mutating shared [android.content.res.Resources].
  */
 abstract class ThemedActivity : AppCompatActivity() {
     /**
@@ -52,12 +53,16 @@ abstract class ThemedActivity : AppCompatActivity() {
     @JvmField
     var settings: Settings? = null
 
+    override fun attachBaseContext(newBase: Context) {
+        val locale = Settings(newBase).getLocale()
+        super.attachBaseContext(LocaleContextHelper.createLocalizedContext(newBase, locale))
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         val current = Settings(this)
         settings = current
 
         setTheme(current.getTheme())
-        setLocale()
 
         // Match the navigation bar to the theme colors
         getWindow().setNavigationBarColor(Tools.getThemeColor(this, R.attr.navigationBarColor))
@@ -66,22 +71,15 @@ abstract class ThemedActivity : AppCompatActivity() {
     }
 
     public override fun onResume() {
-        setLocale()
-
         super.onResume()
+        setLocale()
     }
 
-    /** Applies the selected language to this activity. */
-    @Suppress("DEPRECATION")
+    /** Recreates this activity when the selected language changed while it was backgrounded. */
     public fun setLocale() {
         val locale: Locale = settings!!.getLocale()
         Locale.setDefault(locale)
-
-        val resources: Resources = getBaseContext().resources
-        val config: Configuration = resources.configuration
-        config.setLocale(locale)
-
-        // TODO: updateConfiguration is marked as deprecated. Replace with android.content.Context.createConfigurationContext
-        resources.updateConfiguration(config, resources.displayMetrics)
+        if (!LocaleContextHelper.isLocaleApplied(this, locale))
+            recreate()
     }
 }

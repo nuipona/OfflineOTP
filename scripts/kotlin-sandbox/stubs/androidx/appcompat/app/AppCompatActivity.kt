@@ -56,7 +56,7 @@ open class AppCompatActivity : android.app.Activity() {
 
     protected open fun onStart() {}
 
-    protected open fun onResume() {}
+    override fun onResume() {}
 
     protected open fun onPause() {}
 
@@ -116,7 +116,7 @@ open class AppCompatActivity : android.app.Activity() {
 
     open fun invalidateOptionsMenu() {}
 
-    open fun recreate() {}
+    override fun recreate() {}
 
     open fun onUserInteraction() {}
 

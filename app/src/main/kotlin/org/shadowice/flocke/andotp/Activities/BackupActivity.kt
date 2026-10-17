@@ -253,9 +253,10 @@ open class BackupActivity : BackgroundTaskActivity<BackupTaskResult>() {
         return !isFinishing() && encryptionKey != null && VaultSession.getKey() === encryptionKey
     }
 
-    // TODO: Show more information about the finished backup (e.g. a notification with the file name)
-    private fun notifyBackupState(msgId: Int) {
-        Toast.makeText(this, msgId, Toast.LENGTH_LONG).show()
+    private fun notifyBackupState(msgId: Int, detail: String? = null) {
+        val message = getString(msgId)
+        val text = if (detail.isNullOrBlank()) message else "$message\n$detail"
+        Toast.makeText(this, text, Toast.LENGTH_LONG).show()
     }
 
     override fun onTaskFailure(error: TaskFailure) {
@@ -279,16 +280,14 @@ open class BackupActivity : BackgroundTaskActivity<BackupTaskResult>() {
     }
 
     private fun handleBackupTaskResult(result: BackupTaskResult) {
-        if (result.messageId != 0)
-            notifyBackupState(result.messageId)
-        else
-            if (result.success)
-                notifyBackupState(R.string.backup_toast_export_success)
-            else
-                notifyBackupState(R.string.backup_toast_export_failed)
-
-        if (result.success)
+        if (result.success) {
+            val successMessage = result.messageId.takeIf { it != 0 } ?: R.string.backup_toast_export_success
+            notifyBackupState(successMessage, result.payload)
             finishWithResult()
+        } else {
+            val failureMessage = result.messageId.takeIf { it != 0 } ?: R.string.backup_toast_export_failed
+            notifyBackupState(failureMessage)
+        }
     }
 
     private fun handleRestoreTaskResult(result: BackupTaskResult) {

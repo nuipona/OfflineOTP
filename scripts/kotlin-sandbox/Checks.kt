@@ -1113,7 +1113,7 @@ private class ScannerActivity : SecureCaptureActivity() {
     fun initialize(): DecoratedBarcodeView = initializeContent()
 }
 
-/** The resources of the scanner activity: they only carry the configuration the activity updates. */
+/** Scanner resources keep a separate configuration; the sandbox records localized wrapping on Context. */
 private class ScannerResources(private val config: Configuration) : Resources() {
     override val configuration: Configuration get() = config
 }
@@ -4667,15 +4667,19 @@ fun main() {
         store.edit().putString(settingsKey(R.string.settings_key_lang), "de_DE").commit()
 
         val sdk = Build.VERSION.SDK_INT
+        val defaultLocale = Locale.getDefault()
         try {
+            // The platform calls attachBaseContext before onCreate; drive that hook explicitly here.
+            activity.attachBaseContext(activity)
+            expect(activity.createdConfiguration?.currentLocale == Locale("de", "DE"),
+                    { "the wrong language context was created: ${activity.createdConfiguration?.currentLocale}" })
+
             // Below Android 11 the system bars are hidden with the fullscreen flag.
             Build.VERSION.SDK_INT = Build.VERSION_CODES.Q
             withPoisonedTransaction { activity.initialize() }
 
             expect(activity.appliedTheme == R.style.AppTheme_NoActionBar,
                     { "the wrong theme was applied: ${activity.appliedTheme}" })
-            expect(activity.config.currentLocale == Locale("de", "DE"),
-                    { "the wrong language was applied: ${activity.config.currentLocale}" })
 
             val flags = activity.getWindow().flagCalls.map { it.first }
             expect(flags.contains(WindowManager.LayoutParams.FLAG_HARDWARE_ACCELERATED),
@@ -4706,6 +4710,7 @@ fun main() {
                     { "the fullscreen flag was set although the insets controller was used" })
         } finally {
             Build.VERSION.SDK_INT = sdk
+            Locale.setDefault(defaultLocale)
         }
     }
 
@@ -5206,6 +5211,53 @@ fun main() {
         motp.updateOTP(true)
         expect(motp.getCurrentOTP() == "PINREQ", { "an empty PIN must show the placeholder: ${motp.getCurrentOTP()}" })
         expect(motp.getPrevOTP() == "", { "the placeholder must not be shown as a previous token: ${motp.getPrevOTP()}" })
+    }
+
+    check("TOTP and Steam tokens refresh after the wall clock moves backwards") {
+        val key = ascii("1234567890")
+        val totp = Entry(Entry.OTPType.TOTP, ENTRY_SEED, 30, 6, "ACME", "label",
+            TokenCalculator.HashAlgorithm.SHA1, arrayListOf())
+        expect(totp.updateOTPAt(300L, false), { "the initial future-step token was not calculated" })
+        val futureToken = Tools.formatTokenString(
+            TokenCalculator.TOTP_RFC6238(key, 30, 300L, 6, TokenCalculator.HashAlgorithm.SHA1, 0), 6)
+        expect(totp.getCurrentOTP() == futureToken, { "the explicit TOTP time was not used" })
+        expect(totp.updateOTPAt(60L, false), { "a backwards clock jump did not refresh the TOTP" })
+        val rewoundToken = Tools.formatTokenString(
+            TokenCalculator.TOTP_RFC6238(key, 30, 60L, 6, TokenCalculator.HashAlgorithm.SHA1, 0), 6)
+        val rewoundPrevious = Tools.formatTokenString(
+            TokenCalculator.TOTP_RFC6238(key, 30, 60L, 6, TokenCalculator.HashAlgorithm.SHA1, -1), 6)
+        expect(totp.getCurrentOTP() == rewoundToken, { "the TOTP still shows its future-step token" })
+        expect(totp.getPrevOTP() == rewoundPrevious, { "the previous TOTP was not recalculated after rewind" })
+        expect(!totp.updateOTPAt(60L, false), { "the same time step should not recalculate repeatedly" })
+
+        val steam = Entry(Entry.OTPType.STEAM, ENTRY_SEED, 30, TokenCalculator.STEAM_DEFAULT_DIGITS,
+            "ACME", "steam", TokenCalculator.HashAlgorithm.SHA1, arrayListOf())
+        steam.updateOTPAt(300L, false)
+        expect(steam.updateOTPAt(60L, false), { "a backwards clock jump did not refresh the Steam token" })
+        expect(steam.getCurrentOTP() == TokenCalculator.TOTP_SteamAt(key, 30, 60L,
+            TokenCalculator.STEAM_DEFAULT_DIGITS, TokenCalculator.HashAlgorithm.SHA1, 0),
+            { "the Steam token still uses the future step" })
+        expect(steam.getPrevOTP() == TokenCalculator.TOTP_SteamAt(key, 30, 60L,
+            TokenCalculator.STEAM_DEFAULT_DIGITS, TokenCalculator.HashAlgorithm.SHA1, -1),
+            { "the previous Steam token was not recalculated after rewind" })
+
+        val replacement = ascii("new time-based secret")
+        totp.setSecret(replacement)
+        expect(totp.getCurrentOTP() == "", { "changing the secret left a cached OTP visible" })
+        expect(totp.updateOTPAt(60L, false), { "changing the secret did not invalidate the cached time step" })
+        expect(totp.getCurrentOTP() == Tools.formatTokenString(
+            TokenCalculator.TOTP_RFC6238(replacement, 30, 60L, 6, TokenCalculator.HashAlgorithm.SHA1, 0), 6),
+            { "the TOTP was not recalculated with the replacement secret" })
+
+        val motpSeed = ascii("motp seed")
+        val motp = Entry(Entry.OTPType.MOTP, "motp seed", "ACME", "motp", arrayListOf())
+        motp.setPin("1234")
+        expect(motp.updateOTPAt(60L, false), { "the initial mOTP was not calculated" })
+        motp.setPin("4321")
+        expect(motp.getCurrentOTP() == "", { "changing the mOTP PIN left a cached OTP visible" })
+        expect(motp.updateOTPAt(60L, false), { "changing the mOTP PIN did not invalidate the cached time step" })
+        expect(motp.getCurrentOTP() == TokenCalculator.MOTP("4321", String(motpSeed), 60L, 0),
+            { "the mOTP was not recalculated with the replacement PIN" })
     }
 
     if (failures == 0) {

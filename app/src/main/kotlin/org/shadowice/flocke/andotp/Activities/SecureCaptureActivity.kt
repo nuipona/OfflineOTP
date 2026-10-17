@@ -22,6 +22,7 @@
 
 package org.shadowice.flocke.andotp.Activities
 
+import android.content.Context
 import android.os.Build
 import android.view.WindowInsets
 import android.view.WindowInsetsController
@@ -29,17 +30,23 @@ import android.view.WindowManager
 import com.journeyapps.barcodescanner.CaptureActivity
 import com.journeyapps.barcodescanner.DecoratedBarcodeView
 
+import org.shadowice.flocke.andotp.Utilities.LocaleContextHelper
 import org.shadowice.flocke.andotp.Utilities.Settings
-import java.util.Locale
 
 /**
  * QR scanner activity that honours the theme, language and screenshot settings.
  *
  * Converted from the Java class of the same name. The theme, the language, the window flags, the
- * secure flag and the hidden system bars are unchanged; the deprecated configuration update is
- * still used, because the platform has no replacement for it in this activity.
+ * secure flag and the hidden system bars are unchanged. Its separate locale override uses a
+ * configuration-specific base context, like the other app activities, without mutating shared
+ * Resources.
  */
 open class SecureCaptureActivity : CaptureActivity() {
+    override fun attachBaseContext(newBase: Context) {
+        val locale = Settings(newBase).getLocale()
+        super.attachBaseContext(LocaleContextHelper.createLocalizedContext(newBase, locale))
+    }
+
     /**
      * Overrides [CaptureActivity.initializeContent] to:
      * - block screenshots and non-secure displays (unless enabled in the app settings),
@@ -50,12 +57,10 @@ open class SecureCaptureActivity : CaptureActivity() {
      * so the window decor exists by the time [android.view.Window.getInsetsController] is used;
      * calling it earlier would throw an NPE.
      */
-    @Suppress("DEPRECATION")
     override fun initializeContent(): DecoratedBarcodeView {
         val settings = Settings(this)
 
         setTheme(settings.getTheme())
-        setLocale(settings)
 
         // This flag must be set before setting the content view of the activity or dialog.
         getWindow().setFlags(
@@ -87,16 +92,10 @@ open class SecureCaptureActivity : CaptureActivity() {
         return barcodeScannerView
     }
 
-    /** Applies the selected language (this activity does not extend ThemedActivity). */
-    @Suppress("DEPRECATION")
-    private fun setLocale(settings: Settings) {
-        val locale = settings.getLocale()
-        Locale.setDefault(locale)
-
-        val resources = getBaseContext().resources
-        val config = resources.configuration
-        config.setLocale(locale)
-
-        resources.updateConfiguration(config, resources.displayMetrics)
+    override fun onResume() {
+        super.onResume()
+        val locale = Settings(this).getLocale()
+        if (!LocaleContextHelper.isLocaleApplied(this, locale))
+            recreate()
     }
 }

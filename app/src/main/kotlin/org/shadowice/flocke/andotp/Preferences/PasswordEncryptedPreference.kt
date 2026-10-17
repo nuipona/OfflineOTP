@@ -48,7 +48,7 @@ open class PasswordEncryptedPreference(context: Context, attrs: AttributeSet?) :
     private lateinit var passwordConfirm: EditText
     private lateinit var btnSave: Button
 
-    private var value: String = DEFAULT_VALUE
+    private var encryptedValue: String? = null
 
     init {
         setDialogLayoutResource(R.layout.component_password)
@@ -72,6 +72,8 @@ open class PasswordEncryptedPreference(context: Context, attrs: AttributeSet?) :
         val passwordLayout = requireNotNull(view.findViewById<TextInputLayout>(R.id.passwordLayout))
         passwordInput = requireNotNull(view.findViewById(R.id.passwordEdit))
         passwordConfirm = requireNotNull(view.findViewById(R.id.passwordConfirm))
+        passwordInput.isSaveEnabled = false
+        passwordConfirm.isSaveEnabled = false
 
         if (settings.getBlockAccessibility()) {
             passwordLayout.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS)
@@ -90,9 +92,7 @@ open class PasswordEncryptedPreference(context: Context, attrs: AttributeSet?) :
         btnCancel.setOnClickListener(this)
         btnSave.setOnClickListener(this)
 
-        if (value.isNotEmpty()) {
-            passwordInput.setText(value)
-        }
+        passwordInput.setText(restoreAndDecrypt(encryptedValue))
 
         if (mode == Mode.PASSWORD) {
             passwordLayout.hint = context.getString(R.string.settings_hint_password)
@@ -118,41 +118,43 @@ open class PasswordEncryptedPreference(context: Context, attrs: AttributeSet?) :
 
     override fun onGetDefaultValue(a: TypedArray, index: Int): Any? = a.getString(index)
 
-    /** Encrypts the value with the KeyStore key and stores it Base64 encoded. */
+    /** Encrypts a plaintext value immediately; plaintext is never retained in a preference field. */
     private fun encryptAndPersist(value: String) {
         try {
             val pair = requireNotNull(key)
             val encBytes = EncryptionHelper.encrypt(pair.getPublic(), value.toByteArray(StandardCharsets.UTF_8))
-            persistString(Base64.encodeToString(encBytes, Base64.URL_SAFE))
+            val encoded = Base64.encodeToString(encBytes, Base64.URL_SAFE)
+            if (persistString(encoded)) encryptedValue = encoded
         } catch (e: Exception) {
             e.printStackTrace()
         }
     }
 
-    /** Loads and decrypts the stored Base64 value. */
-    private fun restoreAndDecrypt(encValue: String?) {
-        try {
+    /** Decrypts only while binding the dialog, returning an empty value if no credential is stored. */
+    private fun restoreAndDecrypt(encValue: String?): String {
+        if (encValue.isNullOrEmpty()) return DEFAULT_VALUE
+
+        return try {
             val pair = requireNotNull(key)
-            val encoded = requireNotNull(encValue)
-            val encBytes = Base64.decode(encoded, Base64.URL_SAFE)
-            value = String(EncryptionHelper.decrypt(pair.getPrivate(), encBytes), StandardCharsets.UTF_8)
+            val encBytes = Base64.decode(encValue, Base64.URL_SAFE)
+            String(EncryptionHelper.decrypt(pair.getPrivate(), encBytes), StandardCharsets.UTF_8)
         } catch (e: Exception) {
             e.printStackTrace()
+            DEFAULT_VALUE
         }
     }
 
     override fun onSetInitialValue(restorePersistedValue: Boolean, defaultValue: Any?) {
         if (restorePersistedValue) {
-            restoreAndDecrypt(getPersistedString(DEFAULT_VALUE))
+            encryptedValue = getPersistedString(DEFAULT_VALUE)
         } else {
             // This preference has no android:defaultValue. The framework therefore supplies null
-            // the first time it is attached; keep the in-memory empty default without persisting it.
+            // the first time it is attached; keep the empty value without persisting it.
             val initialValue = defaultValue as? String ?: run {
-                value = DEFAULT_VALUE
+                encryptedValue = null
                 return
             }
-            value = initialValue
-            encryptAndPersist(value)
+            encryptAndPersist(initialValue)
         }
     }
 
@@ -160,12 +162,16 @@ open class PasswordEncryptedPreference(context: Context, attrs: AttributeSet?) :
         when (view.id) {
             R.id.btnCancel -> requireNotNull(getDialog()).dismiss()
             R.id.btnSave -> {
-                value = passwordInput.text.toString()
-                encryptAndPersist(value)
-
+                encryptAndPersist(passwordInput.text.toString())
                 requireNotNull(getDialog()).dismiss()
             }
         }
+    }
+
+    override fun onDialogClosed(positiveResult: Boolean) {
+        if (this::passwordInput.isInitialized) passwordInput.setText("")
+        if (this::passwordConfirm.isInitialized) passwordConfirm.setText("")
+        super.onDialogClosed(positiveResult)
     }
 
     override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {

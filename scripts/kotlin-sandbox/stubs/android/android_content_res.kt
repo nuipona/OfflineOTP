@@ -47,23 +47,17 @@ open class Resources {
 
     open val configuration: Configuration get() = Configuration()
 
-    /**
-     * Records the configuration update. The platform method is deprecated but the converted base
-     * activity still uses it to apply the selected language.
-     */
-    open fun updateConfiguration(config: Configuration, metrics: android.util.DisplayMetrics) {}
-
     companion object {
         @JvmStatic
         fun getSystem(): Resources = Resources()
     }
 }
 
-class Configuration {
+class Configuration(other: Configuration? = null) {
     val locales: LocaleList get() = LocaleList()
 
     /** The locale that was set; the platform's own `getLocale()` was removed in API 24. */
-    var currentLocale: java.util.Locale? = null
+    var currentLocale: java.util.Locale? = other?.currentLocale
         private set
 
     /** The platform setter, kept because the converted base activity applies the language with it. */

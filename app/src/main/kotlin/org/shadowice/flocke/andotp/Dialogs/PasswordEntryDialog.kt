@@ -56,6 +56,8 @@ open class PasswordEntryDialog(
         val passwordLayout = requireNotNull(findViewById<TextInputLayout>(R.id.passwordInputLayout))
         passwordInput = requireNotNull(findViewById(R.id.passwordInput))
         passwordConfirm = requireNotNull(findViewById(R.id.passwordConfirm))
+        passwordInput.isSaveEnabled = false
+        passwordConfirm.isSaveEnabled = false
         tooShortWarning = requireNotNull(findViewById(R.id.tooShortWarning))
         tooShortWarning.setText(
             context.getString(R.string.settings_label_short_password, Constants.AUTH_MIN_PASSWORD_LENGTH)
@@ -124,12 +126,24 @@ open class PasswordEntryDialog(
         return false
     }
 
+    private fun clearSensitiveInputs() {
+        passwordInput.setText("")
+        passwordConfirm.setText("")
+    }
+
+    override fun dismiss() {
+        clearSensitiveInputs()
+        super.dismiss()
+    }
+
     // View.OnClickListener callback
     override fun onClick(view: View) {
-        if (view.id == R.id.buttonOk) {
-            callback?.onPasswordEntered(passwordInput.text.toString())
+        try {
+            if (view.id == R.id.buttonOk) {
+                callback?.onPasswordEntered(passwordInput.text.toString())
+            }
+        } finally {
+            dismiss()
         }
-
-        dismiss()
     }
 }

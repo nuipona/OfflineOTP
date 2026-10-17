@@ -69,6 +69,7 @@ APP_SOURCES=(
     "$KOTLIN_APP/Utilities/EncryptionHelper.kt"
     "$KOTLIN_APP/Utilities/KeyStoreHelper.kt"
     "$KOTLIN_APP/Utilities/Settings.kt"
+    "$KOTLIN_APP/Utilities/LocaleContextHelper.kt"
     "$KOTLIN_APP/Utilities/Constants.kt"
     "$KOTLIN_APP/Utilities/FileHelper.kt"
     "$KOTLIN_APP/Utilities/StorageAccessHelper.kt"

@@ -36,6 +36,7 @@ import org.shadowice.flocke.andotp.Utilities.OtpKind
 import org.shadowice.flocke.andotp.Utilities.OtpParseResult
 import org.shadowice.flocke.andotp.Utilities.OtpUriParser
 import org.shadowice.flocke.andotp.Utilities.TokenCalculator
+import org.shadowice.flocke.andotp.Utilities.Tools
 import org.shadowice.flocke.andotp.Utilities.ValidatedOtp
 
 import java.nio.charset.StandardCharsets
@@ -62,6 +63,7 @@ open class Entry {
     private var visible = false
     private var hideTask: Runnable? = null
     private var last_update = 0L
+    private var hasUpdatedTimeToken = false
     private var last_used = 0L
     private var used_frequency = 0L
 
@@ -205,8 +207,7 @@ open class Entry {
     fun destroy() {
         secret?.fill(0)
         secret = null
-        currentOTP = ""
-        prevOTP = ""
+        invalidateCachedToken()
         pin = ""
         issuer = ""
         label = ""
@@ -281,7 +282,15 @@ open class Entry {
 
     fun getType(): OTPType = type
 
+    private fun invalidateCachedToken() {
+        hasUpdatedTimeToken = false
+        last_update = 0L
+        currentOTP = ""
+        prevOTP = ""
+    }
+
     fun setType(type: OTPType) {
+        if (this.type != type) invalidateCachedToken()
         this.type = type
     }
 
@@ -294,7 +303,11 @@ open class Entry {
     }
 
     fun setSecret(secret: ByteArray?) {
-        this.secret = secret?.clone()
+        // Copy before wiping the old value in case the caller passes an aliased array.
+        val replacement = secret?.clone()
+        this.secret?.fill(0)
+        this.secret = replacement
+        invalidateCachedToken()
     }
 
     fun getIssuer(): String = issuer
@@ -316,6 +329,7 @@ open class Entry {
     fun getPeriod(): Int = period
 
     fun setPeriod(period: Int) {
+        if (this.period != period) invalidateCachedToken()
         this.period = period
     }
 
@@ -328,6 +342,7 @@ open class Entry {
     fun getDigits(): Int = digits
 
     fun setDigits(digits: Int) {
+        if (this.digits != digits) invalidateCachedToken()
         this.digits = digits
     }
 
@@ -383,6 +398,7 @@ open class Entry {
      */
     fun setPin(pin: String) {
         InputPolicy.text(pin, InputPolicy.MAX_TAG_CHARS)
+        if (this.pin != pin) invalidateCachedToken()
         this.pin = pin
     }
 
@@ -393,33 +409,41 @@ open class Entry {
     }
 
     /** Recalculates the token ({@code updateNow} forces a time-based refresh); returns whether one was produced. */
-    fun updateOTP(updateNow: Boolean): Boolean {
+    fun updateOTP(updateNow: Boolean): Boolean = updateOTPAt(System.currentTimeMillis() / 1000, updateNow)
+
+    /**
+     * Time-based update with an explicit epoch second. Besides making all token variants use one
+     * consistent clock sample, this refreshes when the wall clock moves backwards as well as
+     * forwards; otherwise a cached token from a future step could remain visible until time caught
+     * up. Internal visibility keeps this deterministic seam out of the Java API.
+     */
+    internal fun updateOTPAt(time: Long, updateNow: Boolean): Boolean {
         val seed = secret ?: return false
         validate()
         if (type == OTPType.TOTP || type == OTPType.STEAM || type == OTPType.MOTP) {
-            val time = System.currentTimeMillis() / 1000
             val counter = time / getPeriod()
 
-            if (updateNow || counter > last_update) {
-                // The previous token is the one for the period before `counter`. The cached current
-                // token is only that one after a single-period advance; an edit (updateNow) may have
-                // changed the seed, period or PIN, and a longer gap (e.g. after the app was paused)
-                // leaves the cached token several periods behind. Both cases recalculate it.
-                val reusePrevious = !updateNow && counter == last_update + 1
+            if (updateNow || !hasUpdatedTimeToken || counter != last_update) {
+                // Reuse the cached token only when the clock advanced by exactly one step. A
+                // backwards/large jump or edit recomputes both current and previous at this time.
+                val reusePrevious = hasUpdatedTimeToken && !updateNow && last_update != Long.MAX_VALUE
+                        && counter == last_update + 1
                 prevOTP = if (reusePrevious && !currentOTP.isNullOrEmpty()) currentOTP else ""
 
                 when (type) {
                     OTPType.TOTP -> {
-                        currentOTP = TokenCalculator.TOTP_RFC6238(seed, period, digits, algorithm, 0)
+                        currentOTP = Tools.formatTokenString(
+                            TokenCalculator.TOTP_RFC6238(seed, period, time, digits, algorithm, 0), digits)
 
                         if (prevOTP.isNullOrEmpty())
-                            prevOTP = TokenCalculator.TOTP_RFC6238(seed, period, digits, algorithm, -1)
+                            prevOTP = Tools.formatTokenString(
+                                TokenCalculator.TOTP_RFC6238(seed, period, time, digits, algorithm, -1), digits)
                     }
                     OTPType.STEAM -> {
-                        currentOTP = TokenCalculator.TOTP_Steam(seed, period, digits, algorithm, 0)
+                        currentOTP = TokenCalculator.TOTP_SteamAt(seed, period, time, digits, algorithm, 0)
 
                         if (prevOTP.isNullOrEmpty())
-                            prevOTP = TokenCalculator.TOTP_Steam(seed, period, digits, algorithm, -1)
+                            prevOTP = TokenCalculator.TOTP_SteamAt(seed, period, time, digits, algorithm, -1)
                     }
                     OTPType.MOTP -> {
                         val currentPin = getPin()
@@ -438,6 +462,7 @@ open class Entry {
                 }
 
                 last_update = counter
+                hasUpdatedTimeToken = true
                 setColor(COLOR_DEFAULT)
                 return true
             }

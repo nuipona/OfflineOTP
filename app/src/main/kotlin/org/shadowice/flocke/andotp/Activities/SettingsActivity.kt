@@ -76,7 +76,7 @@ open class SettingsActivity : BackgroundTaskActivity<ChangeEncryptionTask.Result
     private var authenticationGeneration: Long = -1
     private var encryptionChanged = false
 
-    private var inProgress: Snackbar? = null
+    private var inProgress: AlertDialog? = null
     private var canGoBack = true
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -270,16 +270,20 @@ open class SettingsActivity : BackgroundTaskActivity<ChangeEncryptionTask.Result
 
     override fun setupUiForTaskState(taskRunning: Boolean) {
         if (taskRunning) {
-            // TODO: Better in-progress notification
-            val snackbar = Snackbar.make(snackbarAnchor(), R.string.settings_toast_encryption_changing,
-                BaseTransientBottomBar.LENGTH_INDEFINITE)
-            inProgress = snackbar
-            snackbar.show()
-
             canGoBack = false
+            if (inProgress == null) {
+                val progressView = getLayoutInflater().inflate(R.layout.dialog_encryption_progress, null, false)
+                val dialog = AlertDialog.Builder(this)
+                    .setTitle(R.string.settings_activity_title)
+                    .setView(progressView)
+                    .setCancelable(false)
+                    .create()
+                inProgress = dialog
+                dialog.show()
+            }
         } else {
             inProgress?.dismiss()
-
+            inProgress = null
             canGoBack = true
         }
     }
@@ -340,6 +344,8 @@ open class SettingsActivity : BackgroundTaskActivity<ChangeEncryptionTask.Result
     }
 
     override fun onDestroy() {
+        inProgress?.dismiss()
+        inProgress = null
         prefs?.unregisterOnSharedPreferenceChangeListener(this)
         encryptionKey = null
         fragment?.setEncryptionKey(null)
