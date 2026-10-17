@@ -46,8 +46,9 @@ jobs:
             # hosted-runner log and artifact download endpoints are unavailable.
             python3 - <<'PY'
           from pathlib import Path
-          lines = Path('gradle-apk.log').read_text(errors='replace').splitlines()[-80:]
-          message = '\n'.join(lines)[-7000:]
+          lines = Path('gradle-apk.log').read_text(errors='replace').splitlines()
+          start = next((i for i, line in enumerate(lines) if line.startswith('FAILURE:')), max(0, len(lines) - 35))
+          message = '\n'.join(lines[start:])[:3500]
           message = message.replace('%', '%25').replace('\r', '%0D').replace('\n', '%0A')
           print(f'::error title=APK build failure::{message}')
           PY
