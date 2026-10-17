@@ -23,6 +23,24 @@ interface TextWatcher {
     fun afterTextChanged(s: Editable?) {}
 }
 
+/**
+ * Stand-in for the platform input-filter interface and its nested `LengthFilter`, the only filter
+ * the converted dialogs install (the PIN dialog caps what can be typed). The stand-in records the
+ * cap; it does not rewrite text.
+ */
+interface InputFilter {
+    fun filter(source: CharSequence?, start: Int, end: Int, dest: CharSequence?, dstart: Int,
+               dend: Int): CharSequence?
+
+    class LengthFilter(private val max: Int) : InputFilter {
+        /** The configured cap. */
+        fun getMax(): Int = max
+
+        override fun filter(source: CharSequence?, start: Int, end: Int, dest: CharSequence?,
+                            dstart: Int, dend: Int): CharSequence? = source
+    }
+}
+
 /** Constants-only stand-in for the platform input-type flags. */
 interface InputType {
     companion object {

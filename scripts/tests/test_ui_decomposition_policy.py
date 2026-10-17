@@ -167,7 +167,7 @@ class UiDecompositionSourceTest(unittest.TestCase):
         body = codec[codec.index("fun serialize("):]
         self.assertEqual(["JSON_SECRET", "JSON_ISSUER", "JSON_LABEL", "JSON_DIGITS", "JSON_TYPE",
                           "JSON_ALGORITHM", "JSON_THUMBNAIL", "JSON_LAST_USED", "JSON_USED_FREQUENCY",
-                          "JSON_PERIOD", "JSON_PERIOD", "JSON_COUNTER", "JSON_TAGS"],
+                          "JSON_PERIOD", "JSON_PERIOD", "JSON_COUNTER", "JSON_PIN", "JSON_TAGS"],
                          re.findall(r"jsonObj\.put\((JSON_\w+)", body))
 
         # A closed failure set, an owned one-use seed and redacted diagnostics. No generated

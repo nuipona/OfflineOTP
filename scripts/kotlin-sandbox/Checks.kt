@@ -1483,7 +1483,7 @@ fun main() {
             // The stored format is the Java serializer's: same names, same order, same values.
             val written = EntryJson.serialize(parsed.kind, parsed.copySecret(), parsed.issuer, parsed.label,
                     parsed.digits, parsed.period, parsed.counter, parsed.algorithm, parsed.thumbnailName!!,
-                    parsed.lastUsed, parsed.usedFrequency, parsed.tags)
+                    parsed.lastUsed, parsed.usedFrequency, parsed.tags, "")
             expect(written.toString() == STORED_ENTRY_JSON, { "stored form changed: $written" })
             expect(written.keys().asSequence().toList() == listOf("secret", "issuer", "label", "digits", "type",
                     "algorithm", "thumbnail", "last_used", "used_frequency", "period", "tags"),
@@ -1520,15 +1520,66 @@ fun main() {
 
         // HOTP writes its counter and no period; TOTP writes its period and no counter.
         val hotp = EntryJson.serialize(OtpKind.HOTP, ascii("12345678901234567890"), "", "hotp", 8, 30, 42L,
-                OtpHashAlgorithm.SHA256, "GitHub", 5L, 7L, listOf("work"))
+                OtpHashAlgorithm.SHA256, "GitHub", 5L, 7L, listOf("work"), "")
         expect(hotp.getString("type") == "HOTP" && hotp.getString("algorithm") == "SHA256", { "HOTP fields" })
         expect(hotp.getLong("counter") == 42L && !hotp.has("period"), { "HOTP counter/period" })
         expect(hotp.getLong("last_used") == 5L && hotp.getLong("used_frequency") == 7L, { "usage metadata" })
         expect(hotp.getJSONArray("tags").getString(0) == "work", { "tags array" })
         val totp = EntryJson.serialize(OtpKind.TOTP, ascii("12345678901234567890"), "ACME", "totp", 6, 60, 0L,
-                OtpHashAlgorithm.SHA1, "Default", 0L, 0L, emptyList())
+                OtpHashAlgorithm.SHA1, "Default", 0L, 0L, emptyList(), "")
         expect(totp.getInt("period") == 60 && !totp.has("counter"), { "TOTP period/counter" })
         expect(totp.getString("issuer") == "ACME" && totp.getJSONArray("tags").length() == 0, { "TOTP fields" })
+    }
+
+    check("the mOTP PIN is stored, round-trips and defaults to empty in older documents") {
+        // An mOTP entry that has a PIN carries it, and the document survives a round trip.
+        val written = EntryJson.serialize(OtpKind.MOTP, ascii("0123456789abcdef"), "ACME", "alice", 6, 30, 0L,
+                OtpHashAlgorithm.SHA1, "Default", 0L, 0L, emptyList(), "1234")
+        expect(written.has("pin") && written.getString("pin") == "1234", { "the PIN was not written" })
+        val parsed = entryValue(JSONObject(written.toString()))
+        try {
+            expect(parsed.kind == OtpKind.MOTP && parsed.pin == "1234",
+                    { "the stored PIN did not survive the round trip" })
+            val again = EntryJson.serialize(parsed.kind, parsed.copySecret(), parsed.issuer, parsed.label,
+                    parsed.digits, parsed.period, parsed.counter, parsed.algorithm, parsed.thumbnailName!!,
+                    parsed.lastUsed, parsed.usedFrequency, parsed.tags, parsed.pin)
+            expect(again.toString() == written.toString(), { "the mOTP document changed: $again" })
+        } finally {
+            parsed.close()
+        }
+
+        // Only an mOTP entry that actually has a PIN writes the field, so every document the Java
+        // serializer produced stays byte-identical.
+        expect(!EntryJson.serialize(OtpKind.MOTP, ascii("0123456789abcdef"), "", "alice", 6, 30, 0L,
+                OtpHashAlgorithm.SHA1, "Default", 0L, 0L, emptyList(), "").has("pin"),
+                { "an empty mOTP PIN must not be written" })
+        expect(!EntryJson.serialize(OtpKind.TOTP, ascii("12345678901234567890"), "", "totp", 6, 30, 0L,
+                OtpHashAlgorithm.SHA1, "Default", 0L, 0L, emptyList(), "1234").has("pin"),
+                { "a PIN on a non-mOTP entry must not be written" })
+
+        // A document written before the field existed reads back as an empty PIN.
+        val legacy = entryValue(entryDocument().put("type", "MOTP"))
+        try {
+            expect(legacy.kind == OtpKind.MOTP && legacy.pin.isEmpty(), { "the legacy mOTP PIN default" })
+        } finally {
+            legacy.close()
+        }
+
+        // The PIN is bounded like the other entry text, and a non-string PIN is a rejected field.
+        expect(entryError(entryDocument().put("type", "MOTP")
+                .put("pin", "5".repeat(InputPolicy.MAX_TAG_CHARS + 1))) == EntryJsonError.TEXT_TOO_LONG,
+                { "an oversized PIN must be rejected" })
+        expect(entryError(entryDocument().put("type", "MOTP").put("pin", 5))
+                == EntryJsonError.INVALID_TEXT, { "a numeric PIN must be rejected" })
+
+        // The Entry adapter carries the stored PIN into the model and back into the document.
+        val entry = Entry(JSONObject(written.toString()))
+        try {
+            expect(entry.getPin() == "1234", { "the adapter did not carry the stored PIN" })
+            expect(entry.toJSON().toString() == written.toString(), { "the adapter round trip changed it" })
+        } finally {
+            entry.destroy()
+        }
     }
 
     check("entry documents reject malformed fields with a closed error set") {

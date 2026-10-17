@@ -168,6 +168,7 @@ open class Entry {
             this.thumbnail = thumbnailFromName(value.thumbnailName)
             this.last_used = value.lastUsed
             this.used_frequency = value.usedFrequency
+            this.pin = value.pin
             validate()
         } catch (error: RuntimeException) {
             destroy()
@@ -228,7 +229,8 @@ open class Entry {
         thumbnailName = getThumbnail().name,
         lastUsed = getLastUsed(),
         usedFrequency = getUsedFrequency(),
-        tags = tags
+        tags = tags,
+        pin = getPin()
     )
 
     /** Serializes this entry to an otpauth:// URI (null if the type is unsupported). */
@@ -375,7 +377,12 @@ open class Entry {
 
     fun getPin(): String = pin
 
+    /**
+     * Sets the mOTP PIN. The bound is the one [validate] and the document parser apply, so a PIN
+     * that would make the next vault write reject the entry is refused at the setter instead.
+     */
     fun setPin(pin: String) {
+        InputPolicy.text(pin, InputPolicy.MAX_TAG_CHARS)
         this.pin = pin
     }
 

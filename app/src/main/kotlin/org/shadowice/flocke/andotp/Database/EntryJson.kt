@@ -33,6 +33,7 @@ object EntryJson {
     private const val JSON_THUMBNAIL = "thumbnail"
     private const val JSON_LAST_USED = "last_used"
     private const val JSON_USED_FREQUENCY = "used_frequency"
+    private const val JSON_PIN = "pin"
 
     // Older documents predate these fields; the Java parser defaulted them the same way.
     private const val DEFAULT_PERIOD = TokenCalculator.TOTP_DEFAULT_PERIOD
@@ -69,6 +70,9 @@ object EntryJson {
             val thumbnailName = thumbnailName(json)
             val lastUsed = usage(json, JSON_LAST_USED)
             val usedFrequency = usage(json, JSON_USED_FREQUENCY)
+            // The mOTP PIN was never stored before, so a document written by an older version (and
+            // every non-mOTP document) simply has no such key and reads back as an empty PIN.
+            val pin = if (json.has(JSON_PIN)) text(json, JSON_PIN) else ""
 
             // The bounds the Java model ran in validate() after reading every field, in its order.
             if (seed.isEmpty() || seed.size > InputPolicy.MAX_SECRET_BYTES) reject(EntryJsonError.INVALID_SECRET)
@@ -81,11 +85,12 @@ object EntryJson {
                 reject(EntryJsonError.INVALID_PARAMETERS)
             bounded(issuer, InputPolicy.MAX_TEXT_CHARS)
             bounded(label, InputPolicy.MAX_TEXT_CHARS)
+            bounded(pin, InputPolicy.MAX_TAG_CHARS)
             if (tags.size > InputPolicy.MAX_TAGS) reject(EntryJsonError.TOO_MANY_TAGS)
             for (tag in tags) bounded(tag, InputPolicy.MAX_TAG_CHARS)
 
             return ValidatedEntry.create(kind, seed, period, digits, counter, issuer, label, algorithm,
-                thumbnailName, lastUsed, usedFrequency, tags)
+                thumbnailName, lastUsed, usedFrequency, tags, pin)
         } catch (invalid: Rejected) {
             seed.fill(0)
             throw invalid
@@ -105,7 +110,7 @@ object EntryJson {
     @Throws(JSONException::class)
     fun serialize(kind: OtpKind, secret: ByteArray, issuer: String, label: String, digits: Int,
                   period: Int, counter: Long, algorithm: OtpHashAlgorithm, thumbnailName: String,
-                  lastUsed: Long, usedFrequency: Long, tags: List<String>): JSONObject {
+                  lastUsed: Long, usedFrequency: Long, tags: List<String>, pin: String): JSONObject {
         val jsonObj = JSONObject()
         jsonObj.put(JSON_SECRET, String(Base32().encode(secret)))
         jsonObj.put(JSON_ISSUER, issuer)
@@ -124,6 +129,12 @@ object EntryJson {
             jsonObj.put(JSON_PERIOD, period)
         else if (kind == OtpKind.HOTP)
             jsonObj.put(JSON_COUNTER, counter)
+
+        // Same rule for the mOTP PIN: only an mOTP entry that actually has one carries the field,
+        // so every other document - and every mOTP document written before the field existed -
+        // stays byte-for-byte what the Java serializer produced.
+        if (kind == OtpKind.MOTP && pin.isNotEmpty())
+            jsonObj.put(JSON_PIN, pin)
 
         val tagsArray = JSONArray()
         for (tag in tags) {

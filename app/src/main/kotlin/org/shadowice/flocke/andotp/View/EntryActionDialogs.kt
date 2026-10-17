@@ -3,6 +3,7 @@ package org.shadowice.flocke.andotp.View
 import android.app.AlertDialog
 import android.content.Context
 import android.text.Editable
+import android.text.InputFilter
 import android.text.InputType
 import android.text.TextWatcher
 import android.text.method.PasswordTransformationMethod
@@ -14,6 +15,7 @@ import android.widget.LinearLayout
 
 import org.shadowice.flocke.andotp.R
 import org.shadowice.flocke.andotp.Utilities.EntryThumbnail
+import org.shadowice.flocke.andotp.Utilities.InputPolicy
 import org.shadowice.flocke.andotp.Utilities.Settings
 import org.shadowice.flocke.andotp.Utilities.Tools
 import org.shadowice.flocke.andotp.Utilities.UIHelper
@@ -95,6 +97,9 @@ class EntryActionDialogs(private val context: Context, private val settings: Set
     fun pin(current: String, save: Consumer<String>) {
         val input = input()
         input.setRawInputType(InputType.TYPE_NUMBER_VARIATION_PASSWORD or InputType.TYPE_CLASS_NUMBER)
+        // Cap the text at the bound the entry model applies, so a PIN that would make the next
+        // vault write reject the entry can never be typed in the first place.
+        input.filters = arrayOf<InputFilter>(InputFilter.LengthFilter(InputPolicy.MAX_TAG_CHARS))
         input.setText(current)
         input.transformationMethod = PasswordTransformationMethod.getInstance()
         input.requestFocus()

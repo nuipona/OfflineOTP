@@ -735,6 +735,16 @@ the same exception type and the same messages' shape.
   `period` for TOTP or `counter` for HOTP, then `tags`), the secret re-encoded as padded Base32, and
   `period`/`counter` omitted when the entry does not use them. `ApplicationTest.testEntry` compares
   that string exactly, so an ordering or naming change fails there.
+- `pin` (the mOTP PIN) is the one field the Java serializer never wrote. It is stored after
+  `counter` and before `tags`, and is written **only** for an mOTP entry that actually has one - the
+  same conditional rule `period`/`counter` follow - so every TOTP/HOTP/Steam document, every
+  PIN-less mOTP document and every document written by an older version stays byte-identical. A
+  missing key reads back as an empty PIN, a non-string PIN is `INVALID_TEXT` and an oversized one
+  `TEXT_TOO_LONG` (`InputPolicy.MAX_TAG_CHARS`, the bound `Entry.validate` already applied). The
+  consequence is that the PIN now survives a vault save/load and travels with an encrypted backup
+  and its restore, which it did not do before; it is still not part of the `otpauth://` URI. The
+  dialog caps what can be typed at the same bound, and `EntriesCardAdapter.establishPIN` saves the
+  vault after setting it, so a reload or a failed-save revert cannot drop it again.
 - Document numbers must be integral and in range (`InputPolicy.tokenParameters`: `period` 1…86400,
   `digits` 1…9, counter non-negative and not `Long.MAX_VALUE`); a decimal, a string too large for a
   long, or a wrong type is rejected rather than coerced. Steam keeps its own digit default and the
@@ -1011,11 +1021,12 @@ test verifies the `R` stand-in still matches what `run.sh` compiles. With the en
 document field names and their order, the closed error set, the one-use/redacted value, and the
 semantics a mechanical conversion could drop (the HOTP/TOTP branch in `ownedSecret`, the value-based
 `hashCode`, the `MISSING_SECRET` check, `InputPolicy.tokenParameters`, thumbnail resolution,
-`updateOTP`'s `Boolean`, the mOTP PIN placeholder). The instrumentation test,
+`updateOTP`'s `Boolean`, the mOTP PIN placeholder and its storage/defaults). The instrumentation test,
 `app/src/androidTest/kotlin/.../Database/EntryJsonTest.kt`, characterizes the boundary on a device:
 stored-format equality for a round-tripped document, the malformed-field matrix, the seed ownership
 rules, the `Entry` adapter's round trip and failure messages, the URI parameter set, the token
-calculators and the manual-entry secret validator. With the vault-repository batch the converted-stem
+calculators, the manual-entry secret validator and the mOTP PIN round trip with its older-document
+default. With the vault-repository batch the converted-stem
 list gains `Utilities/DatabaseHelper`, and a dedicated guard
 (`test_converted_vault_repository_keeps_the_transaction_and_its_java_surface`) pins the `object`
 shape with its fourteen `@JvmStatic` members, the lock/constant fields, both `@JvmField` status
@@ -1214,7 +1225,8 @@ checks after the twentieth batch:
   lookup on `Settings` throws before a name is compared.
 - The entry document boundary executed against functional `org.json`/`Base32`/`Hex` replicas: the
   stored field order and defaults (including a reserialization that equals the legacy string
-  byte-for-byte), the malformed-field matrix with its closed error set, the `ValidatedEntry`
+  byte-for-byte), the malformed-field matrix with its closed error set, the mOTP PIN round trip and
+  its older-document default, the `ValidatedEntry`
   one-use/redacted ownership, and the Base32/mOTP-hex secret rules.
 - The converted `Entry` class reflected: public and non-final class, the six constructors including
   both `Exception`-declaring adapters, the `OTPType` constants, `COLOR_RED`, thumbnail getter and

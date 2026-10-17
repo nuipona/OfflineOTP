@@ -6,6 +6,7 @@ import org.json.JSONObject
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertThrows
@@ -68,7 +69,8 @@ class EntryJsonTest {
                 parsed.thumbnailName ?: "Default",
                 parsed.lastUsed,
                 parsed.usedFrequency,
-                parsed.tags
+                parsed.tags,
+                parsed.pin
             )
             assertEquals(STORED_JSON, rewritten.toString())
         } finally {
@@ -241,6 +243,91 @@ class EntryJsonTest {
         } finally {
             motp.destroy()
         }
+    }
+
+    @Test fun theMotpPinSurvivesTheDocumentRoundTripAndOlderDocumentsHaveNone() {
+        val stored = EntryJson.serialize(
+            OtpKind.MOTP,
+            "0123456789abcdef".toByteArray(StandardCharsets.US_ASCII),
+            "ACME",
+            "alice",
+            6,
+            30,
+            0L,
+            OtpHashAlgorithm.SHA1,
+            "Default",
+            0L,
+            0L,
+            emptyList(),
+            "1234"
+        )
+        assertTrue(stored.has("pin"))
+        assertEquals("1234", stored.getString("pin"))
+
+        // Reading it back through the model gives the same document and the same PIN.
+        val entry = Entry(JSONObject(stored.toString()))
+        try {
+            assertEquals("1234", entry.getPin())
+            assertEquals(stored.toString(), entry.toJSON().toString())
+            // The stored PIN is used for the token instead of the placeholder.
+            entry.updateOTP(true)
+            assertNotEquals("PINREQ", entry.getCurrentOTP())
+        } finally {
+            entry.destroy()
+        }
+
+        // An mOTP entry without a PIN writes no such field, so documents the Java serializer
+        // produced stay byte-identical.
+        val withoutPin = EntryJson.serialize(
+            OtpKind.MOTP,
+            "0123456789abcdef".toByteArray(StandardCharsets.US_ASCII),
+            "ACME",
+            "alice",
+            6,
+            30,
+            0L,
+            OtpHashAlgorithm.SHA1,
+            "Default",
+            0L,
+            0L,
+            emptyList(),
+            ""
+        )
+        assertFalse(withoutPin.has("pin"))
+
+        // A document written before the field existed reads back as an empty PIN.
+        val legacy = value(document().put("type", "MOTP"))
+        try {
+            assertEquals(OtpKind.MOTP, legacy.kind)
+            assertEquals("", legacy.pin)
+        } finally {
+            legacy.close()
+        }
+
+        // A non-mOTP kind never writes the field, whatever PIN it is given.
+        val totp = EntryJson.serialize(
+            OtpKind.TOTP,
+            SEED_BYTES,
+            "",
+            "totp",
+            6,
+            30,
+            0L,
+            OtpHashAlgorithm.SHA1,
+            "Default",
+            0L,
+            0L,
+            emptyList(),
+            "1234"
+        )
+        assertFalse(totp.has("pin"))
+
+        // The PIN is bounded like the other entry text.
+        assertEquals(EntryJsonError.TEXT_TOO_LONG,
+                error(document().put("type", "MOTP")
+                        .put("pin", "5".repeat(InputPolicy.MAX_TAG_CHARS + 1))))
+        assertEquals(EntryJsonError.INVALID_TEXT,
+                error(document().put("type", "MOTP").put("pin", 5)))
     }
 
     @Test fun tokensStillComeFromTheSameCalculators() {

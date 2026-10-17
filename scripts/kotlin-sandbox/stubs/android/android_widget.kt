@@ -4,6 +4,7 @@ package android.widget
 import android.content.Context
 import android.text.Editable
 import android.text.SimpleEditable
+import android.text.InputFilter
 import android.text.TextUtils
 import android.text.TextWatcher
 import android.text.method.TransformationMethod
@@ -82,6 +83,13 @@ open class TextView : View() {
 
     /** Whether the text is a single line. */
     var isSingleLine: Boolean = false
+
+    /**
+     * The installed input filters. The platform property is synthesized from the Java
+     * `getFilters()`/`setFilters(...)` pair, so it is declared as a Kotlin property here; the
+     * generated accessors keep the same Java-visible names.
+     */
+    var filters: Array<InputFilter> = emptyArray()
 
     /** The raw input type of the field. The platform only has a setter, setRawInputType(int). */
     private var rawInputTypeValue: Int = 0
