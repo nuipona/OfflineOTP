@@ -212,7 +212,8 @@ class UiDecompositionSourceTest(unittest.TestCase):
         self.assertIn("fun getSecretEncoded(): String {", entry)
         self.assertIn("if (type == OTPType.MOTP) String(seed) else String(Base32().encode(seed))", entry)
         self.assertIn("fun setSecret(secret: ByteArray?)", entry)
-        self.assertIn("this.secret = secret?.clone()", entry)
+        self.assertIn("val replacement = secret?.clone()", entry)
+        self.assertIn("this.secret = replacement", entry)
         self.assertIn("fun getHideTask(): Runnable?", entry)
         self.assertIn("fun setHideTask(newTask: Runnable?)", entry)
 
@@ -230,10 +231,13 @@ class UiDecompositionSourceTest(unittest.TestCase):
 
         # destroy() keeps the Java reset list: previously shown tokens and metadata are cleared.
         destroy = re.search(r"fun destroy\(\)[^{]*{(.*?)\n    }", entry, re.S).group(1)
-        for reset in ("secret?.fill(0)", "secret = null", 'currentOTP = ""', 'prevOTP = ""', 'pin = ""',
+        for reset in ("secret?.fill(0)", "secret = null", "invalidateCachedToken()", 'pin = ""',
                       'issuer = ""', 'label = ""', "tags = ArrayList()", "visible = false",
                       "hideTask = null"):
             self.assertIn(reset, destroy)
+        invalidate = re.search(r"fun invalidateCachedToken\(\)[^{]*{(.*?)\n    }", entry, re.S).group(1)
+        self.assertIn('currentOTP = ""', invalidate)
+        self.assertIn('prevOTP = ""', invalidate)
 
         # The URI writer keeps the Java parameter policy, including the HOTP fall-through that also
         # emits a non-default period, and the default-digest/default-digit omissions.
@@ -255,18 +259,33 @@ class UiDecompositionSourceTest(unittest.TestCase):
         self.assertIn('.scheme("otpauth")', to_uri)
         self.assertIn(".appendPath(label)", to_uri)
 
-        # updateOTP keeps the Java early return, its timeout guard and the mOTP PIN placeholder.
+        # updateOTP samples the clock once and refreshes for either direction of a wall-clock jump.
         update = entry[entry.index("fun updateOTP("):entry.index("fun hasColorChanged()")]
+        self.assertIn("fun updateOTP(updateNow: Boolean): Boolean = updateOTPAt(System.currentTimeMillis() / 1000, updateNow)", update)
         self.assertIn("val seed = secret ?: return false", update)
-        self.assertIn("if (updateNow || counter > last_update)", update)
+        self.assertIn("if (updateNow || !hasUpdatedTimeToken || counter != last_update)", update)
         # The cached token is reused as the previous one only after a single-period advance without an edit.
-        self.assertIn("val reusePrevious = !updateNow && counter == last_update + 1", update)
+        self.assertIn("hasUpdatedTimeToken && !updateNow && last_update != Long.MAX_VALUE", update)
+        self.assertIn("&& counter == last_update + 1", update)
         self.assertIn("prevOTP = if (reusePrevious && !currentOTP.isNullOrEmpty()) currentOTP else \"\"", update)
         self.assertIn("prevOTP = \"\" // the placeholder is not a token", update)
         self.assertIn("currentOTP = MOTP_NO_PIN_CODE", update)
         self.assertIn("currentOTP = TokenCalculator.HOTP(seed, counter, digits, algorithm)", update)
+        self.assertIn("TokenCalculator.TOTP_SteamAt(seed, period, time, digits, algorithm, 0)", update)
         self.assertIn("last_update = counter", update)
+        self.assertIn("hasUpdatedTimeToken = true", update)
         self.assertIn("setColor(COLOR_DEFAULT)", update)
+        self.assertIn("private fun invalidateCachedToken()", entry)
+        for setter in (
+            "fun setType(type: OTPType)",
+            "fun setSecret(secret: ByteArray?)",
+            "fun setPeriod(period: Int)",
+            "fun setDigits(digits: Int)",
+            "fun setPin(pin: String)",
+        ):
+            body = entry.split(setter, 1)[1].split("\n    }", 1)[0]
+            self.assertIn("invalidateCachedToken()", body)
+        self.assertIn("val replacement = secret?.clone()", entry)
 
     def test_converted_vault_repository_keeps_the_transaction_and_its_java_surface(self):
         """The vault file transaction runs on a device only: FileHelper/AtomicFile, SharedPreferences

@@ -42,8 +42,7 @@ object TokenCalculator {
         return mac.doFinal(data)
     }
 
-    // TODO: Rewrite tests so this compatibility wrapper can be removed
-    /** Convenience overload without a time step offset. */
+    /** Legacy Java-compatible overload without a time-step offset; retained for existing callers. */
     @JvmStatic
     fun TOTP_RFC6238(secret: ByteArray, period: Int, time: Long, digits: Int, algorithm: HashAlgorithm): Int {
         return TOTP_RFC6238(secret, period, time, digits, algorithm, 0)
@@ -68,16 +67,19 @@ object TokenCalculator {
 
     /** Steam Guard variant of TOTP, mapped onto Steam's custom alphabet. */
     @JvmStatic
-    fun TOTP_Steam(secret: ByteArray, period: Int, digits: Int, algorithm: HashAlgorithm, offset: Int): String {
-        var fullToken = TOTP(secret, period, System.currentTimeMillis() / 1000, algorithm, offset)
+    fun TOTP_Steam(secret: ByteArray, period: Int, digits: Int, algorithm: HashAlgorithm, offset: Int): String =
+        TOTP_SteamAt(secret, period, System.currentTimeMillis() / 1000, digits, algorithm, offset)
+
+    /** Internal explicit-time variant used to keep entry updates on one clock sample. */
+    internal fun TOTP_SteamAt(secret: ByteArray, period: Int, time: Long, digits: Int,
+                              algorithm: HashAlgorithm, offset: Int): String {
+        var fullToken = TOTP(secret, period, time, algorithm, offset)
 
         val tokenBuilder = StringBuilder()
-
         for (i in 0 until digits) {
             tokenBuilder.append(steamChars[fullToken % steamChars.size])
             fullToken /= steamChars.size
         }
-
         return tokenBuilder.toString()
     }
 

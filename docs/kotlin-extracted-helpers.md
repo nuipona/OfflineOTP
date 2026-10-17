@@ -287,11 +287,13 @@ Seventeenth batch (the Android components):
 Eighteenth batch (the activity base classes):
 
 - `Activities/ThemedActivity.kt` and `Activities/BaseActivity.kt` replace their Java
-  implementations. The theme is still applied before `super.onCreate()`, the locale handling
-  (`Locale.setDefault`, `Configuration.setLocale`, the deprecated `updateConfiguration`) is
-  unchanged, the screen-off receiver still locks the vault with `SCREEN_OFF`, notifies the
-  callback and finishes the activity, and the obscured-touch rejection still refuses the
-  `FLAG_WINDOW_IS_OBSCURED` window and, from Android 10 on, the partially obscured one.
+  implementations. The theme is still applied before `super.onCreate()`. Locale resources now come
+  from a configuration-specific base context via `LocaleContextHelper`; shared `Resources` are no
+  longer mutated with deprecated `updateConfiguration()`. On resume, a changed language triggers
+  recreation so the new base context resolves the selected locale. The screen-off receiver still
+  locks the vault with `SCREEN_OFF`, notifies the callback and finishes the activity, and the
+  obscured-touch rejection still refuses the `FLAG_WINDOW_IS_OBSCURED` window and, from Android 10
+  on, the partially obscured one.
 - The public `settings` field stays a **field** (not a property), so the 88 Java call sites in the
   activities keep reading `settings.…` unchanged. Kotlin cannot declare a public field that is
   assigned later — `@JvmField` cannot be combined with `lateinit` — so the field is nullable: it
@@ -318,25 +320,26 @@ Nineteenth batch (the small standalone activities):
 - `Activities/PanicResponderActivity.kt` and `Activities/SecureCaptureActivity.kt` replace their
   Java implementations. The panic responder still answers the PanicKit action only, still disables
   the automatic backups, cancels the pending encrypted backup and locks the vault **before** it
-  wipes the accounts or the settings, and still removes its task. The scanner activity still
-  applies the theme and the language, still requests the hardware acceleration before the content
-  view is built, still blocks the screenshots with `FLAG_SECURE` unless the setting allows them,
-  and still hides the system bars with the insets controller from Android 11 on and with the
-  fullscreen flag below that.
+  wipes the accounts or the settings, and still removes its task. The scanner activity applies the
+  selected locale through `LocaleContextHelper` in its own `attachBaseContext` override (it does not
+  extend `ThemedActivity`), and still applies the theme, requests hardware acceleration before the
+  content view is built, blocks screenshots with `FLAG_SECURE` unless the setting allows them, and
+  hides the system bars with the insets controller from Android 11 on and with the fullscreen flag
+  below that. Its `onResume` recreates the scanner if the selected locale changed while it was
+  backgrounded.
 - Both classes stay extendable (`open`), like the Java classes, and the public constant
   `PANIC_TRIGGER_ACTION` stays a `public static final` field, so the Java call site in
   `MainActivity` (`SecureCaptureActivity.class`) and the manifest entries are unchanged.
-- The deprecated configuration update is still used, because the platform has no replacement for it
-  in an activity that does not extend `ThemedActivity`.
+- Neither activity mutates shared `Resources` with deprecated `updateConfiguration()`.
 - The sandbox compiles both and **executes** the panic decision (a foreign action wipes nothing,
   the panic action without a configured response wipes nothing, the "settings" response disables
   the automatic backups, cancels the pending encrypted backup and locks the vault, and the
   "accounts" response reaches the wipe of the database) and the window handling of the scanner
-  (the theme, the language, the acceleration flag, the secure flag, the fullscreen flag below
-  Android 11 and the hidden system bars with the requested behaviour from Android 11 on). The wipe
-  of the database and the keys itself needs the Java-only file helper, which has no class file in
-  the sandbox, and the real activity start, the real theme, the real camera and the real
-  configuration change are not exercised.
+  (the theme, a recorded selected-locale base-context configuration, the acceleration flag, the
+  secure flag, the fullscreen flag below Android 11 and the hidden system bars with the requested
+  behaviour from Android 11 on). The wipe of the database and the keys itself needs the Java-only
+  file helper, which has no class file in the sandbox; resource resolution, the real activity start,
+  the real theme, the real camera and the real configuration change are not exercised.
 
 Twentieth batch (the about screens):
 
@@ -1093,16 +1096,17 @@ state. It has **not been compiled or run** here.
 With the activity-base batch the stem list gains `Activities/ThemedActivity` and
 `Activities/BaseActivity`, and `scripts/tests/test_kotlin_activity_bases_conversion.py` pins the
 replacements, the public `settings` field the Java activities read, the theme applied before
-`super.onCreate()`, the unchanged locale handling, the screen-off registration, the vault lock
-with its reason, the callback, the finish, the lock listener's UI-thread delivery, the
+`super.onCreate()`, configuration-scoped locale handling, the screen-off registration, the vault
+lock with its reason, the callback, the finish, the lock listener's UI-thread delivery, the
 unregistration on destroy, the single-method callback interface the Java lambdas need and the
 obscured-touch rejection with its Android 10 gate. The nineteenth batch adds
 `Activities/PanicResponderActivity` and `Activities/SecureCaptureActivity` to the stem list and
 `scripts/tests/test_kotlin_small_activities_conversion.py` pins the replacements, the panic
-action, the order of the panic steps, the theme and the language of the scanner activity, the
-acceleration, secure and fullscreen flags, the insets controller branch, the unchanged manifest
-entries and the Java class literal in `MainActivity`. The twentieth batch adds the about screens,
-and `scripts/tests/test_kotlin_about_screens_conversion.py` pins the replacements (both flavors),
+action, the order of the panic steps, the theme and configuration-scoped locale of the scanner
+activity, the acceleration, secure and fullscreen flags, the insets controller branch, the
+unchanged manifest entries and the Java class literal in `MainActivity`. The follow-up audit adds
+an Android interop check that localized contexts leave base resources unchanged. The twentieth batch
+adds the about screens, and `scripts/tests/test_kotlin_about_screens_conversion.py` pins the replacements (both flavors),
 the row/link wiring and the exact URIs, the easter-egg counter and confirmation, the clipboard
 fallbacks, the two pages and their titles, the raw-resource library load with its empty-document
 fallback, the navigation, the public `@JvmField` statics and the Java interop test.

@@ -70,6 +70,7 @@ object ManualEntryDialog {
         val secretInput = requireNotNull(inputView.findViewById<EditText>(R.id.manual_secret))
         secretInput.isSaveEnabled = false
         val secretView = requireNotNull(inputView.findViewById<TextView>(R.id.manual_secret_view))
+        secretView.isSaveEnabled = false
         val counterInput = requireNotNull(inputView.findViewById<EditText>(R.id.manual_counter))
         val periodInput = requireNotNull(inputView.findViewById<EditText>(R.id.manual_period))
         val digitsInput = requireNotNull(inputView.findViewById<EditText>(R.id.manual_digits))
@@ -190,6 +191,10 @@ object ManualEntryDialog {
             .setNegativeButton(android.R.string.cancel, DialogInterface.OnClickListener { _, _ -> })
 
         val dialog = builder.create()
+        dialog.setOnDismissListener {
+            secretInput.setText("")
+            secretView.setText("")
+        }
         dialog.show()
 
         val positiveButton = requireNotNull(dialog.getButton(AlertDialog.BUTTON_POSITIVE))

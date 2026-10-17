@@ -6,7 +6,6 @@ import android.app.KeyguardManager
 import android.content.DialogInterface
 import android.content.Intent
 import android.content.SharedPreferences
-import android.content.res.Configuration
 import android.os.Bundle
 import android.preference.PreferenceManager
 import android.provider.Settings as AndroidSettings
@@ -231,10 +230,10 @@ open class MainActivity : BaseActivity(), SharedPreferences.OnSharedPreferenceCh
 
         encryptionType = settings!!.getEncryption()
 
-        // Activity state is not proof of an unlock; process death/recreation must reauthenticate.
-        VaultSession.lock()
-        requireAuthentication = settings!!.getAuthMethod() != AuthMethod.NONE ||
-                encryptionType == EncryptionType.PASSWORD
+        // A live process-owned session may survive Activity recreation; process death cannot restore
+        // it from saved state, because no key or authentication proof is serialized there.
+        requireAuthentication = VaultSession.getKey() == null &&
+                (settings!!.getAuthMethod() != AuthMethod.NONE || encryptionType == EncryptionType.PASSWORD)
 
         setBroadcastCallback {
             if (settings!!.getRelockOnScreenOff()) onVaultLocked()
@@ -438,8 +437,17 @@ open class MainActivity : BaseActivity(), SharedPreferences.OnSharedPreferenceCh
             requireAuthentication = false
         }
         val currentAdapter = adapter ?: return
-        if (currentAdapter.encryptionKey == null) updateEncryption(null)
-        else populateAdapter()
+        if (currentAdapter.encryptionKey == null) {
+            val sessionKey = VaultSession.getKey()
+            if (sessionKey != null) {
+                currentAdapter.encryptionKey = sessionKey
+                populateAdapter()
+            } else {
+                updateEncryption(null)
+            }
+        } else {
+            populateAdapter()
+        }
         if (authenticationPending || currentAdapter.encryptionKey == null || isFinishing()) return
         checkIntent()
         restartInactivityTimer()
@@ -497,11 +505,6 @@ open class MainActivity : BaseActivity(), SharedPreferences.OnSharedPreferenceCh
                 key == getString(R.string.settings_key_show_prev_token)) {
             recreateActivity = true
         }
-    }
-
-    override fun onConfigurationChanged(newConfig: Configuration) {
-        super.onConfigurationChanged(newConfig)
-        tagsToggle?.onConfigurationChanged(newConfig)
     }
 
     // Activity results

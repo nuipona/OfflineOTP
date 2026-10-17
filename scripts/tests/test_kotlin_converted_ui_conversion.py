@@ -186,6 +186,33 @@ class KotlinConvertedUiConversionTest(unittest.TestCase):
         self.assertIn("protected abstract fun onTaskResult(result: Result)", source)
         self.assertIn("the Java `onTaskResult` was package-private", source)
 
+    def test_backup_success_reports_the_returned_filename(self):
+        activity = (KOTLIN / "Activities/BackupActivity.kt").read_text()
+        result = activity.split("private fun handleBackupTaskResult(", 1)[1].split(
+            "private fun handleRestoreTaskResult(", 1
+        )[0]
+        self.assertIn("notifyBackupState(successMessage, result.payload)", result)
+        self.assertIn("result.payload", result)
+        self.assertIn("val message = getString(msgId)", activity)
+        self.assertIn('"$message\\n$detail"', activity)
+        self.assertNotIn("TODO: Show more information about the finished backup", activity)
+
+    def test_encryption_progress_is_modal_lifecycle_safe_and_keeps_navigation_blocked(self):
+        activity = (KOTLIN / "Activities/SettingsActivity.kt").read_text()
+        state = activity.split("override fun setupUiForTaskState(", 1)[1].split(
+            "/** Asks for a folder", 1
+        )[0]
+        self.assertIn("AlertDialog.Builder(this)", state)
+        self.assertIn("R.layout.dialog_encryption_progress", state)
+        self.assertIn(".setCancelable(false)", state)
+        self.assertIn("canGoBack = false", state)
+        self.assertIn("inProgress?.dismiss()", state)
+        self.assertIn("inProgress = null", state)
+        self.assertNotIn("LENGTH_INDEFINITE", state)
+        destroy = activity.split("override fun onDestroy()", 1)[1].split("/** The preference screen", 1)[0]
+        self.assertIn("inProgress?.dismiss()", destroy)
+        self.assertNotIn("TODO: Better in-progress notification", activity)
+
     def test_the_widened_visibility_is_kept_and_documented(self):
         # The Java classes widened two platform methods to public; the Kotlin classes keep that.
         backup = (KOTLIN / "Activities/BackupActivity.kt").read_text()
@@ -195,6 +222,43 @@ class KotlinConvertedUiConversionTest(unittest.TestCase):
         self.assertIn("public override fun onCreate(savedInstanceState: Bundle?) {", settings)
         self.assertIn("The Java class widened the platform fragment's protected `onCreate()` to public",
                       settings)
+
+    def test_main_activity_uses_normal_configuration_recreation_without_serializing_a_session(self):
+        manifest = (ROOT / "app/src/main/AndroidManifest.xml").read_text()
+        activity = manifest.split('android:name=".Activities.MainActivity"', 1)[1].split(">", 1)[0]
+        self.assertNotIn("android:configChanges", activity)
+        self.assertNotIn("TODO: Rework configuration changes", manifest)
+
+        source = (KOTLIN / "Activities/MainActivity.kt").read_text()
+        create = source.split("override fun onCreate(savedInstanceState: Bundle?)", 1)[1].split(
+            "private fun checkIntent()", 1
+        )[0]
+        self.assertNotIn("VaultSession.lock()", create)
+        self.assertIn("requireAuthentication = VaultSession.getKey() == null &&", create)
+        resume = source.split("public override fun onResume()", 1)[1].split("public override fun onPause()", 1)[0]
+        self.assertIn("val sessionKey = VaultSession.getKey()", resume)
+        self.assertIn("currentAdapter.encryptionKey = sessionKey", resume)
+        self.assertIn("updateEncryption(null)", resume)
+        self.assertIn('outState.putString("filterString", filterString)', source)
+        self.assertNotIn("onConfigurationChanged", source)
+
+    def test_authentication_and_intro_clear_secret_widgets_after_transfer_and_teardown(self):
+        auth = (KOTLIN / "Activities/AuthenticateActivity.kt").read_text()
+        start = auth.split("private fun startAuthTask(", 1)[1].split("override fun onTaskFailure", 1)[0]
+        self.assertIn("startBackgroundTask(task)", start)
+        self.assertIn("finally", start)
+        self.assertIn("clearPasswordInput()", start)
+        finish = auth.split(
+            "private fun finishWithResult(success: Boolean, encryptionKey: ByteArray?, expected: Long) {", 1
+        )[1].split("\n    @Suppress", 1)[0]
+        self.assertIn("clearPasswordInput()", finish)
+        self.assertIn("override fun onDestroy()", auth)
+
+        intro = (KOTLIN / "Activities/IntroScreenActivity.kt").read_text()
+        self.assertIn("authentication.clearCredentialInputs()", intro)
+        self.assertIn("fun clearCredentialInputs()", intro)
+        self.assertIn("override fun onDestroy()", intro)
+        self.assertIn("authenticationFragment?.clearCredentialInputs()", intro)
 
     def test_the_locale_sensitive_conversions_keep_the_java_semantics(self):
         # Java's bare toUpperCase()/toLowerCase() use the default locale; the Kotlin calls say so.

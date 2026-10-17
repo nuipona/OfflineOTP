@@ -30,6 +30,7 @@
             android:layout_height="match_parent"
             android:imeOptions="actionDone"
             android:inputType="textPassword"
+            android:saveEnabled="false"
             android:autofillHints="password" />
     <requestFocus/>
     </com.google.android.material.textfield.TextInputLayout>

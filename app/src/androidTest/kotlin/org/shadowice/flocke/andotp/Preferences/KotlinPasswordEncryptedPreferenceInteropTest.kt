@@ -32,6 +32,8 @@ class KotlinPasswordEncryptedPreferenceInteropTest {
 
         fun initialize(restore: Boolean, value: Any?) = onSetInitialValue(restore, value)
 
+        fun closeDialog() = onDialogClosed(false)
+
         fun inflateAndBind(): View {
             val view = LayoutInflater.from(context).inflate(R.layout.component_password, null, false)
             onBindDialogView(view)
@@ -71,6 +73,7 @@ class KotlinPasswordEncryptedPreferenceInteropTest {
             assertNotNull(password)
             assertNotNull(save)
             assertEquals(plain, password.text.toString())
+            assertFalse(password.isSaveEnabled)
             assertFalse(save.isEnabled)
         }
     }
@@ -89,6 +92,8 @@ class KotlinPasswordEncryptedPreferenceInteropTest {
                 assertNotNull(password)
                 assertNotNull(confirm)
                 assertNotNull(save)
+                assertFalse(password.isSaveEnabled)
+                assertFalse(confirm.isSaveEnabled)
 
                 val expectedClass = if (mode == PasswordEncryptedPreference.Mode.PASSWORD) {
                     InputType.TYPE_CLASS_TEXT
@@ -104,6 +109,9 @@ class KotlinPasswordEncryptedPreferenceInteropTest {
                 assertFalse(save.isEnabled)
                 confirm.setText("123456")
                 assertTrue(save.isEnabled)
+                preference.closeDialog()
+                assertEquals("", password.text.toString())
+                assertEquals("", confirm.text.toString())
             }
         }
     }

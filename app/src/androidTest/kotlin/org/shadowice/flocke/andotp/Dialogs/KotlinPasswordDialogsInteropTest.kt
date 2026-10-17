@@ -64,6 +64,8 @@ class KotlinPasswordDialogsInteropTest {
                 assertNotNull(warning)
                 assertNotNull(ok)
                 assertNotNull(cancel)
+                assertFalse(password.isSaveEnabled)
+                assertFalse(confirm.isSaveEnabled)
                 assertEquals(View.GONE, confirm.visibility)
                 assertFalse(ok.isEnabled)
 
@@ -78,6 +80,8 @@ class KotlinPasswordDialogsInteropTest {
 
                 assertTrue(dialog.onEditorAction(password, EditorInfo.IME_ACTION_DONE, null))
                 assertEquals(accepted, delivered.get())
+                assertEquals("", password.text.toString())
+                assertEquals("", confirm.text.toString())
                 assertEquals(1, dialog.dismissals)
                 assertTrue(
                     dialog.onEditorAction(
@@ -90,6 +94,36 @@ class KotlinPasswordDialogsInteropTest {
                 cancel.performClick()
                 assertNull(delivered.get())
                 assertEquals(2, dialog.dismissals)
+            } finally {
+                dialog.dismiss()
+            }
+        }
+    }
+
+    @Test
+    fun callbackFailureStillClearsInputsAndDismisses() {
+        InstrumentationRegistry.getInstrumentation().runOnMainSync {
+            val failure = IllegalStateException("callback failed")
+            val dialog = RecordingDialog(
+                context(), PasswordEntryDialog.Mode.ENTER, false, false,
+                PasswordEntryDialog.PasswordEnteredCallback { throw failure }
+            )
+            try {
+                val password = requireNotNull(dialog.findViewById<TextInputEditText>(R.id.passwordInput))
+                val confirm = requireNotNull(dialog.findViewById<EditText>(R.id.passwordConfirm))
+                val ok = requireNotNull(dialog.findViewById<Button>(R.id.buttonOk))
+                password.setText(repeat('x', Constants.AUTH_MIN_PASSWORD_LENGTH))
+
+                val thrown = try {
+                    ok.performClick()
+                    null
+                } catch (error: IllegalStateException) {
+                    error
+                }
+                assertSame(failure, thrown)
+                assertEquals("", password.text.toString())
+                assertEquals("", confirm.text.toString())
+                assertEquals(1, dialog.dismissals)
             } finally {
                 dialog.dismiss()
             }
@@ -113,6 +147,8 @@ class KotlinPasswordDialogsInteropTest {
                 assertNotNull(password)
                 assertNotNull(confirm)
                 assertNotNull(ok)
+                assertFalse(password.isSaveEnabled)
+                assertFalse(confirm.isSaveEnabled)
                 assertEquals(View.VISIBLE, confirm.visibility)
                 assertEquals(
                     View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS,
@@ -133,6 +169,8 @@ class KotlinPasswordDialogsInteropTest {
                 assertTrue(ok.isEnabled)
                 ok.performClick()
                 assertEquals(passwordText, delivered.get())
+                assertEquals("", password.text.toString())
+                assertEquals("", confirm.text.toString())
                 assertEquals(1, dialog.dismissals)
             } finally {
                 dialog.dismiss()

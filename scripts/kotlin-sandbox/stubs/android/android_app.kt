@@ -233,6 +233,15 @@ class Notification(val channelId: String?, val smallIcon: Int, val title: CharSe
 
 /** A context subclass so a fragment can hand one back; no lifecycle is modelled. */
 open class Activity : Context() {
+    /** The base-context hook supplied by Android before activity creation. */
+    open fun attachBaseContext(newBase: Context) {}
+
+    /** Requests a fresh activity instance with its current base-context configuration. */
+    open fun recreate() {}
+
+    /** The resume callback supplied by Android before an activity is interactive. */
+    open fun onResume() {}
+
     /** The intent the activity was started with; the platform returns the launch intent. */
     open fun getIntent(): Intent? = null
 

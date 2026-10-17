@@ -32,15 +32,26 @@ class KotlinActivityBasesConversionTest(unittest.TestCase):
         self.assertIn("val current = Settings(this)\n        settings = current", source)
         # The theme is applied before `super.onCreate()`, which is what AppCompat expects.
         body = source[source.index("override fun onCreate("):source.index("public override fun onResume()")]
-        order = ["settings = current", "setTheme(current.getTheme())", "setLocale()",
+        order = ["settings = current", "setTheme(current.getTheme())",
                  "getWindow().setNavigationBarColor(", "super.onCreate(savedInstanceState)"]
         positions = [body.index(marker) for marker in order]
         self.assertEqual(sorted(positions), positions, "the theme is no longer applied before super.onCreate()")
-        # The locale handling is unchanged.
+        # Locale changes are applied through an activity-specific configuration context, never by
+        # mutating the process-wide Resources instance.
+        attach = source[source.index("override fun attachBaseContext(newBase: Context)"):
+                        source.index("override fun onCreate(savedInstanceState: Bundle?)")]
+        self.assertIn("Settings(newBase).getLocale()", attach)
+        self.assertIn("LocaleContextHelper.createLocalizedContext(newBase, locale)", attach)
         locale = source[source.index("public fun setLocale()"):]
-        self.assertIn("Locale.setDefault(locale)", locale)
-        self.assertIn("config.setLocale(locale)", locale)
-        self.assertIn("resources.updateConfiguration(config, resources.displayMetrics)", locale)
+        self.assertIn("LocaleContextHelper.isLocaleApplied(this, locale)", locale)
+        self.assertIn("recreate()", locale)
+        self.assertNotIn("updateConfiguration", source)
+
+        helper = (KOTLIN / "Utilities/LocaleContextHelper.kt").read_text()
+        self.assertIn("Configuration(context.resources.configuration)", helper)
+        self.assertIn("configuration.setLocale(locale)", helper)
+        self.assertIn("context.createConfigurationContext(configuration)", helper)
+        self.assertNotIn("updateConfiguration", helper)
 
     def test_the_converted_activities_keep_reading_the_settings_field(self):
         # The field name did not change, so the call sites still read the same field. The

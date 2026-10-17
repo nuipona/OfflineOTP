@@ -529,15 +529,16 @@ object R {
         const val content_authenticate = 0x7f08000c
         const val content_backup = 0x7f08000d
         const val dialog_dont_show_again = 0x7f08000e
-        const val dialog_manual_entry = 0x7f08000f
-        const val dialog_password_entry = 0x7f080010
-        const val fragment_about = 0x7f080011
-        const val part_author_extra = 0x7f080012
-        const val simple_expandable_list_item_1 = 0x7f080013
-        const val simple_list_item_multiple_choice = 0x7f080014
-        const val simple_list_item_single_choice = 0x7f080015
-        const val simple_spinner_dropdown_item = 0x7f080016
-        const val simple_spinner_item = 0x7f080017
+        const val dialog_encryption_progress = 0x7f08000f
+        const val dialog_manual_entry = 0x7f080010
+        const val dialog_password_entry = 0x7f080011
+        const val fragment_about = 0x7f080012
+        const val part_author_extra = 0x7f080013
+        const val simple_expandable_list_item_1 = 0x7f080014
+        const val simple_list_item_multiple_choice = 0x7f080015
+        const val simple_list_item_single_choice = 0x7f080016
+        const val simple_spinner_dropdown_item = 0x7f080017
+        const val simple_spinner_item = 0x7f080018
     }
     object menu {
         const val menu_fab = 0x7f090000
@@ -755,20 +756,19 @@ object R {
         const val settings_toast_encryption_backup_failed = 0x7f0c00c8
         const val settings_toast_encryption_change_failed = 0x7f0c00c9
         const val settings_toast_encryption_change_success = 0x7f0c00ca
-        const val settings_toast_encryption_changing = 0x7f0c00cb
-        const val settings_toast_encryption_no_key = 0x7f0c00cc
-        const val toast_auth_failed_fatal = 0x7f0c00cd
-        const val toast_copied_to_clipboard = 0x7f0c00ce
-        const val toast_entry_exists = 0x7f0c00cf
-        const val toast_file_load_error = 0x7f0c00d0
-        const val toast_intent_creation_failed = 0x7f0c00d1
-        const val toast_invalid_qr_code = 0x7f0c00d2
-        const val toast_qr_checksum_exception = 0x7f0c00d3
-        const val toast_qr_error = 0x7f0c00d4
-        const val toast_qr_failed_to_generate = 0x7f0c00d5
-        const val toast_qr_format_error = 0x7f0c00d6
-        const val toast_qr_unsuported = 0x7f0c00d7
-        const val yes = 0x7f0c00d8
+        const val settings_toast_encryption_no_key = 0x7f0c00cb
+        const val toast_auth_failed_fatal = 0x7f0c00cc
+        const val toast_copied_to_clipboard = 0x7f0c00cd
+        const val toast_entry_exists = 0x7f0c00ce
+        const val toast_file_load_error = 0x7f0c00cf
+        const val toast_intent_creation_failed = 0x7f0c00d0
+        const val toast_invalid_qr_code = 0x7f0c00d1
+        const val toast_qr_checksum_exception = 0x7f0c00d2
+        const val toast_qr_error = 0x7f0c00d3
+        const val toast_qr_failed_to_generate = 0x7f0c00d4
+        const val toast_qr_format_error = 0x7f0c00d5
+        const val toast_qr_unsuported = 0x7f0c00d6
+        const val yes = 0x7f0c00d7
     }
     object style {
         const val AppTheme_Black_NoActionBar = 0x7f0d0000

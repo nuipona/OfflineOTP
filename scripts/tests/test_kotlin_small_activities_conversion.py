@@ -54,9 +54,10 @@ class KotlinSmallActivitiesConversionTest(unittest.TestCase):
     def test_the_scanner_activity_keeps_its_window_handling(self):
         source = (KOTLIN / "Activities/SecureCaptureActivity.kt").read_text()
         self.assertIn("open class SecureCaptureActivity : CaptureActivity()", source)
-        # The theme and the language come from the settings.
+        # The theme comes from settings; the locale is applied before the scanner activity is created.
         self.assertIn("setTheme(settings.getTheme())", source)
-        self.assertIn("setLocale(settings)", source)
+        self.assertIn("Settings(newBase).getLocale()", source)
+        self.assertIn("LocaleContextHelper.createLocalizedContext(newBase, locale)", source)
         # The hardware acceleration is requested before the content view is built.
         body = source[source.index("override fun initializeContent()"):]
         acceleration = body.index("FLAG_HARDWARE_ACCELERATED")
@@ -74,11 +75,10 @@ class KotlinSmallActivitiesConversionTest(unittest.TestCase):
                       "WindowInsetsController.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE)", body)
         # Below that the fullscreen flag is used.
         self.assertIn("WindowManager.LayoutParams.FLAG_FULLSCREEN", body)
-        # The language is applied the way the Java version did it.
-        locale = source[source.index("private fun setLocale(settings: Settings)"):]
-        self.assertIn("Locale.setDefault(locale)", locale)
-        self.assertIn("config.setLocale(locale)", locale)
-        self.assertIn("resources.updateConfiguration(config, resources.displayMetrics)", locale)
+        # Locale changes after the scanner is launched recreate it with a correctly wrapped base context.
+        self.assertIn("if (!LocaleContextHelper.isLocaleApplied(this, locale))", source)
+        self.assertIn("recreate()", source)
+        self.assertNotIn("updateConfiguration", source)
 
     def test_the_manifest_and_the_java_call_sites_are_unchanged(self):
         manifest = (ROOT / "app/src/main/AndroidManifest.xml").read_text()
@@ -106,6 +106,7 @@ class KotlinSmallActivitiesConversionTest(unittest.TestCase):
         self.assertIn("foreignActionWipesNothing", source)
         # The scanner activity is checked for its shape, because it needs a camera.
         self.assertIn("scannerActivityKeepsItsShape", source)
+        self.assertIn("localizedContextUsesTheRequestedLocaleWithoutMutatingTheBaseContext", source)
         self.assertIn("CaptureActivity::class.java", source)
         self.assertIn("Modifier.isProtected(initialize.modifiers)", source)
 

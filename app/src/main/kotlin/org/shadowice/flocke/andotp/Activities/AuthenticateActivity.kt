@@ -164,10 +164,14 @@ open class AuthenticateActivity : BackgroundTaskActivity<AuthenticationOutcome>(
 
     override fun onReturnToCanceledTask() {
         val input = passwordInput ?: return
-        input.setText("")
+        clearPasswordInput()
         input.requestFocus()
         val keyboard = getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
         keyboard.showSoftInput(input, 0)
+    }
+
+    private fun clearPasswordInput() {
+        passwordInput?.setText("")
     }
 
     override fun setupUiForTaskState(isTaskRunning: Boolean) {
@@ -194,7 +198,12 @@ open class AuthenticateActivity : BackgroundTaskActivity<AuthenticationOutcome>(
 
     private fun startAuthTask(plainPassword: String) {
         val task = AuthenticationTask(this, isAuthUpgrade, existingAuthCredentials, plainPassword)
-        startBackgroundTask(task)
+        try {
+            startBackgroundTask(task)
+        } finally {
+            // The task owns its immutable copy; do not leave another copy in the UI widget.
+            clearPasswordInput()
+        }
     }
 
     override fun onTaskFailure(error: TaskFailure) {
@@ -222,6 +231,7 @@ open class AuthenticateActivity : BackgroundTaskActivity<AuthenticationOutcome>(
     }
 
     private fun finishWithResult(success: Boolean, encryptionKey: ByteArray?, expected: Long) {
+        clearPasswordInput()
         val data = Intent()
         val requested = newEncryption
         if (requested != null && requested.isNotEmpty())
@@ -255,9 +265,15 @@ open class AuthenticateActivity : BackgroundTaskActivity<AuthenticationOutcome>(
         super.onStop()
     }
 
+    override fun onDestroy() {
+        clearPasswordInput()
+        passwordInput?.setAutoFillTextListener(null)
+        super.onDestroy()
+    }
+
     override fun onVaultLocked() {
         cancelBackgroundTask()
-        passwordInput?.setText("")
+        clearPasswordInput()
         finish()
     }
 

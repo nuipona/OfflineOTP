@@ -17,9 +17,11 @@ import org.shadowice.flocke.andotp.R
 import org.shadowice.flocke.andotp.Utilities.Constants
 import org.shadowice.flocke.andotp.Utilities.DatabaseHelper
 import org.shadowice.flocke.andotp.Utilities.KeyStoreHelper
+import org.shadowice.flocke.andotp.Utilities.LocaleContextHelper
 import java.io.File
 import java.lang.reflect.Modifier
 import java.util.Arrays
+import java.util.Locale
 import java.util.HashSet
 import java.util.Set
 import java.util.concurrent.TimeUnit
@@ -135,6 +137,20 @@ class KotlinSmallActivitiesInteropTest {
             automaticBackupPassword() == "off" && (response == null || !response.contains("settings"))
         }
         assertEquals("the automatic backups were not disabled", "off", automaticBackupPassword())
+    }
+
+    @Test
+    fun localizedContextUsesTheRequestedLocaleWithoutMutatingTheBaseContext() {
+        val locale = Locale("de", "DE")
+        val originalLocale = context.resources.configuration.locales[0]
+        val originalDefault = Locale.getDefault()
+        try {
+            val localized = LocaleContextHelper.createLocalizedContext(context, locale)
+            assertEquals(locale, localized.resources.configuration.locales[0])
+            assertEquals(originalLocale, context.resources.configuration.locales[0])
+        } finally {
+            Locale.setDefault(originalDefault)
+        }
     }
 
     @Test

@@ -137,15 +137,27 @@ open class IntroScreenActivity : IntroActivity() {
             override fun onPageSelected(position: Int) {
                 // The second part is needed to prevent the function from being triggered a second
                 // time when clicking the finish button in the last slide
-                if (position == getCount() - 1 && currentSlidePosition < getCount())
-                    finished.saveSettings(encryption.getEncryptionType(), authentication.getAuthMethod(),
-                        authentication.getPassword(), sync.getSyncEnabled())
+                if (position == getCount() - 1 && currentSlidePosition < getCount()) {
+                    try {
+                        finished.saveSettings(encryption.getEncryptionType(), authentication.getAuthMethod(),
+                            authentication.getPassword(), sync.getSyncEnabled())
+                    } finally {
+                        authentication.clearCredentialInputs()
+                    }
+                }
             }
 
             override fun onPageScrolled(position: Int, positionOffset: Float, positionOffsetPixels: Int) {}
 
             override fun onPageScrollStateChanged(state: Int) {}
         })
+    }
+
+    override fun onDestroy() {
+        authenticationFragment?.clearCredentialInputs()
+        encryptionKey?.let { Arrays.fill(it, 0) }
+        encryptionKey = null
+        super.onDestroy()
     }
 
     /** Returns the setup result to MainActivity. */
@@ -458,6 +470,12 @@ open class IntroScreenActivity : IntroActivity() {
 
         fun getPassword(): String? {
             return passwordInput?.text?.toString()
+        }
+
+        /** Clears credential text as soon as setup takes ownership or the fragment view is discarded. */
+        fun clearCredentialInputs() {
+            passwordInput?.setText("")
+            passwordConfirm?.setText("")
         }
 
         override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?,

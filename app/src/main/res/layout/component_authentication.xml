@@ -37,6 +37,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="match_parent"
                 android:inputType="textPassword"
+                android:saveEnabled="false"
                 android:autofillHints="password" />
 
         </com.google.android.material.textfield.TextInputLayout>
@@ -47,6 +48,7 @@
             android:layout_height="wrap_content"
             android:hint="@string/settings_hint_password_confirm"
             android:inputType="textPassword"
+            android:saveEnabled="false"
             android:autofillHints="password" />
 
         <TextView

@@ -36,6 +36,14 @@ open class Context {
 
     /** The base context; the platform returns the context the application context was made from. */
     open fun getBaseContext(): Context = this
+    /** The last configuration passed to the locale-context factory. */
+    var createdConfiguration: android.content.res.Configuration? = null
+        private set
+    /** Configuration wrapper used by locale-aware activities. The sandbox records, but does not resolve, resources. */
+    open fun createConfigurationContext(configuration: android.content.res.Configuration): Context {
+        createdConfiguration = configuration
+        return this
+    }
 
     /**
      * Format overload; the result stays a recognisable placeholder, arguments are not applied.
