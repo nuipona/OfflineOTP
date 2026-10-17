@@ -579,8 +579,10 @@ open class EntriesCardAdapter(context: Context, private val tagsFilterAdapter: T
         inflate.inflate(R.menu.menu_popup, popup.getMenu())
 
         if (presentation.get(pos).getType() == Entry.OTPType.MOTP) {
-            val item = popup.getMenu().getItem(ESTABLISH_PIN_MENU_INDEX)
-            item.setVisible(true)
+            // Look the item up by id, not by position: `menu_popup_establishPin` is the fourth
+            // <item> in R.menu.menu_popup (index 3), and a positional lookup silently made the
+            // wrong item visible, leaving the mOTP PIN action unreachable.
+            popup.getMenu().findItem(R.id.menu_popup_establishPin)?.setVisible(true)
         }
 
         popup.setOnMenuItemClickListener(PopupMenu.OnMenuItemClickListener { item ->
@@ -678,9 +680,5 @@ open class EntriesCardAdapter(context: Context, private val tagsFilterAdapter: T
     interface Callback {
         fun onMoveEventStart()
         fun onMoveEventStop()
-    }
-
-    companion object {
-        private const val ESTABLISH_PIN_MENU_INDEX = 4
     }
 }

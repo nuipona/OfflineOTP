@@ -1,0 +1,140 @@
+# OfflineOTP bug hunt — findings
+
+Audit of `nuipona/OfflineOTP` at `c3618ade` (branch `arena/b9338704-offlineotp`), Kotlin
+conversion of andOTP with the vault-security hardening from PR #23.
+
+## 1. Confirmed defect — "Establish PIN" is unreachable from the card popup
+
+**File:** `app/src/main/kotlin/org/shadowice/flocke/andotp/View/EntriesCardAdapter.kt`
+(`showPopupMenu`), **resource:** `app/src/main/res/menu/menu_popup.xml`
+
+`menu_popup.xml` declares six items in this order:
+
+| index | id |
+| --- | --- |
+| 0 | `menu_popup_edit` |
+| 1 | `menu_popup_changeImage` |
+| 2 | `menu_popup_show_qr_code` |
+| 3 | `menu_popup_establishPin` (`android:visible="false"`) |
+| 4 | `menu_popup_remove` |
+| 5 | `menu_send_keystrokes` |
+
+`showPopupMenu` revealed the mOTP PIN row with
+
+```kotlin
+val item = popup.getMenu().getItem(ESTABLISH_PIN_MENU_INDEX)   // == 4
+item.setVisible(true)
+```
+
+`ESTABLISH_PIN_MENU_INDEX` was `4`, i.e. `menu_popup_remove`. Consequences:
+
+* `menu_popup_remove` was set visible (a no-op — it is already visible), and
+* `menu_popup_establishPin` stayed `android:visible="false"`, so the **"Establish PIN" action
+  never appears in the per-entry popup menu**, even for mOTP entries.
+
+`EntriesCardAdapter.establishPIN(position)` is therefore only reachable through
+`establishPinIfNeeded(position)`, which fires from the single/double-tap handlers. An mOTP entry
+whose PIN has never been set can still be revealed/copied (the code shows the `PINREQ`
+placeholder), but the user cannot set the PIN from the menu that is supposed to offer it.
+
+**Fix applied:** look the item up by id instead of by position, so the behaviour no longer depends
+on the menu's item order:
+
+```kotlin
+popup.getMenu().findItem(R.id.menu_popup_establishPin)?.setVisible(true)
+```
+
+`ESTABLISH_PIN_MENU_INDEX` was removed (it had no other reference).
+
+> Provenance note: the identical constant (`= 4`) and the identical `menu_popup.xml` exist in
+> upstream andOTP master, so this is an **inherited** bug rather than one introduced by this fork's
+> Kotlin conversion. It is still a real defect in the current source and is fixed here.
+
+## 2. Confirmed defect — stray `%` in a string resource
+
+**File:** `app/src/main/res/values/strings_backup.xml`
+
+```xml
+<string name="backup_toast_export_failed">Export to external storage failed</string>%
+```
+
+A `%` sits as character data between elements inside `<resources>`. It is not part of any string
+value and is not referenced anywhere; it is leftover junk (present in upstream as well). Removed.
+The same scan (`</tag>` followed by non-whitespace, non-`<` text) found no other occurrence in any
+`values*/` file, including the translations.
+
+## 3. Audited and cleared
+
+No further functional or security defect was found. Everything below was read in full and compared
+against upstream andOTP master (`/tmp/up/andOTP-master`) and/or the repo's own documented deltas:
+
+* **Every app source file** (87 Kotlin files; the sandbox compiles 86 of them, all but the
+  4-line `play` `AboutFragment`). Full read + upstream Java comparison of the crypto core
+  (`EncryptionHelper`, `KeyStoreHelper`, `SecretKeyWrapper`), the vault layer (`DatabaseHelper`,
+  `VaultSession`, `SessionContracts`, `VaultContracts`, `EntryPersistence`,
+  `VaultRestoreOperation`), the model (`Entry`, `EntryList`, `EntryJson`, `EntryJsonResult`), the
+  parsers (`OtpUriParser`, `OtpParseResult`, `InputPolicy`), the settings facade (`Settings`), the
+  tasks and receivers, all six activities plus the adapters/dialogs/preferences/fragment, and the
+  helpers (`Tools`, `UIHelper`, `NotificationHelper`, `FileHelper`, `StorageAccessHelper`,
+  `BackupHelper`, `EntryThumbnail`, `LetterBitmap`, `TokenCalculator`, `DimensionConverter`,
+  `EditorActionHelper`, `BoundedInputReader`, `BoundedOutput`, `EncryptedBackupHeader`,
+  `ConfirmedPasswordTransformationHelper`, `ScreenTimerController`, `HandlerTimerScheduler`,
+  `BackupAgent`, `AutoFillableTextInputEditText`, `ItemTouchHelper/*`).
+* **`Constants.kt`** — every constant and every enum member matches upstream exactly (only the
+  plain-text `BackupType.PLAIN_TEXT`, the two plain-text intent ids and the plain-text filename/
+  mimetype constants are gone, which matches `BackupType = ENCRYPTED, OPEN_PGP, UNAVAILABLE` and
+  the removed plain-text backup feature).
+* **`EntryThumbnail.EntryThumbnails`** — all 350 enum constants match upstream by name *and* by
+  drawable resource; no entry declares `AssetType.Bitmap` in either tree.
+* **Resource tree** — `diff -rq` against upstream shows the only content change in `layout/`,
+  `menu/`, `values/` and the `values-*` translations is `content_backup.xml` swapping
+  `backup_label_warning_plain` for `backup_label_crypt` (plain-text backups were removed). The
+  remaining differences are intentional: the rebrand (andOTP → OfflineOTP), the "Dark Forest"
+  theme, the AboutLibraries 14.x attributes/colors, the `pref_theme_mode` → `pref_theme_mode`
+  key spelling fix (with the documented `Settings.migrateDeprecatedSettings` migration), and the
+  removed `plain` entry of `settings_values_backup_broadcasts`.
+* **Dangling resource references** — every `R.<type>.<name>` reference in `app/src/main/kotlin`
+  resolves against `app/src/main/res` (748 references; the 15 "unresolved" hits are all
+  `android.R.*` framework resources or build-time generated values).
+* **Numeric-literal diff** — a per-file multiset comparison of integer literals between upstream
+  Java and the fork's Kotlin found no unexplained change (all differences map to documented
+  hardening: the 20 000 000 / 2 000 000 PBKDF2 bounds, the 36/28/64 transaction framing, the
+  8192-byte write chunk, the 60 000 ms broadcast throttle, the 16/24/32-byte AES key lengths, and
+  constants moved into extracted helpers).
+* **Automated gates** — all green after the fix:
+  * `scripts/kotlin-sandbox/run.sh` → "All sandbox checks passed." (86 app sources compiled +
+    ~90 behavioural checks on a desktop JVM).
+  * `python3 -m unittest discover -s scripts/tests` → 166 tests, OK (2 skipped).
+  * `app/src/test` JVM unit tests → 76 test methods, all passing (re-run locally with a
+    hand-written JUnit-4 shim and reflective runner, since no Gradle/JUnit is available).
+  * A token-level and operator-level diff of every method pair that exists in both trees found
+    only syntax/type-name noise.
+
+### Defects deliberately **not** reported as new
+
+* `docs/vault-security-hardening.md` states that "Password/seed widgets do not automatically save
+  their text into Android view state". No layout sets `android:saveEnabled="false"` /
+  `android:freezesText="false"` and no activity overrides `onSaveInstanceState` for them, so the
+  claim is stronger than the implementation. This is identical to upstream and the text never
+  leaves the app's private storage, so it is a documentation overstatement, not a bug.
+* The same document's `\p{Cntrl}` comment in `StorageAccessHelper.getContentFileName` describes the
+  Java `\p{Cntrl}` class as the ASCII control set only; it is actually the Unicode `Cc` category
+  (U+0000–U+001F and U+007F–U+009F). Behaviour is byte-identical to upstream.
+* `Settings.getAndroidBackupServiceEnabled()` returning a hard `false` and
+  `setAndroidBackupServiceEnabled()` ignoring its argument are the documented platform-backup
+  kill switch, not a defect.
+
+## 4. Residual risk / what could not be verified here
+
+* No Android SDK, Gradle, JUnit or emulator is available in this environment, so lint, the
+  packaging/manifest/resource inspection, the instrumentation suites and both-flavor builds were
+  not executed. The Kotlin sandbox and the JVM unit-test run are non-authoritative stand-ins.
+* The 26 `app/src/androidTest` behavioural suites were read but not compiled or run; in particular
+  `IpcAuthorizationSecurityTest`, `VaultFailureSecurityTest`,
+  `CredentialLifecycleSecurityTest`, `BackgroundTaskCancellationSecurityTest`,
+  `EncryptedRestoreSecurityTest` and `VaultRestoreOperationTest` encode expectations that match
+  the source, but only a device run can confirm them.
+* Concurrency (`VaultSession.MutationLock`, `DatabaseHelper.DatabaseFileLock`) cannot be exercised
+  without an Android runtime; the guards were reviewed by reading only.
+* The two local root commits (`1c6804c` = `master`, `c3618ad` = this branch's base) differ only in
+  `LICENSE.txt`, so the fork's own history offers no pre-change oracle either.
