@@ -4,11 +4,17 @@ Copyright (c) 2026 unsubstantiation
 
 This software is licensed under the PolyForm Noncommercial License 1.0.0. 
 You may use, copy, modify, and distribute this software for noncommercial purposes only.
+
+### Attribution Requirement
+Any copying, distribution, or modification of this code or its contents strictly requires 
+prominent attribution to the original author (unsubstantiation) by retaining the above 
+copyright notice in all copies or substantial portions of the software.
+
 To view the full terms, visit: https://polyformproject.org
 
 --------------------------------------------------------------------------------
 
 # ATTRIBUTION
 
-This project is a complete rewrite in Kotlin of andOTP, originally copyright 
+This project is a complete update from android 5.1+ to android 9+ rewrite in Kotlin of andOTP, originally copyright 
 (C) 2017-2020 Jakob Nixdorf and (C) 2015 Bruno Bierbaumer.
