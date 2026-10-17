@@ -1,1 +1,0 @@
-"This project is a complete rewrite in Kotlin of andOTP, originally copyright (C) 2017-2020 Jakob Nixdorf and (C) 2015 Bruno Bierbaumer."

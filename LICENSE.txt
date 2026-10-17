@@ -1,0 +1,14 @@
+# LICENSE
+
+Copyright (c) 2026 unsubstantiation
+
+This software is licensed under the PolyForm Noncommercial License 1.0.0. 
+You may use, copy, modify, and distribute this software for noncommercial purposes only.
+To view the full terms, visit: https://polyformproject.org
+
+--------------------------------------------------------------------------------
+
+# ATTRIBUTION
+
+This project is a complete rewrite in Kotlin of andOTP, originally copyright 
+(C) 2017-2020 Jakob Nixdorf and (C) 2015 Bruno Bierbaumer.
