@@ -19,8 +19,17 @@
 
     <dimen name="scroll_padding_bottom">95dp</dimen>
 
-    <!-- Scale of the letter used by the LetterBitmap class -->
-    <item name="tile_letter_font_size_scale" format="float" type="dimen">67%</item>
+    <!-- Legacy layout names remain in use by the About, entry-card and drawer layouts. -->
+    <dimen name="activity_margin_xxsmall">1dp</dimen>
+    <dimen name="activity_margin_xsmall">4dp</dimen>
+    <dimen name="card_padding_without_corners">14dp</dimen>
+    <dimen name="author_image_size">64dp</dimen>
+    <dimen name="drawer_width">200dp</dimen>
+    <dimen name="divider_size">1dp</dimen>
+    <dimen name="fab_recyclerview_padding">84dp</dimen>
+
+    <!-- LetterBitmap reads TypedValue.float, not a fraction or a dimension with units. -->
+    <item name="tile_letter_font_size_scale" format="float" type="dimen">0.67</item>
 
     <!-- Unified Dark Forest Theme Sizing & Spacing -->
     <dimen name="forest_card_corner_radius">4dp</dimen>

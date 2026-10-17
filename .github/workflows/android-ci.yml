@@ -50,6 +50,10 @@ jobs:
         with:
           cmdline-tools-version: '12266719'
           packages: 'platform-tools platforms;android-36 build-tools;36.0.0'
+      - name: Dependency inventory artifact-selection regression
+        run: |
+          ./gradlew --no-daemon --version
+          GRADLE_EXECUTABLE="$PWD/gradlew" python3 scripts/tests/test_dependency_inventory.py -v
       - name: Host regression tests, focused lint and debug APKs
         shell: bash
         run: |

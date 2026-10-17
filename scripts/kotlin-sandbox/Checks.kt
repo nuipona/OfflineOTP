@@ -2346,6 +2346,30 @@ fun main() {
         }
     }
 
+    check("live metadata callbacks defer Settings startup recovery and migration") {
+        // The real callback/promotion sequence is an Android test. Here the guard is set directly
+        // to check that reentrant Settings construction and repository reads stay out of storage.
+        val active = DatabaseHelper::class.java.getDeclaredField("metadataCommitInProgress")
+        active.isAccessible = true
+        val previous = active.getBoolean(null)
+        val context = SettingsContext()
+        PreferenceManager.reset()
+        val store = PreferenceManager.getDefaultSharedPreferences(context)
+        store.edit().putString("perf_theme_mode", "manual").commit()
+        active.setBoolean(null, true)
+        try {
+            expect(!DatabaseHelper.recoverPendingDatabase(context), { "live journal treated as abandoned" })
+            Settings(context)
+            expect(store.contains("perf_theme_mode"), { "Settings migrated during a live metadata callback" })
+            expect(DatabaseHelper.readVault(context, null) ==
+                    VaultReadResult.Unavailable(VaultReadError.RECOVERY_REQUIRED), { "read during commit" })
+            expect(!DatabaseHelper.canInitialize(context), { "nested initialization during commit" })
+        } finally {
+            active.setBoolean(null, previous)
+            PreferenceManager.reset()
+        }
+    }
+
     check("document writes are content-only, bounded and re-check permission around every chunk") {
         val directory = java.nio.file.Files.createTempDirectory("andotp-sandbox").toFile()
         try {
