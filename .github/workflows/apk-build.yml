@@ -1,0 +1,54 @@
+name: Build installable APK
+
+on:
+  workflow_dispatch:
+  # Also build when this workflow is first introduced on a branch (manual dispatch
+  # is only available after a workflow exists on the default branch).
+  push:
+    paths:
+      - .github/workflows/apk-build.yml
+
+permissions:
+  contents: read
+
+jobs:
+  apk:
+    name: F-Droid debug APK
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@c5195efecf7bdfc987ee8bae7a71cb8b11521c00 # v4.7.1
+        with:
+          distribution: temurin
+          java-version: '17.0.14+7'
+      - uses: android-actions/setup-android@9fc6c4e9069bf8d3d10b2204b1fb8f6ef7065407 # v3.2.2
+        with:
+          cmdline-tools-version: '12266719'
+          packages: 'platform-tools platforms;android-36 build-tools;36.0.0'
+      - name: Assemble F-Droid debug APK
+        shell: bash
+        run: |
+          set -o pipefail
+          ./gradlew --no-daemon :app:assembleFdroidDebug 2>&1 | tee gradle-apk.log
+      - name: Summarize build failure
+        if: failure()
+        shell: bash
+        run: |
+          if [ -f gradle-apk.log ]; then
+            echo '### Last 100 lines of the APK build' >> "$GITHUB_STEP_SUMMARY"
+            echo '```text' >> "$GITHUB_STEP_SUMMARY"
+            tail -n 100 gradle-apk.log >> "$GITHUB_STEP_SUMMARY"
+            echo '```' >> "$GITHUB_STEP_SUMMARY"
+          fi
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: always()
+        with:
+          name: offlineotp-fdroid-debug
+          retention-days: 14
+          if-no-files-found: warn
+          path: |
+            app/build/outputs/apk/fdroid/debug/*.apk
+            gradle-apk.log
