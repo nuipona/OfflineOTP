@@ -69,10 +69,12 @@ kotlin {
 }
 
 dependencies {
-    implementation('org.jetbrains.kotlin:kotlin-stdlib:2.3.20') {
-        version { strictly '2.3.20' }
+    implementation('org.jetbrains.kotlin:kotlin-stdlib:2.4.21') {
+        version { strictly '2.4.21' }
     }
 
+    // Keep the shared lifecycle version on the newest release compatible with compileSdk 36 /
+    // AGP 8.13.2; lifecycle 2.11's supported configuration requires compileSdk 37 and AGP 9.1+.
     def lifecycle_version = "2.10.0"
 
     implementation 'androidx.media:media:1.8.0'
@@ -93,10 +95,12 @@ dependencies {
     implementation("com.journeyapps:zxing-android-embedded:4.3.0") { transitive = false }
     implementation('com.google.zxing:core:3.5.4')
     implementation "me.zhanghai.android.materialprogressbar:library:1.6.1"
-    implementation "com.github.open-keychain.open-keychain:openpgp-api:v5.7.1"
+    implementation "com.github.open-keychain.open-keychain:openpgp-api:v5.8.2"
     implementation "com.leinardi.android:speed-dial:3.3.0"
     // The View UI requires MaterialCardView: all app themes inherit MaterialComponents.Bridge.
     // Keep this version aligned with the build-time plugin in the root build.gradle.
+    // 14.2.1 is the last release with the legacy View-based UI: 15.x drops it (Compose only)
+    // and requires AGP 9, while AboutActivity still hosts Libs/LibsBuilder.
     implementation "com.mikepenz:aboutlibraries:14.2.1"
 
     testImplementation 'junit:junit:4.13.2'

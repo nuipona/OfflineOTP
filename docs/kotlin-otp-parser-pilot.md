@@ -58,12 +58,12 @@ Backup framing, database schema, KDF settings and token algorithms are **not** c
 
 ## Build changes and provenance
 
-- Kotlin Gradle plugin **2.3.20** and a strictly aligned **2.3.20** stdlib declaration; Groovy build scripts are retained.
+- Kotlin Gradle plugin **2.4.21** and a strictly aligned **2.4.21** stdlib declaration; Groovy build scripts are retained.
 - Kotlin JVM target **1.8**, matching Java 8 bytecode; minimum API **28** and target API **35** unchanged.
 - Compiler/build-tools/plugin classpaths are included in the existing dependency inventory, in addition to the root buildscript and app/runtime/test classpaths. Missing compiler configuration fails the inventory gate instead of silently omitting compiler inputs.
 - No Kotlin plugin is applied to the independent IPC test client.
 
-Selection sources: [official Kotlin 2.3.20 release](https://github.com/JetBrains/kotlin/releases/tag/v2.3.20), and the [KGP compatibility table](https://github.com/JetBrains/kotlin-web-site/blob/master/docs/topics/gradle/gradle-configure-project.md). The 2.3.20–2.3.21 row covers Gradle 7.6.3–9.3.0 and AGP 8.2.2–9.0.0, including this repository's Gradle 8.13/AGP 8.13.2. Compiler configuration names were checked against the [tagged KGP source](https://github.com/JetBrains/kotlin/blob/v2.3.20/libraries/tools/kotlin-gradle-plugin/src/common/kotlin/org/jetbrains/kotlin/gradle/plugin/AbstractKotlinPlugin.kt). Compatibility declarations are not evidence that this project actually builds.
+Selection sources: [official Kotlin 2.4.21 release](https://github.com/JetBrains/kotlin/releases/tag/v2.4.21), and the [KGP compatibility table](https://github.com/JetBrains/kotlin-web-site/blob/master/docs/topics/gradle/gradle-configure-project.md). The 2.4.20–2.4.21 row covers Gradle 7.6.3–9.7.0 and AGP 8.5.2–9.3.1, including this repository's Gradle 8.13/AGP 8.13.2. Compiler configuration names were checked against the [tagged KGP source](https://github.com/JetBrains/kotlin/blob/v2.4.21/libraries/tools/kotlin-gradle-plugin/src/common/kotlin/org/jetbrains/kotlin/gradle/plugin/AbstractKotlinPlugin.kt). Compatibility declarations are not evidence that this project actually builds.
 
 The new resolved Kotlin inputs need the same trusted lockfile/checksum baseline review as the rest of the build. No dependency locks or verification checksums have been fabricated. Independent unsigned APK and dependency-inventory comparisons must be rerun; repeatability is not assumed from adding a pinned version.
 

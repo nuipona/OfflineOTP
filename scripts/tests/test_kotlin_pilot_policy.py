@@ -11,10 +11,10 @@ class KotlinPilotConfigurationTest(unittest.TestCase):
     def test_plugin_and_runtime_have_aligned_explicit_pins(self):
         root_build = (ROOT / "build.gradle").read_text()
         app_build = (ROOT / "app/build.gradle").read_text()
-        self.assertEqual(["2.3.20"], re.findall(r"org.jetbrains.kotlin:kotlin-gradle-plugin:([^'\s]+)", root_build))
-        self.assertEqual(["2.3.20"], re.findall(r"org.jetbrains.kotlin:kotlin-stdlib:([^'\s]+)", app_build))
-        self.assertIn("version { strictly '2.3.20' }", root_build)
-        self.assertIn("version { strictly '2.3.20' }", app_build)
+        self.assertEqual(["2.4.21"], re.findall(r"org.jetbrains.kotlin:kotlin-gradle-plugin:([^'\s]+)", root_build))
+        self.assertEqual(["2.4.21"], re.findall(r"org.jetbrains.kotlin:kotlin-stdlib:([^'\s]+)", app_build))
+        self.assertIn("version { strictly '2.4.21' }", root_build)
+        self.assertIn("version { strictly '2.4.21' }", app_build)
         self.assertIn("apply plugin: 'org.jetbrains.kotlin.android'", app_build)
 
     def test_jvm_target_remains_aligned_with_java_eight(self):

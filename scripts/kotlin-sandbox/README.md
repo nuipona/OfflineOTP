@@ -233,7 +233,7 @@ curl -sS -o /tmp/kt.tgz https://registry.npmjs.org/kotlin-compiler/-/kotlin-comp
 tar xzf /tmp/kt.tgz -C /tmp && chmod +x /tmp/package/bin/kotlinc*
 ```
 
-Verified with Kotlin `2.3.20` (the app's pinned version) and `2.4.21` (the bootstrap version), plus
+Verified with Kotlin `2.3.20` (the app's pinned version at the time) and `2.4.21` (the bootstrap version), plus
 Temurin `25.0.2`, on 2026-10-15 (63 checks). The fifteenth batch added seven checks (70 total) and
 was verified with Kotlin `2.4.21`/Temurin `25.0.2` on 2026-10-16. The seventeenth batch added four
 (81), the eighteenth two (83) and the nineteenth two (85) checks; the last run reports **85
