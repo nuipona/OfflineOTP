@@ -1,6 +1,6 @@
 # LICENSE
 
-Copyright (c) 2026 unsubstantiation
+Copyright (c) 2026 unsubstantiation (fairuniversal.com)
 
 This software is licensed under the PolyForm Noncommercial License 1.0.0. 
 You may use, copy, modify, and distribute this software for noncommercial purposes only.
