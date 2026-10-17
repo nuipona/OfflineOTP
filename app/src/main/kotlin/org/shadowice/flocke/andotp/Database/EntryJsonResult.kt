@@ -47,7 +47,9 @@ class ValidatedEntry private constructor(
     val thumbnailName: String?,
     val lastUsed: Long,
     val usedFrequency: Long,
-    tags: List<String>
+    tags: List<String>,
+    /** The mOTP PIN, empty for every other kind and for documents written before it was stored. */
+    val pin: String
 ) : AutoCloseable {
     private val seed: ByteArray = secret.also {
         require(it.isNotEmpty() && it.size <= InputPolicy.MAX_SECRET_BYTES)
@@ -62,6 +64,7 @@ class ValidatedEntry private constructor(
             require(kind != OtpKind.STEAM || digits == 5)
             InputPolicy.text(issuer, InputPolicy.MAX_TEXT_CHARS)
             InputPolicy.text(label, InputPolicy.MAX_TEXT_CHARS)
+            InputPolicy.text(pin, InputPolicy.MAX_TAG_CHARS)
             require(this.tags.size <= InputPolicy.MAX_TAGS)
             this.tags.forEach { InputPolicy.text(requireNotNull(it), InputPolicy.MAX_TAG_CHARS) }
         } catch (invalid: IllegalArgumentException) {
@@ -90,8 +93,8 @@ class ValidatedEntry private constructor(
         internal fun create(
             kind: OtpKind, secret: ByteArray, period: Int, digits: Int, counter: Long,
             issuer: String, label: String, algorithm: OtpHashAlgorithm, thumbnailName: String?,
-            lastUsed: Long, usedFrequency: Long, tags: List<String>
+            lastUsed: Long, usedFrequency: Long, tags: List<String>, pin: String
         ): ValidatedEntry = ValidatedEntry(kind, secret, period, digits, counter, issuer, label,
-            algorithm, thumbnailName, lastUsed, usedFrequency, tags)
+            algorithm, thumbnailName, lastUsed, usedFrequency, tags, pin)
     }
 }

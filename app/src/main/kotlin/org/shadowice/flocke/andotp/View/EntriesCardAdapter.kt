@@ -498,6 +498,9 @@ open class EntriesCardAdapter(context: Context, private val tagsFilterAdapter: T
                 withTarget(target, Consumer { actual ->
                     actual.setPin(value)
                     actual.updateOTP(true)
+                    // The PIN is part of the stored document now, so it has to reach the vault
+                    // here; otherwise a reload (or a failed-save revert) would drop it again.
+                    saveEntries(settings.getAutoBackupEncryptedFullEnabled())
                     notifyEntryChanged(actual)
                 })
             })

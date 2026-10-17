@@ -56,10 +56,11 @@ positional `getMenu().getItem(...)` lookup or a `*_MENU_INDEX` constant reappear
 `menu_popup_establishPin` stops being revealed by id for mOTP entries. Verified by reintroducing the
 original bug: 2 of the 3 tests fail.
 
-> Note: the mOTP PIN is **not persisted** — it is absent from `EntryJson`, the vault JSON and the
-> `otpauth://motp` URI, and its only writer is `establishPIN()` → `EntryActionDialogs.pin()`. It is
-> therefore session-only and must be re-entered after each app restart. This is upstream behaviour
-> and was left unchanged; it is a design limitation, not a defect introduced here.
+> Follow-up (fixed in a later commit): the mOTP PIN was **not persisted** — it was absent from
+> `EntryJson`, the vault JSON and the `otpauth://motp` URI, so it was session-only and had to be
+> re-entered after each app restart. It is now stored as a `pin` field, written only for an mOTP
+> entry that actually has one, so every other document stays byte-identical to what the Java
+> serializer produced. See section 3a below.
 
 ## 2. Confirmed defect — stray `%` in a string resource
 
@@ -134,6 +135,25 @@ against upstream andOTP master (`/tmp/up/andOTP-master`) and/or the repo's own d
 * `Settings.getAndroidBackupServiceEnabled()` returning a hard `false` and
   `setAndroidBackupServiceEnabled()` ignoring its argument are the documented platform-backup
   kill switch, not a defect.
+
+## 3a. Follow-up fix: the mOTP PIN is now persisted
+
+`EntryJson` now carries a `pin` field, written only for an mOTP entry that actually has one - the
+same conditional rule `period`/`counter` already follow. So:
+
+* every TOTP/HOTP/Steam document, every PIN-less mOTP document and every document written by an
+  older version stays **byte-identical** to what the Java serializer produced (`STORED_JSON`, the
+  round-trip tests and the `security/{current,legacy}.aes` fixtures are unchanged);
+* a missing key reads back as an empty PIN, a non-string PIN is `INVALID_TEXT` and an oversized one
+  `TEXT_TOO_LONG` (`InputPolicy.MAX_TAG_CHARS`, the bound `Entry.validate` already applied);
+* the PIN now survives a vault save/load and travels with an encrypted backup and its restore.
+
+`Entry.setPin` enforces that bound (previously a long PIN would have made
+`DatabaseHelper.entriesToString` throw `VaultException(CORRUPT)` and break every save), the PIN
+dialog caps what can be typed at the same bound, and `EntriesCardAdapter.establishPIN` writes the
+vault after setting it so a reload or a failed-save revert cannot drop it again.
+
+The PIN is still **not** part of the `otpauth://motp` URI, so a QR code never carries it.
 
 ## 4. Residual risk / what could not be verified here
 
