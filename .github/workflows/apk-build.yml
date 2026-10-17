@@ -42,6 +42,15 @@ jobs:
             echo '```text' >> "$GITHUB_STEP_SUMMARY"
             tail -n 100 gradle-apk.log >> "$GITHUB_STEP_SUMMARY"
             echo '```' >> "$GITHUB_STEP_SUMMARY"
+            # Annotations remain accessible through the GitHub API even where
+            # hosted-runner log and artifact download endpoints are unavailable.
+            python3 - <<'PY'
+          from pathlib import Path
+          lines = Path('gradle-apk.log').read_text(errors='replace').splitlines()[-80:]
+          message = '\n'.join(lines)[-7000:]
+          message = message.replace('%', '%25').replace('\r', '%0D').replace('\n', '%0A')
+          print(f'::error title=APK build failure::{message}')
+          PY
           fi
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         if: always()
